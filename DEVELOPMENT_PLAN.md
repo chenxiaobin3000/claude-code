@@ -44,17 +44,17 @@
 - 语音模式、录音、音频 NAPI Workspace 和相关二进制依赖已经移除。
 - 本地版本号与 CLI 版本已统一为 `2.1.116`，构建版本以根目录 `package.json` 为唯一来源，源码直跑入口使用相同兜底值；该版本号不代表对应的官方版本。
 
-### 2.4 2026-07-15 工程健康快照
+### 2.4 当前工程与验证基线
 
-以下结果来自当前工作区的实际静态检查，作为 P0 修复和后续验收的起始基线：
+以下状态由 2026-07-15 至 2026-07-16 的实际检查和验收确认，后续改动不得降低这些基线能力：
 
 - Bun workspace 当前包含 18 个子包。
 - Git 管理的 TypeScript 源码约 2,746 个文件、56 万行。
 - 当前模型主路径由 `getAPIProvider()` 固定路由至 `openai`。Anthropic 账号登录、鉴权和官方模型直连已移除；Anthropic SDK 因大量内部消息、工具和流事件调用而继续作为兼容层保留。Bedrock Provider 的客户端、AWS 鉴权、模型发现、Token 计数、限流适配、配置和专用依赖已于 2026-07-15 移除；Vertex 和 Foundry 仍需分别审计。
 - 已新增统一最小验证命令 `bun run verify`，顺序覆盖锁定安装、类型检查、Lint，以及 Bun bundle、Vite/Rollup Node bundle、Windows x64 standalone EXE 三条构建链的完整性、版本、启动、单轮模型请求和 `Read` 工具调用。验证直接使用 `~/.claude/models.json` 的默认模型，并限制为回环或私有网络地址。2026-07-16 使用本地 llama.cpp（Qwen3.5-9B-Q6_K，65,536 上下文）完成三构建链全矩阵复验，所有检查通过，总耗时 69.1 秒。
 - 多模型注册表已于 2026-07-15 完成：重复模型 ID 和无效默认模型会在加载时失败；同地址模型复用 OpenAI Client，不同地址使用独立 Client；旧 `OPENAI_MODEL`、`OPENAI_BASE_URL`、角色模型环境变量、模型映射和 `providers.json` 注册表已从运行链移除。类型检查、Lint、Bun 构建、Vite 构建及 Bun/Node CLI 启动验证通过。
-
-该快照只描述当前状态，不作为长期允许失败的基线。P0 完成后，类型检查、Lint、构建和启动检查必须全部转为通过。
+- 第二模型验收已于 2026-07-16 完成：通过 `https://api.deepseek.com` 调用注册模型 `deepseek-v4-flash`，单轮流式响应和受权限约束的 `Read` 工具调用均通过；凭据只从配置指定的环境变量读取，未写入模型注册表、命令输出或诊断日志。结合本地 llama.cpp 的 Qwen3.5-9B-Q6_K 验证，至少两个 OpenAI-compatible 模型完成了流式响应和工具调用验收。
+- `bun run typecheck`、`bun run lint`、三条构建链的完整性检查、CLI 启动、模型请求和工具调用必须持续通过，不允许把已修复问题重新定义为长期允许失败的状态。
 
 ## 3. 与官方 v2.1.210 的主要差异
 
@@ -96,23 +96,11 @@
 6. 保持语音功能移除状态，除非后续单独立项恢复。
 7. 不在源码目录引入 `*.test.ts` 或测试框架；轻量逻辑验证统一写入 `scripts/validation`，并由现有 `bun run verify` 执行，不形成第二层验证。
 
-## 5. 后续开发路线图
+## 5. 当前验证与构建基线
 
-### P0：建立可靠基线
+本节固化已经实现并验收的工程约束。统一入口为 `bun run verify`：本地模式覆盖安装、TypeScript、Biome、轻量源码验证、三条构建链、CLI 启动、模型请求和工具调用；CI 模式复用同一流程，仅跳过依赖本机模型配置的请求检查。
 
-目标：让后续开发可以判断“改动是否破坏核心功能”。
-
-- [x] 统一项目版本来源：构建版本读取根目录 `package.json`，源码直跑入口的兜底版本同步为 `2.1.116`（2026-07-15 已验证）。
-- [x] 修复当前 5 处 TypeScript 错误，使 `bun run typecheck` 零错误通过（2026-07-15 已验证）。
-- [x] 修复当前 16 处 Biome correctness 错误，并将 `biome.json` schema 与实际 CLI 版本对齐（2026-07-15 已验证）。
-- [x] 完成统一最小验证命令 `bun run verify` 的全链路验收：安装、类型检查、Lint、Bun/Vite 构建、CLI 启动、单轮模型请求和 `Read` 工具调用均于 2026-07-16 通过。
-- [x] 在 `scripts/validation` 增加独立轻量验证脚本，覆盖消息格式转换、OpenAI 流适配、工具权限、Bash/PowerShell 命令解析和模型日志脱敏；脚本直接调用源码纯函数，以固定输入和预期输出判定结果，失败时返回非零退出码；不引入 `*.test.ts`、测试框架或官方大型测试体系，并统一并入现有 `bun run verify`，不另设第二层验证（2026-07-16 已完成）。
-- [x] 使用本地 llama.cpp 的 OpenAI-compatible endpoint 完成单轮对话与工具调用冒烟；该检查属于同一个 `bun run verify` 流程，不另设付费请求或第二层验证（2026-07-16 已完成）。
-- [x] 明确 Bun bundle、Vite/Rollup Node bundle、Bun standalone EXE 三条构建链的支持边界和验证矩阵，并并入同一个 `bun run verify`（2026-07-16 已完成三条构建链全矩阵验证）。
-- [x] 增加 Windows/Linux CI，执行依赖锁定检查、TypeScript、Biome、适用构建产物完整性检查及 CLI `--version`/`--help` 启动冒烟；统一复用 `bun run verify -- --ci`（2026-07-16 已完成本地 CI 模式验证）。
-- [x] 为模型请求增加结构化、可脱敏的诊断日志；API Key、OAuth Token、URL 凭据和完整敏感 Prompt 不进入日志或 Langfuse LLM observation，原始 API 错误在写日志和显示给用户前统一脱敏（2026-07-16 已完成固定样例、实际落盘及三构建链验证）。
-
-构建链支持边界：
+### 5.1 构建链支持边界
 
 | 构建链 | 定位 | 支持运行时/平台 | 产物与边界 |
 | --- | --- | --- | --- |
@@ -120,7 +108,7 @@
 | Vite/Rollup Node bundle | npm 默认 CLI 发布产物 | 当前基线为 Node.js 22；扩大 Node 版本或操作系统范围前必须增加对应 CI | `dist/cli-node.js` 与 `dist/chunks/*`；不得残留 Bun-only 必需依赖，Chunk 引用必须完整。 |
 | Bun standalone EXE | 无需目标机器安装 Node.js/Bun 的单文件发布 | 仅 Windows x64 | `dist/ccb.exe`；内嵌 Bun Runtime，但 Git、Shell、MCP Server 等外部功能依赖不因此自动内嵌。 |
 
-统一验证矩阵：
+### 5.2 统一验证矩阵
 
 | 检查 | Bun bundle | Vite/Node bundle | Windows x64 EXE |
 | --- | --- | --- | --- |
@@ -134,7 +122,7 @@
 
 矩阵必须按“构建一条、立即验证一条”的顺序运行，因为 Bun 与 Vite 构建都会重建 `dist`。`scripts/check-bundle-integrity.ts` 对未知外部运行时模块保持错误；`bun:ffi` 仅在 Bun 产物中作为运行时专用警告，`@napi-rs/keyring` 和旧 Google/Vertex 分支的 `node-fetch` 作为可选或非支持路径警告，缺失时必须安全降级。2026-07-16 实测 Bun 与 Node 产物完整性均为零错误，Windows x64 EXE 为 120.1 MiB，三种产物的版本、帮助、模型请求和工具调用全部通过。
 
-CI 验证矩阵：
+### 5.3 CI 验证矩阵
 
 | CI 平台 | 依赖/静态检查 | Bun bundle | Vite/Node bundle | Windows x64 EXE | 模型与工具调用 |
 | --- | --- | --- | --- | --- | --- |
@@ -143,11 +131,13 @@ CI 验证矩阵：
 
 GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，使用 Node.js 22 与 Bun 1.3.14；安装阶段关闭只适用于用户机器的 Chrome MCP 注册。CI 与本地共用 `scripts/verify.ts`：普通 `bun run verify` 保留本地 llama.cpp 的单轮模型请求和 `Read` 工具调用；`bun run verify -- --ci` 仅跳过这两项环境相关检查，不读取 `models.json`，其余步骤完全一致。2026-07-16 在 Windows x64 本地执行 CI 模式，三类适用产物全部通过，耗时 45.7 秒；GitHub 托管环境结果以首次 push 或 pull request 的实际运行记录为准。
 
-模型诊断安全边界：请求开始、首 Token、成功和失败事件只记录请求 ID、Provider、模型、无凭据 endpoint、消息/字符/工具数量、Token 上限、TTFT、总耗时、Usage、停止原因、HTTP 状态、错误码和 Provider 请求 ID。禁止把请求体、Headers、system/user Prompt、工具参数、工具返回值或原始错误对象传入诊断日志。`logForDebugging` 在最终写入前统一清理 Authorization、Bearer/Basic、API Key、OAuth/JWT、敏感 URL 参数和 URL 用户凭据，并截断超长内容；OpenAI 错误还会按本次请求实际使用的 API Key 和消息文本做精确替换。Langfuse LLM observation 仅保留输入、输出和工具的类型、数量、角色分布与序列化长度摘要，不再保存原文。
+### 5.4 模型诊断安全边界
+
+请求开始、首 Token、成功和失败事件只记录请求 ID、Provider、模型、无凭据 endpoint、消息/字符/工具数量、Token 上限、TTFT、总耗时、Usage、停止原因、HTTP 状态、错误码和 Provider 请求 ID。禁止把请求体、Headers、system/user Prompt、工具参数、工具返回值或原始错误对象传入诊断日志。`logForDebugging` 在最终写入前统一清理 Authorization、Bearer/Basic、API Key、OAuth/JWT、敏感 URL 参数和 URL 用户凭据，并截断超长内容；OpenAI 错误还会按本次请求实际使用的 API Key 和消息文本做精确替换。Langfuse LLM observation 仅保留输入、输出和工具的类型、数量、角色分布与序列化长度摘要，不再保存原文。
 
 `scripts/validation/model-diagnostics.ts` 使用固定伪 API Key、OAuth JWT、URL 凭据和唯一 Prompt 标记验证脱敏、endpoint 清理、错误截断及摘要输出，并已并入唯一的 `bun run verify` 流程。2026-07-16 使用本地 llama.cpp 完成 Bun bundle、Vite/Node bundle 和 Windows x64 EXE 的模型与 `Read` 工具全矩阵验证，新增脱敏检查同时通过，总耗时 66.0 秒；另以 `--debug-file` 执行真实请求，落盘得到请求开始、首 Token、成功三类结构化事件，Prompt 标记未写入日志。
 
-轻量源码验证矩阵：
+### 5.5 轻量源码验证矩阵
 
 | 脚本 | 纯函数边界 | 固定样例覆盖 |
 | --- | --- | --- |
@@ -159,7 +149,9 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 每个脚本都可由 `bun run scripts/validation/<name>.ts` 独立运行；`scripts/verify.ts` 按固定清单逐项执行，项目不增加第二个总验证命令。PowerShell 轻量验证不启动 `pwsh`，只调用运行路径实际使用的 `transformPowerShellParseOutput` 纯转换边界，因此可在 Windows/Linux CI 中得到相同结果；外部 PowerShell 进程发现与启动不属于本组纯函数验证。2026-07-16 五项脚本独立执行总耗时低于 1 秒，随后完整 `bun run verify` 通过，三构建链、模型和工具调用均成功，总耗时 69.8 秒。
 
-验收标准：
+2026-07-16 第二模型实测：显式选择 `deepseek-v4-flash` 后，单轮流式请求返回预期标记；随后仅开放并允许 `Read` 工具读取根目录 `package.json`，模型正确发起工具调用并返回版本 `2.1.116`。测试使用 `OPENAI_MAX_TOKENS=4096`，未记录 API Key 或完整 Prompt。本地功能基线已完成验收；跨平台 CI 仍以 GitHub 托管环境首次实际运行记录作为最终证据。
+
+### 5.6 基线约束
 
 - 全新环境可按文档完成安装、构建和启动。
 - `bun run typecheck`、`bun run lint`、构建完整性检查和 CLI 冒烟检查全部通过。
@@ -167,7 +159,9 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - 至少两个 OpenAI/OpenAI-compatible 模型完成流式对话与工具调用。
 - 失败时能定位 Provider、模型映射、鉴权或流解析阶段。
 
-### P1：工程结构与 Provider 边界治理
+## 6. 后续开发路线图
+
+### P0：工程结构与 Provider 边界治理
 
 目标：降低核心模块修改风险，明确 OpenAI 模型主路径与 Anthropic SDK 内部兼容层的边界。
 
@@ -191,7 +185,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - 每个 workspace 都能被统一验证流程发现并得到明确结果。
 - Feature Flag 的默认集合、依赖关系和支持级别可由机器读取并在构建时校验。
 
-### P1：OpenAI-compatible 模型对齐
+### P0：OpenAI-compatible 模型对齐
 
 目标：建立统一、可配置的 OpenAI-compatible 模型调用链。
 
@@ -209,7 +203,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - 至少两个 OpenAI-compatible 模型可以流式响应并调用工具。
 - 上下文、推理参数、Prompt Cache 和价格统计与实际模型能力一致。
 
-### P1：权限、Sandbox 和 Worktree 安全
+### P0：权限、Sandbox 和 Worktree 安全
 
 目标：优先补齐最新版最重要的安全差异。
 
@@ -228,7 +222,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - 未经明确授权，模型不能读取凭据或执行破坏性命令。
 - Bash 和 PowerShell 对相同危险操作给出一致决策。
 
-### P2：排障和会话体验
+### P1：排障和会话体验
 
 目标：降低复杂配置导致的启动和会话故障。
 
@@ -245,7 +239,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - `/cd` 后当前会话可继续，并能由 `--resume` 正确找到。
 - Shell 命令响应行为可由设置显式控制。
 
-### P2：Agent 和后台任务
+### P1：Agent 和后台任务
 
 目标：统一本地 Coordinator、Agent Team 和官方后台 Agent 语义。
 
@@ -263,7 +257,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - Session 切换、终端 resize 和后台服务重连不会丢任务。
 - Agent 异常退出后无残留 Worktree 锁和孤儿进程。
 
-### P2：Hook、Plugin、Skill 和 MCP 对齐
+### P1：Hook、Plugin、Skill 和 MCP 对齐
 
 目标：稳定扩展生态接口，避免每个版本重复修改核心代码。
 
@@ -282,7 +276,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - MCP 重连或配置刷新不会错误关闭其他 Plugin 的 MCP Server。
 - Skill、Hook 和 Plugin 的上下文成本可在 `/usage` 中识别。
 
-### P3：性能和稳定性
+### P2：性能和稳定性
 
 目标：解决长会话与高并发 Agent 下的资源问题。
 
@@ -299,7 +293,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - 网络短暂中断不会丢失整个会话。
 - Windows 文件写入不会产生零字节或截断文件。
 
-### P3：可选产品能力
+### P2：可选产品能力
 
 以下能力应单独评估，不作为核心兼容阻塞项：
 
@@ -309,23 +303,22 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - [ ] Linux Desktop 或系统级 Computer Use：作为独立项目评估权限和安全成本。
 - [ ] 语音模式：保持移除，恢复必须另立需求并重新评估原生依赖。
 
-## 6. 推荐实施顺序
+## 7. 推荐实施顺序
 
 建议按照以下顺序推进，每一阶段完成验收后再进入下一阶段：
 
-1. P0 静态检查、构建、冒烟、CI 和诊断能力。
-2. Provider 接口收敛及 Anthropic SDK 兼容边界梳理。
-3. OpenAI-compatible 模型配置、能力探测与协议稳定性。
-4. 核心巨石文件和 workspace 工程结构治理。
-5. 权限、Sandbox、Worktree 安全。
-6. Safe Mode、Doctor、会话迁移。
-7. Agent 和后台任务状态统一。
-8. Hook、Plugin、Skill、MCP 扩展协议。
-9. 性能优化及可选产品能力。
+1. Provider 接口收敛及 Anthropic SDK 兼容边界梳理。
+2. OpenAI-compatible 模型能力探测与协议稳定性。
+3. 核心巨石文件和 workspace 工程结构治理。
+4. 权限、Sandbox、Worktree 安全。
+5. Safe Mode、Doctor、会话迁移。
+6. Agent 和后台任务状态统一。
+7. Hook、Plugin、Skill、MCP 扩展协议。
+8. 性能优化及可选产品能力。
 
 不建议首先重写为官方原生二进制架构。该改造投入大、风险高，且不会直接解决模型协议、安全和稳定性问题。应先把当前 TypeScript 架构维护到可靠状态，再通过独立调研决定是否迁移 Rust、Go 或其他原生运行时。
 
-## 7. 每项功能的完成定义
+## 8. 每项功能的完成定义
 
 一个计划项只有同时满足以下条件才可标记完成：
 
@@ -339,7 +332,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - 旧配置有迁移或兼容方案。
 - README 或本文件中的状态已同步更新。
 
-## 8. 暂不追求的一致性
+## 9. 暂不追求的一致性
 
 - 官方私有服务端接口的完全兼容。
 - 官方订阅、额度、组织管理和灰度实验的完整复刻。
@@ -349,7 +342,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 这些差异不影响项目作为独立 CLI Agent 使用，但必须在发布说明中明确，避免用户把本项目误认为官方 Claude Code 的可替代发行版。
 
-## 9. 官方参考
+## 10. 官方参考
 
 - [Claude Code 官方 Changelog](https://code.claude.com/docs/en/changelog)
 - [2026 年 3 月 30 日至 4 月 3 日更新](https://code.claude.com/docs/en/whats-new/2026-w14)
@@ -365,7 +358,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - [2026 年 6 月 29 日至 7 月 3 日更新](https://code.claude.com/docs/en/whats-new/2026-w27)
 - [Claude Code v2.1.210](https://github.com/anthropics/claude-code/releases/tag/v2.1.210)
 
-## 10. 维护规则
+## 11. 维护规则
 
 - 官方 Claude Code 发布新版本时，只更新经过源码核对或实际验证的差异项。
 - 每完成一个计划项，勾选对应复选框，并记录验证命令或验证结果。
