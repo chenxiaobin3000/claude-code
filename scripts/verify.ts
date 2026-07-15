@@ -14,6 +14,13 @@ const expectedVersion = `${packageJson.version} (Claude Code)`
 const commandTimeoutMs = 120_000
 const modelTimeoutMs = 180_000
 const ciMode = process.argv.includes('--ci')
+const validationScripts = [
+  'scripts/validation/message-conversion.ts',
+  'scripts/validation/openai-stream.ts',
+  'scripts/validation/tool-permissions.ts',
+  'scripts/validation/shell-parsers.ts',
+  'scripts/validation/model-diagnostics.ts',
+]
 
 interface RunOptions {
   capture?: boolean
@@ -255,11 +262,13 @@ async function main(): Promise<void> {
   ])
   await runStep('TypeScript typecheck', [bunExecutable, 'run', 'typecheck'])
   await runStep('Biome lint', [bunExecutable, 'run', 'lint'])
-  await runStep('model diagnostics redaction validation', [
-    bunExecutable,
-    'run',
-    'scripts/validation/model-diagnostics.ts',
-  ])
+  for (const script of validationScripts) {
+    await runStep(`source validation: ${script}`, [
+      bunExecutable,
+      'run',
+      script,
+    ])
+  }
 
   const config = ciMode ? null : resolveModelConfig()
   const bunArtifact: CliArtifact = {

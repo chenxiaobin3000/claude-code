@@ -261,7 +261,7 @@ export type RawStatement = {
   }
 }
 
-type RawParsedOutput = {
+export type RawParsedOutput = {
   valid: boolean
   errors: { message: string; errorId: string }[]
   statements: RawStatement[]
@@ -1103,7 +1103,9 @@ export function transformStatement(raw: RawStatement): ParsedStatement {
 }
 
 /** Transform the complete raw PS output into ParsedPowerShellCommand */
-function transformRawOutput(raw: RawParsedOutput): ParsedPowerShellCommand {
+export function transformPowerShellParseOutput(
+  raw: RawParsedOutput,
+): ParsedPowerShellCommand {
   const result: ParsedPowerShellCommand = {
     valid: raw.valid,
     errors: ensureArray(raw.errors),
@@ -1247,7 +1249,7 @@ async function parsePowerShellCommandImpl(
 
   try {
     const raw = jsonParse(trimmed) as RawParsedOutput
-    return transformRawOutput(raw)
+    return transformPowerShellParseOutput(raw)
   } catch {
     logForDebugging(
       `PowerShell parser: invalid JSON output: ${trimmed.slice(0, 200)}`,

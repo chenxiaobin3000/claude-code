@@ -106,7 +106,7 @@
 - [x] 修复当前 5 处 TypeScript 错误，使 `bun run typecheck` 零错误通过（2026-07-15 已验证）。
 - [x] 修复当前 16 处 Biome correctness 错误，并将 `biome.json` schema 与实际 CLI 版本对齐（2026-07-15 已验证）。
 - [x] 完成统一最小验证命令 `bun run verify` 的全链路验收：安装、类型检查、Lint、Bun/Vite 构建、CLI 启动、单轮模型请求和 `Read` 工具调用均于 2026-07-16 通过。
-- [ ] 在 `scripts/validation` 增加独立轻量验证脚本，优先覆盖消息格式转换、OpenAI 流适配、工具权限和 Bash/PowerShell 命令解析；脚本直接调用源码纯函数，以固定输入和预期输出判定结果，失败时返回非零退出码；不引入 `*.test.ts`、测试框架或官方大型测试体系，并统一并入现有 `bun run verify`，不另设第二层验证。
+- [x] 在 `scripts/validation` 增加独立轻量验证脚本，覆盖消息格式转换、OpenAI 流适配、工具权限、Bash/PowerShell 命令解析和模型日志脱敏；脚本直接调用源码纯函数，以固定输入和预期输出判定结果，失败时返回非零退出码；不引入 `*.test.ts`、测试框架或官方大型测试体系，并统一并入现有 `bun run verify`，不另设第二层验证（2026-07-16 已完成）。
 - [x] 使用本地 llama.cpp 的 OpenAI-compatible endpoint 完成单轮对话与工具调用冒烟；该检查属于同一个 `bun run verify` 流程，不另设付费请求或第二层验证（2026-07-16 已完成）。
 - [x] 明确 Bun bundle、Vite/Rollup Node bundle、Bun standalone EXE 三条构建链的支持边界和验证矩阵，并并入同一个 `bun run verify`（2026-07-16 已完成三条构建链全矩阵验证）。
 - [x] 增加 Windows/Linux CI，执行依赖锁定检查、TypeScript、Biome、适用构建产物完整性检查及 CLI `--version`/`--help` 启动冒烟；统一复用 `bun run verify -- --ci`（2026-07-16 已完成本地 CI 模式验证）。
@@ -146,6 +146,18 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 模型诊断安全边界：请求开始、首 Token、成功和失败事件只记录请求 ID、Provider、模型、无凭据 endpoint、消息/字符/工具数量、Token 上限、TTFT、总耗时、Usage、停止原因、HTTP 状态、错误码和 Provider 请求 ID。禁止把请求体、Headers、system/user Prompt、工具参数、工具返回值或原始错误对象传入诊断日志。`logForDebugging` 在最终写入前统一清理 Authorization、Bearer/Basic、API Key、OAuth/JWT、敏感 URL 参数和 URL 用户凭据，并截断超长内容；OpenAI 错误还会按本次请求实际使用的 API Key 和消息文本做精确替换。Langfuse LLM observation 仅保留输入、输出和工具的类型、数量、角色分布与序列化长度摘要，不再保存原文。
 
 `scripts/validation/model-diagnostics.ts` 使用固定伪 API Key、OAuth JWT、URL 凭据和唯一 Prompt 标记验证脱敏、endpoint 清理、错误截断及摘要输出，并已并入唯一的 `bun run verify` 流程。2026-07-16 使用本地 llama.cpp 完成 Bun bundle、Vite/Node bundle 和 Windows x64 EXE 的模型与 `Read` 工具全矩阵验证，新增脱敏检查同时通过，总耗时 66.0 秒；另以 `--debug-file` 执行真实请求，落盘得到请求开始、首 Token、成功三类结构化事件，Prompt 标记未写入日志。
+
+轻量源码验证矩阵：
+
+| 脚本 | 纯函数边界 | 固定样例覆盖 |
+| --- | --- | --- |
+| `message-conversion.ts` | `anthropicMessagesToOpenAI` | system/user/assistant、thinking、tool use/result 顺序、图片 |
+| `openai-stream.ts` | `adaptOpenAIStreamToAnthropic` | thinking/text、分片工具参数、尾部 Usage、缓存 Token、`tool_use`/`max_tokens` 停止原因 |
+| `tool-permissions.ts` | 权限规则解析、序列化和通配匹配 | exact/prefix/wildcard、括号与反斜杠转义、命令边界、Bash 大小写敏感、PowerShell 大小写不敏感 |
+| `shell-parsers.ts` | Bash 纯 TypeScript AST 解析与 PowerShell JSON AST 转换 | 管道、控制符、命令替换、转义分号、heredoc、cmdlet/路径/模块前缀、参数、变量、重定向 |
+| `model-diagnostics.ts` | 日志脱敏和摘要纯函数 | API Key、OAuth/JWT、URL 凭据、Prompt、截断和安全诊断字段 |
+
+每个脚本都可由 `bun run scripts/validation/<name>.ts` 独立运行；`scripts/verify.ts` 按固定清单逐项执行，项目不增加第二个总验证命令。PowerShell 轻量验证不启动 `pwsh`，只调用运行路径实际使用的 `transformPowerShellParseOutput` 纯转换边界，因此可在 Windows/Linux CI 中得到相同结果；外部 PowerShell 进程发现与启动不属于本组纯函数验证。2026-07-16 五项脚本独立执行总耗时低于 1 秒，随后完整 `bun run verify` 通过，三构建链、模型和工具调用均成功，总耗时 69.8 秒。
 
 验收标准：
 
