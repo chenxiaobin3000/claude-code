@@ -46,6 +46,7 @@ import type { PermissionMode } from './utils/permissions/PermissionMode.js';
 import { getBaseRenderOptions } from './utils/renderOptions.js';
 import { getSettingsWithAllErrors } from './utils/settings/allErrors.js';
 import { hasSkipDangerousModePermissionPrompt } from './utils/settings/settings.js';
+import { shouldShowOpenAISetup } from './utils/openAIConfig.js';
 
 export function completeOnboarding(): void {
   saveGlobalConfig(current => ({
@@ -164,6 +165,14 @@ export async function showSetupScreens(
       ),
       { onChangeAppState },
     );
+  }
+
+  if (shouldShowOpenAISetup()) {
+    onboardingShown = true;
+    const { OpenAISetup } = await import('./components/OpenAISetup.js');
+    await showSetupDialog(root, done => <OpenAISetup onDone={done} />, {
+      onChangeAppState,
+    });
   }
 
   // Always show the trust dialog in interactive sessions, regardless of permission mode.

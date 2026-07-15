@@ -932,6 +932,7 @@ async function getMessagesForSlashCommand(
             ],
             shouldQuery: false,
             command,
+            resultText: e instanceof Error ? e.message : String(e),
           };
         }
       }
@@ -989,6 +990,7 @@ async function getMessagesForSlashCommand(
             ],
             shouldQuery: false,
             command,
+            resultText: e instanceof Error ? e.message : String(e),
           };
         }
       }

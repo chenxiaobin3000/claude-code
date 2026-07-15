@@ -3,6 +3,7 @@ import type { Command } from '../commands.js'
 import { maybeMarkProjectOnboardingComplete } from '../projectOnboardingState.js'
 import { AUTONOMY_AGENTS_PATH_POSIX } from '../utils/autonomyAuthority.js'
 import { isEnvTruthy } from '../utils/envUtils.js'
+import { getMissingOpenAIConfig } from '../utils/openAIConfig.js'
 
 const OLD_INIT_PROMPT = `Please analyze this codebase and create a CLAUDE.md file, which will be given to future instances of Claude Code to operate in this repository.
 
@@ -238,6 +239,13 @@ const command = {
   progressMessage: 'analyzing your codebase',
   source: 'builtin',
   async getPromptForCommand() {
+    const missing = getMissingOpenAIConfig()
+    if (missing.length > 0) {
+      throw new Error(
+        `OpenAI-compatible API configuration is incomplete: missing ${missing.join(', ')}. Restart the interactive CLI to run setup, or configure OPENAI_API_KEY, OPENAI_BASE_URL, and OPENAI_MODEL in your environment or user settings.`,
+      )
+    }
+
     maybeMarkProjectOnboardingComplete()
 
     return [
