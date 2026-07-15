@@ -51,7 +51,7 @@
 - Bun workspace 当前包含 18 个子包。
 - Git 管理的 TypeScript 源码约 2,746 个文件、56 万行。
 - 当前模型主路径由 `getAPIProvider()` 固定路由至 `openai`。Anthropic 账号登录、鉴权和官方模型直连已移除；Anthropic SDK 因大量内部消息、工具和流事件调用而继续作为兼容层保留。Bedrock Provider 的客户端、AWS 鉴权、模型发现、Token 计数、限流适配、配置和专用依赖已于 2026-07-15 移除；Vertex 和 Foundry 仍需分别审计。
-- 已新增统一最小验证命令 `bun run verify`，顺序覆盖锁定安装、类型检查、Lint、Bun/Vite 构建、Bun/Node CLI 版本和启动、单轮模型请求及 `Read` 工具调用。验证直接使用 `~/.claude/models.json` 的默认模型，并限制为回环或私有网络地址。2026-07-16 使用本地 llama.cpp（Qwen3.5-9B-Q6_K，65,536 上下文）完成全链路复验，所有检查通过，总耗时 52.6 秒。
+- 已新增统一最小验证命令 `bun run verify`，顺序覆盖锁定安装、类型检查、Lint，以及 Bun bundle、Vite/Rollup Node bundle、Windows x64 standalone EXE 三条构建链的完整性、版本、启动、单轮模型请求和 `Read` 工具调用。验证直接使用 `~/.claude/models.json` 的默认模型，并限制为回环或私有网络地址。2026-07-16 使用本地 llama.cpp（Qwen3.5-9B-Q6_K，65,536 上下文）完成三构建链全矩阵复验，所有检查通过，总耗时 69.1 秒。
 - 多模型注册表已于 2026-07-15 完成：重复模型 ID 和无效默认模型会在加载时失败；同地址模型复用 OpenAI Client，不同地址使用独立 Client；旧 `OPENAI_MODEL`、`OPENAI_BASE_URL`、角色模型环境变量、模型映射和 `providers.json` 注册表已从运行链移除。类型检查、Lint、Bun 构建、Vite 构建及 Bun/Node CLI 启动验证通过。
 
 该快照只描述当前状态，不作为长期允许失败的基线。P0 完成后，类型检查、Lint、构建和启动检查必须全部转为通过。
@@ -94,7 +94,7 @@
 4. 模型供应商必须通过 OpenAI-compatible 协议接入，不新增厂商专用 Provider 分支。
 5. 新模型必须同时补齐模型 ID、上下文、推理参数、价格、显示名称和兼容能力判断。
 6. 保持语音功能移除状态，除非后续单独立项恢复。
-7. 在不恢复大型测试体系的前提下，至少保留构建、类型检查和关键链路冒烟验证。
+7. 不在源码目录引入 `*.test.ts` 或测试框架；轻量逻辑验证统一写入 `scripts/validation`，并由现有 `bun run verify` 执行，不形成第二层验证。
 
 ## 5. 后续开发路线图
 
@@ -106,11 +106,33 @@
 - [x] 修复当前 5 处 TypeScript 错误，使 `bun run typecheck` 零错误通过（2026-07-15 已验证）。
 - [x] 修复当前 16 处 Biome correctness 错误，并将 `biome.json` schema 与实际 CLI 版本对齐（2026-07-15 已验证）。
 - [x] 完成统一最小验证命令 `bun run verify` 的全链路验收：安装、类型检查、Lint、Bun/Vite 构建、CLI 启动、单轮模型请求和 `Read` 工具调用均于 2026-07-16 通过。
-- [ ] 增加轻量自动化验证，优先覆盖消息格式转换、OpenAI 流适配、工具权限和 Bash/PowerShell 命令解析；测试应可独立运行，不要求恢复官方大型测试体系。
+- [ ] 在 `scripts/validation` 增加独立轻量验证脚本，优先覆盖消息格式转换、OpenAI 流适配、工具权限和 Bash/PowerShell 命令解析；脚本直接调用源码纯函数，以固定输入和预期输出判定结果，失败时返回非零退出码；不引入 `*.test.ts`、测试框架或官方大型测试体系，并统一并入现有 `bun run verify`，不另设第二层验证。
 - [x] 使用本地 llama.cpp 的 OpenAI-compatible endpoint 完成单轮对话与工具调用冒烟；该检查属于同一个 `bun run verify` 流程，不另设付费请求或第二层验证（2026-07-16 已完成）。
-- [ ] 明确 Bun bundle、Vite/Rollup Node bundle、Bun standalone EXE 三条构建链的支持边界和验证矩阵。
+- [x] 明确 Bun bundle、Vite/Rollup Node bundle、Bun standalone EXE 三条构建链的支持边界和验证矩阵，并并入同一个 `bun run verify`（2026-07-16 已完成三条构建链全矩阵验证）。
 - [ ] 增加 CI，至少执行依赖锁定检查、TypeScript、Biome、三类构建中的适用产物和 CLI `--version`/启动冒烟。
 - [ ] 为模型请求增加可脱敏的诊断日志，禁止记录 API Key、OAuth Token 和完整敏感 Prompt。
+
+构建链支持边界：
+
+| 构建链 | 定位 | 支持运行时/平台 | 产物与边界 |
+| --- | --- | --- | --- |
+| Bun bundle | Bun 用户、开发与 Bun 运行时发布 | Bun `>=1.3.0`；当前已验证 Windows x64 | `dist/cli-bun.js`；允许 `bun:ffi` 等 Bun 专用模块，不将同次构建生成的 Node 包装入口作为正式 Node 产物。 |
+| Vite/Rollup Node bundle | npm 默认 CLI 发布产物 | 当前基线为 Node.js 22；扩大 Node 版本或操作系统范围前必须增加对应 CI | `dist/cli-node.js` 与 `dist/chunks/*`；不得残留 Bun-only 必需依赖，Chunk 引用必须完整。 |
+| Bun standalone EXE | 无需目标机器安装 Node.js/Bun 的单文件发布 | 仅 Windows x64 | `dist/ccb.exe`；内嵌 Bun Runtime，但 Git、Shell、MCP Server 等外部功能依赖不因此自动内嵌。 |
+
+统一验证矩阵：
+
+| 检查 | Bun bundle | Vite/Node bundle | Windows x64 EXE |
+| --- | --- | --- | --- |
+| 构建成功 | 必须 | 必须 | Windows x64 必须，其他平台明确跳过 |
+| JS/Chunk 完整性 | 必须 | 必须递归检查 `dist/chunks` | 不适用 |
+| `--version` | 必须 | 必须 | 必须 |
+| `--help` 启动 | 必须 | 必须 | 必须 |
+| 本地模型单轮请求 | 必须 | 必须 | 必须 |
+| `Read` 工具调用 | 必须 | 必须 | 必须 |
+| 无需安装 Node.js/Bun | 不适用 | 不适用 | 构建产物属性，必须通过直接执行 EXE 验证 |
+
+矩阵必须按“构建一条、立即验证一条”的顺序运行，因为 Bun 与 Vite 构建都会重建 `dist`。`scripts/check-bundle-integrity.ts` 对未知外部运行时模块保持错误；`bun:ffi` 仅在 Bun 产物中作为运行时专用警告，`@napi-rs/keyring` 和旧 Google/Vertex 分支的 `node-fetch` 作为可选或非支持路径警告，缺失时必须安全降级。2026-07-16 实测 Bun 与 Node 产物完整性均为零错误，Windows x64 EXE 为 120.1 MiB，三种产物的版本、帮助、模型请求和工具调用全部通过。
 
 验收标准：
 
@@ -131,7 +153,7 @@
 - [ ] 对 Vertex、Foundry 非主路径分支分别做引用和运行时审计；只有确认不承担共享 SDK 兼容职责且不可达后，才删除对应实现、配置或依赖。
 - [ ] 拆分 `src/main.tsx`，按启动阶段、参数注册、运行模式和服务初始化划分模块。
 - [ ] 拆分 `src/screens/REPL.tsx`，将会话状态、输入控制、任务/Agent 状态和渲染职责分离。
-- [ ] 拆分 `src/utils/messages.ts`、`src/utils/sessionStorage.ts` 和 `src/utils/hooks.ts`，优先抽出纯函数与协议转换层，并为其补充轻量测试。
+- [ ] 拆分 `src/utils/messages.ts`、`src/utils/sessionStorage.ts` 和 `src/utils/hooks.ts`，优先抽出纯函数与协议转换层，并在 `scripts/validation` 中补充轻量验证脚本。
 - [ ] 为所有 workspace 统一最小脚本约定：`typecheck`、`build`、`test` 或明确的 `test:smoke`；不适用的子包需写明原因。
 - [ ] 审计根包 `devDependencies` 中实际进入生产 Bundle 的依赖，明确运行时依赖与构建期依赖，减少发布和供应链审计范围。
 - [ ] 将 Feature Flag 分为稳定、实验、内部/部署专用三组，增加依赖关系和非法组合检查；默认构建只启用有验收覆盖的稳定能力。
@@ -286,7 +308,7 @@
 - 配置项、环境变量和默认行为有文档。
 - TypeScript 与 Biome 检查零错误通过。
 - Bun、Node 及适用平台的 standalone EXE 构建完成，并通过相应 CLI 启动冒烟。
-- 涉及消息、Provider、权限、命令解析或持久化的改动具有轻量自动化验证；无法自动化时记录人工验证步骤和结果。
+- 涉及消息、Provider、权限、命令解析或持久化的改动应在 `scripts/validation` 中具有独立轻量验证，并由 `bun run verify` 统一执行；无法脚本化时记录人工验证步骤和结果。
 - 不记录或泄露密钥、Token、凭据文件及敏感 Prompt。
 - Windows、macOS、Linux 的差异已评估；无法支持的平台有明确提示。
 - 旧配置有迁移或兼容方案。

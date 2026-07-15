@@ -85,23 +85,33 @@ function assertIncludes(value: string, expected: string, label: string): void {
   }
 }
 
-async function assertVersion(
-  runtime: 'bun' | 'node',
-  entrypoint: string,
-): Promise<void> {
-  const executable = runtime === 'bun' ? bunExecutable : runtime
+interface CliArtifact {
+  label: string
+  command: string[]
+}
+
+async function assertVersion(artifact: CliArtifact): Promise<void> {
   const result = await runStep(
-    `${runtime} CLI version`,
-    [executable, entrypoint, '--version'],
+    `${artifact.label} version`,
+    [...artifact.command, '--version'],
     {
       capture: true,
     },
   )
   if (result.stdout.trim() !== expectedVersion) {
     throw new Error(
-      `${runtime} CLI version mismatch: expected ${JSON.stringify(expectedVersion)}, got ${JSON.stringify(result.stdout.trim())}`,
+      `${artifact.label} version mismatch: expected ${JSON.stringify(expectedVersion)}, got ${JSON.stringify(result.stdout.trim())}`,
     )
   }
+}
+
+async function verifyStartup(artifact: CliArtifact): Promise<void> {
+  const result = await runStep(
+    `${artifact.label} startup`,
+    [...artifact.command, '--help'],
+    { capture: true },
+  )
+  assertIncludes(result.stdout, 'Claude Code', `${artifact.label} help`)
 }
 
 interface ModelConfig {
@@ -141,13 +151,15 @@ function resolveModelConfig(): ModelConfig {
   return { baseUrl, model }
 }
 
-async function verifyModelRequest(config: ModelConfig): Promise<void> {
+async function verifyModelRequest(
+  artifact: CliArtifact,
+  config: ModelConfig,
+): Promise<void> {
   const marker = 'MODEL_SMOKE_OK'
   const result = await runStep(
-    'single-turn model request',
+    `${artifact.label} single-turn model request`,
     [
-      'node',
-      'dist/cli-node.js',
+      ...artifact.command,
       '--print',
       '--bare',
       '--output-format',
@@ -166,7 +178,10 @@ async function verifyModelRequest(config: ModelConfig): Promise<void> {
   assertIncludes(result.stdout, marker, 'single-turn model output')
 }
 
-async function verifyReadTool(config: ModelConfig): Promise<void> {
+async function verifyReadTool(
+  artifact: CliArtifact,
+  config: ModelConfig,
+): Promise<void> {
   const tempDir = await mkdtemp(join(tmpdir(), 'claude-code-verify-'))
   const fixturePath = join(tempDir, 'read-smoke.txt')
   const fixtureToken = `READ_FIXTURE_${crypto.randomUUID()}`
@@ -174,10 +189,9 @@ async function verifyReadTool(config: ModelConfig): Promise<void> {
 
   try {
     const result = await runStep(
-      'Read tool call',
+      `${artifact.label} Read tool call`,
       [
-        'node',
-        'dist/cli-node.js',
+        ...artifact.command,
         '--print',
         '--bare',
         '--verbose',
@@ -208,6 +222,16 @@ async function verifyReadTool(config: ModelConfig): Promise<void> {
   }
 }
 
+async function verifyCliArtifact(
+  artifact: CliArtifact,
+  config: ModelConfig,
+): Promise<void> {
+  await assertVersion(artifact)
+  await verifyStartup(artifact)
+  await verifyModelRequest(artifact, config)
+  await verifyReadTool(artifact, config)
+}
+
 async function main(): Promise<void> {
   const startedAt = Date.now()
 
@@ -219,24 +243,44 @@ async function main(): Promise<void> {
   await runStep('TypeScript typecheck', [bunExecutable, 'run', 'typecheck'])
   await runStep('Biome lint', [bunExecutable, 'run', 'lint'])
 
-  await runStep('Bun build', [bunExecutable, 'run', 'build'])
-  await assertVersion('bun', 'dist/cli-bun.js')
-  await assertVersion('node', 'dist/cli-node.js')
+  const config = resolveModelConfig()
+  const bunArtifact: CliArtifact = {
+    label: 'Bun bundle CLI',
+    command: [bunExecutable, 'dist/cli-bun.js'],
+  }
+  const nodeArtifact: CliArtifact = {
+    label: 'Vite/Node bundle CLI',
+    command: ['node', 'dist/cli-node.js'],
+  }
+
+  await runStep('Bun bundle build', [bunExecutable, 'run', 'build:bun'])
+  await runStep('Bun bundle integrity', [bunExecutable, 'run', 'check:bundle'])
+  await verifyCliArtifact(bunArtifact, config)
 
   await runStep('Vite/Node build', [bunExecutable, 'run', 'build:vite'])
-  await assertVersion('node', 'dist/cli-node.js')
-  const help = await runStep(
-    'Node CLI startup',
-    ['node', 'dist/cli-node.js', '--help'],
-    {
-      capture: true,
-    },
-  )
-  assertIncludes(help.stdout, 'Claude Code', 'Node CLI help')
+  await runStep('Vite/Node bundle integrity', [
+    bunExecutable,
+    'run',
+    'check:bundle',
+  ])
+  await verifyCliArtifact(nodeArtifact, config)
 
-  const config = resolveModelConfig()
-  await verifyModelRequest(config)
-  await verifyReadTool(config)
+  if (process.platform === 'win32' && process.arch === 'x64') {
+    await runStep('Windows x64 standalone EXE build', [
+      bunExecutable,
+      'run',
+      'build:exe',
+    ])
+    const exeArtifact: CliArtifact = {
+      label: 'Windows x64 standalone EXE',
+      command: [resolve(projectRoot, 'dist', 'ccb.exe')],
+    }
+    await verifyCliArtifact(exeArtifact, config)
+  } else {
+    console.log(
+      `\n[verify] SKIP Windows x64 standalone EXE on ${process.platform}-${process.arch}`,
+    )
+  }
 
   console.log(
     `\n[verify] ALL CHECKS PASSED in ${((Date.now() - startedAt) / 1000).toFixed(1)}s`,
