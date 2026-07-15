@@ -1,4 +1,10 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from 'node:fs'
 import { dirname, join } from 'node:path'
 import { getClaudeConfigHomeDir } from '../envUtils.js'
 
@@ -23,6 +29,10 @@ let cachedRegistry: ModelRegistry | null = null
 
 export function getModelsConfigPath(): string {
   return join(getClaudeConfigHomeDir(), 'models.json')
+}
+
+export function isModelRegistryMissing(): boolean {
+  return !existsSync(getModelsConfigPath())
 }
 
 export function clearModelRegistryCache(): void {

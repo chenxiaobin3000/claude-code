@@ -185,7 +185,7 @@ import {
   normalizeModelStringForAPI,
   parseUserSpecifiedModel,
 } from './utils/model/model.js';
-import { getModelRegistryError } from './utils/model/modelRegistry.js';
+import { getModelRegistryError, isModelRegistryMissing } from './utils/model/modelRegistry.js';
 import { ensureModelStringsInitialized } from './utils/model/modelStrings.js';
 import { PERMISSION_MODES } from './utils/permissions/PermissionMode.js';
 import {
@@ -2587,10 +2587,16 @@ async function run(): Promise<CommanderCommand> {
       // Compute resolved model for hooks (use user-specified model at launch)
       setInitialMainLoopModel(getUserSpecifiedModelSetting() || null);
       const initialMainLoopModel = getInitialMainLoopModel();
-      let resolvedInitialModel: string | null =
-        !isNonInteractiveSession && getModelRegistryError() !== null
-          ? null
-          : parseUserSpecifiedModel(initialMainLoopModel ?? getDefaultMainLoopModel());
+      const modelRegistryError = getModelRegistryError();
+      const shouldConfigureModel = !isNonInteractiveSession && isModelRegistryMissing();
+      if (modelRegistryError !== null && !shouldConfigureModel) {
+        process.stderr.write(chalk.red(`Model configuration error: ${modelRegistryError}\n`));
+        gracefulShutdownSync(1);
+        return;
+      }
+      let resolvedInitialModel: string | null = shouldConfigureModel
+        ? null
+        : parseUserSpecifiedModel(initialMainLoopModel ?? getDefaultMainLoopModel());
 
       let advisorModel: string | undefined;
       if (isAdvisorEnabled() && resolvedInitialModel !== null) {

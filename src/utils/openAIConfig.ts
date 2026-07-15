@@ -1,6 +1,7 @@
 import {
   getModelRegistryError,
   getModelsConfigPath,
+  isModelRegistryMissing,
 } from './model/modelRegistry.js'
 
 export function getMissingOpenAIConfig(): string[] {
@@ -9,7 +10,7 @@ export function getMissingOpenAIConfig(): string[] {
 }
 
 export function shouldShowOpenAISetup(): boolean {
-  return getModelRegistryError() !== null
+  return isModelRegistryMissing()
 }
 
 export function getOpenAIModelsConfigPath(): string {
