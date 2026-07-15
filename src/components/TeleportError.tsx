@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { checkIsGitClean, checkNeedsClaudeAiLogin } from 'src/utils/background/remote/preconditions.js';
 import { gracefulShutdownSync } from 'src/utils/gracefulShutdown.js';
 import { Box, Text } from '@anthropic/ink';
-import { ConsoleOAuthFlow } from './ConsoleOAuthFlow.js';
 import { Select } from './CustomSelect/index.js';
 import { Dialog } from '@anthropic/ink';
 import { TeleportStash } from './TeleportStash.js';
@@ -25,7 +24,6 @@ export function TeleportError({
   errorsToIgnore = EMPTY_ERRORS_TO_IGNORE,
 }: TeleportErrorProps): React.ReactNode {
   const [currentError, setCurrentError] = useState<TeleportLocalErrorType | null>(null);
-  const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
 
   // Check for errors on mount and when error resolution occurs
   const checkErrors = useCallback(async () => {
@@ -57,27 +55,6 @@ export function TeleportError({
     gracefulShutdownSync(0);
   }, []);
 
-  const handleLoginComplete = useCallback(() => {
-    setIsLoggingIn(false);
-    void checkErrors();
-  }, [checkErrors]);
-
-  const handleLoginWithClaudeAI = useCallback(() => {
-    setIsLoggingIn(true);
-  }, [setIsLoggingIn]);
-
-  const handleLoginDialogSelect = useCallback(
-    (value: string) => {
-      if (value === 'login') {
-        handleLoginWithClaudeAI();
-      } else {
-        // User selected exit
-        onCancel();
-      }
-    },
-    [handleLoginWithClaudeAI, onCancel],
-  );
-
   const handleStashComplete = useCallback(() => {
     void checkErrors();
   }, [checkErrors]);
@@ -92,22 +69,15 @@ export function TeleportError({
       return <TeleportStash onStashAndContinue={handleStashComplete} onCancel={onCancel} />;
 
     case 'needsLogin': {
-      if (isLoggingIn) {
-        return <ConsoleOAuthFlow onDone={handleLoginComplete} mode="login" forceLoginMethod="claudeai" />;
-      }
-
       return (
-        <Dialog title="Log in to Claude" onCancel={onCancel}>
+        <Dialog title="Remote feature unavailable" onCancel={onCancel}>
           <Box flexDirection="column">
-            <Text dimColor>Teleport requires a Claude.ai account.</Text>
-            <Text dimColor>Your Claude Pro/Max subscription will be used by Claude Code.</Text>
+            <Text dimColor>Teleport requires Anthropic account login.</Text>
+            <Text dimColor>This distribution uses local OpenAI-compatible credentials and does not provide account login.</Text>
           </Box>
           <Select
-            options={[
-              { label: 'Login with Claude account', value: 'login' },
-              { label: 'Exit', value: 'exit' },
-            ]}
-            onChange={handleLoginDialogSelect}
+            options={[{ label: 'Exit', value: 'exit' }]}
+            onChange={onCancel}
           />
         </Dialog>
       );

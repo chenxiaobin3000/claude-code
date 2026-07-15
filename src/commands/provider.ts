@@ -57,13 +57,12 @@ const call: LocalCommandCall = async (args, _context) => {
     delete process.env.CLAUDE_CODE_USE_GROK
     return {
       type: 'text',
-      value: 'API provider cleared (will use environment variables).',
+      value: 'API provider cleared (OpenAI is the default).',
     }
   }
 
   // Validate provider
   const validProviders = [
-    'anthropic',
     'openai',
     'gemini',
     'grok',
@@ -91,7 +90,7 @@ const call: LocalCommandCall = async (args, _context) => {
       if (!hasUrl) missing.push('OPENAI_BASE_URL')
       return {
         type: 'text',
-        value: `Switched to OpenAI provider.\nWarning: Missing env vars: ${missing.join(', ')}\nConfigure them via /login or set manually.`,
+        value: `Switched to OpenAI provider.\nWarning: Missing env vars: ${missing.join(', ')}\nSet them in your environment or settings.json.`,
       }
     }
   }
@@ -118,16 +117,15 @@ const call: LocalCommandCall = async (args, _context) => {
       updateSettingsForSource('userSettings', { modelType: 'gemini' })
       return {
         type: 'text',
-        value: `Switched to Gemini provider.\nWarning: Missing env var: GEMINI_API_KEY\nConfigure it via /login or set manually.`,
+        value: `Switched to Gemini provider.\nWarning: Missing env var: GEMINI_API_KEY\nSet it in your environment or settings.json.`,
       }
     }
   }
 
   // Handle different provider types
-  // - 'anthropic', 'openai', 'gemini' are stored in settings.json (persistent)
+  // - 'openai', 'gemini', 'grok' are stored in settings.json (persistent)
   // - 'bedrock', 'vertex', 'foundry' are env-only (do NOT touch settings.json)
   if (
-    arg === 'anthropic' ||
     arg === 'openai' ||
     arg === 'gemini' ||
     arg === 'grok'
@@ -165,9 +163,9 @@ const provider = {
   type: 'local',
   name: 'provider',
   description:
-    'Switch API provider (anthropic/openai/gemini/grok/bedrock/vertex/foundry)',
+    'Switch API provider (openai/gemini/grok/bedrock/vertex/foundry)',
   aliases: ['api'],
-  argumentHint: '[anthropic|openai|gemini|grok|bedrock|vertex|foundry|unset]',
+  argumentHint: '[openai|gemini|grok|bedrock|vertex|foundry|unset]',
   supportsNonInteractive: true,
   load: () => Promise.resolve({ call }),
 } satisfies Command

@@ -28,7 +28,10 @@ export function getAPIProvider(
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_GEMINI)) return 'gemini'
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_GROK)) return 'grok'
 
-  return 'firstParty'
+  // OpenAI is the default runtime provider. The Anthropic SDK remains a local
+  // type/protocol dependency, but no first-party Anthropic client is selected
+  // implicitly by this distribution.
+  return 'openai'
 }
 
 export function getAPIProviderForStatsig(): AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS {

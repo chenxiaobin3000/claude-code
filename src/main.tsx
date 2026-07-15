@@ -16,10 +16,6 @@ import { startMdmRawRead } from './utils/settings/mdm/rawRead.js';
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 startMdmRawRead();
 
-import { ensureKeychainPrefetchCompleted, startKeychainPrefetch } from './utils/secureStorage/keychainPrefetch.js';
-
-// eslint-disable-next-line custom-rules/no-top-level-side-effects
-startKeychainPrefetch();
 
 import { feature } from 'bun:bundle';
 import { Command as CommanderCommand, InvalidArgumentError, Option } from '@commander-js/extra-typings';
@@ -38,7 +34,6 @@ import { launchRepl } from './replLauncher.js';
 import {
   hasGrowthBookEnvOverride,
   initializeGrowthBook,
-  refreshGrowthBookAfterAuthChange,
 } from './services/analytics/growthbook.js';
 import { fetchBootstrapData } from './services/api/bootstrap.js';
 import {
@@ -52,10 +47,9 @@ import type { McpSdkServerConfig, McpServerConfig, ScopedMcpServerConfig } from 
 import {
   isPolicyAllowed,
   loadPolicyLimits,
-  refreshPolicyLimits,
   waitForPolicyLimitsToLoad,
 } from './services/policyLimits/index.js';
-import { loadRemoteManagedSettings, refreshRemoteManagedSettings } from './services/remoteManagedSettings/index.js';
+import { loadRemoteManagedSettings } from './services/remoteManagedSettings/index.js';
 import type { ToolInputJSONSchema } from './Tool.js';
 import {
   createSyntheticOutputTool,
@@ -77,7 +71,6 @@ import {
   isClaudeAISubscriber,
   prefetchAwsCredentialsAndBedRockInfoIfSafe,
   prefetchGcpCredentialsIfSafe,
-  validateForceLoginOrg,
 } from './utils/auth.js';
 import {
   checkHasTrustDialogAccepted,
@@ -355,7 +348,7 @@ import {
   validateSessionRepository,
 } from './utils/teleport.js';
 import { shouldEnableThinkingByDefault, type ThinkingConfig } from './utils/thinking.js';
-import { initUser, resetUserCache } from './utils/user.js';
+import { initUser } from './utils/user.js';
 import { getTmuxInstallInstructions, isTmuxAvailable, parsePRReference } from './utils/worktree.js';
 
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
@@ -1091,7 +1084,7 @@ async function run(): Promise<CommanderCommand> {
     // Must resolve before init() which triggers the first settings read
     // (applySafeConfigEnvironmentVariables → getSettingsForSource('policySettings')
     // → isRemoteManagedSettingsEligible → sync keychain reads otherwise ~65ms).
-    await Promise.all([ensureMdmSettingsLoaded(), ensureKeychainPrefetchCompleted()]);
+    await ensureMdmSettingsLoaded();
     profileCheckpoint('preAction_after_mdm');
     await init();
     profileCheckpoint('preAction_after_init');
@@ -1178,7 +1171,7 @@ async function run(): Promise<CommanderCommand> {
     )
     .option(
       '--bare',
-      'Minimal mode: skip hooks, LSP, plugin sync, attribution, auto-memory, background prefetches, keychain reads, and CLAUDE.md auto-discovery. Sets CLAUDE_CODE_SIMPLE=1. Anthropic auth is strictly ANTHROPIC_API_KEY or apiKeyHelper via --settings (OAuth and keychain are never read). 3P providers (Bedrock/Vertex/Foundry) use their own credentials. Skills still resolve via /skill-name. Explicitly provide context via: --system-prompt[-file], --append-system-prompt[-file], --add-dir (CLAUDE.md dirs), --mcp-config, --settings, --agents, --plugin-dir.',
+      'Minimal mode: skip hooks, LSP, plugin sync, attribution, auto-memory, background prefetches, keychain reads, and CLAUDE.md auto-discovery. Sets CLAUDE_CODE_SIMPLE=1. Provider credentials are read from environment variables or --settings; account OAuth is unavailable. Skills still resolve via /skill-name. Explicitly provide context via: --system-prompt[-file], --append-system-prompt[-file], --add-dir (CLAUDE.md dirs), --mcp-config, --settings, --agents, --plugin-dir.',
       () => true,
     )
     .addOption(new Option('--init', 'Run Setup hooks with init trigger, then continue').hideHelp())
@@ -2769,7 +2762,7 @@ async function run(): Promise<CommanderCommand> {
 
         logForDebugging('[STARTUP] Running showSetupScreens()...');
         const setupScreensStart = Date.now();
-        const onboardingShown = await showSetupScreens(
+        await showSetupScreens(
           root,
           permissionMode,
           allowDangerouslySkipPermissions,
@@ -2812,38 +2805,6 @@ async function run(): Promise<CommanderCommand> {
           agentDef.pendingSnapshotUpdate = undefined;
         }
 
-        // Skip executing /login if we just completed onboarding for it
-        if (onboardingShown && prompt?.trim().toLowerCase() === '/login') {
-          prompt = '';
-        }
-
-        if (onboardingShown) {
-          // Refresh auth-dependent services now that the user has logged in during onboarding.
-          // Keep in sync with the post-login logic in src/commands/login.tsx
-          void refreshRemoteManagedSettings();
-          void refreshPolicyLimits();
-          // Clear user data cache BEFORE GrowthBook refresh so it picks up fresh credentials
-          resetUserCache();
-          // Refresh GrowthBook after login to get updated feature flags (e.g., for claude.ai MCPs)
-          refreshGrowthBookAfterAuthChange();
-          // Clear any stale trusted device token then enroll for Remote Control.
-          // Both self-gate on tengu_sessions_elevated_auth_enforcement internally
-          // — enrollTrustedDevice() via checkGate_CACHED_OR_BLOCKING (awaits
-          // the GrowthBook reinit above), clearTrustedDeviceToken() via the
-          // sync cached check (acceptable since clear is idempotent).
-          void import('./bridge/trustedDevice.js').then(m => {
-            m.clearTrustedDeviceToken();
-            return m.enrollTrustedDevice();
-          });
-        }
-
-        // Validate that the active token's org matches forceLoginOrgUUID (if set
-        // in managed settings). Runs after onboarding so managed settings and
-        // login state are fully loaded.
-        const orgValidation = await validateForceLoginOrg();
-        if (!orgValidation.valid) {
-          await exitWithError(root, (orgValidation as { valid: false; message: string }).message);
-        }
       }
 
       // If gracefulShutdown was initiated (e.g., user rejected trust dialog),
@@ -3159,14 +3120,6 @@ async function run(): Promise<CommanderCommand> {
         // loadInitialMessages awaits it. Downstream await still observes the
         // rejection — this just prevents the spurious global handler fire.
         sessionStartHooksPromise?.catch(() => {});
-
-        profileCheckpoint('before_validateForceLoginOrg');
-        // Validate org restriction for non-interactive sessions
-        const orgValidation = await validateForceLoginOrg();
-        if (!orgValidation.valid) {
-          process.stderr.write((orgValidation as { valid: false; message: string }).message + '\n');
-          process.exit(1);
-        }
 
         // Headless mode supports all prompt commands and some local commands
         // If disableSlashCommands is true, return empty array
@@ -4862,52 +4815,6 @@ async function run(): Promise<CommanderCommand> {
       );
   }
 
-  // claude auth
-
-  const auth = program.command('auth').description('Manage authentication').configureHelp(createSortedHelpConfig());
-
-  auth
-    .command('login')
-    .description('Sign in to your Anthropic account')
-    .option('--email <email>', 'Pre-populate email address on the login page')
-    .option('--sso', 'Force SSO login flow')
-    .option('--console', 'Use Anthropic Console (API usage billing) instead of Claude subscription')
-    .option('--claudeai', 'Use Claude subscription (default)')
-    .action(
-      async ({
-        email,
-        sso,
-        console: useConsole,
-        claudeai,
-      }: {
-        email?: string;
-        sso?: boolean;
-        console?: boolean;
-        claudeai?: boolean;
-      }) => {
-        const { authLogin } = await import('./cli/handlers/auth.js');
-        await authLogin({ email, sso, console: useConsole, claudeai });
-      },
-    );
-
-  auth
-    .command('status')
-    .description('Show authentication status')
-    .option('--json', 'Output as JSON (default)')
-    .option('--text', 'Output as human-readable text')
-    .action(async (opts: { json?: boolean; text?: boolean }) => {
-      const { authStatus } = await import('./cli/handlers/auth.js');
-      await authStatus(opts);
-    });
-
-  auth
-    .command('logout')
-    .description('Log out from your Anthropic account')
-    .action(async () => {
-      const { authLogout } = await import('./cli/handlers/auth.js');
-      await authLogout();
-    });
-
   /**
    * Helper function to handle marketplace command errors consistently.
    * Logs the error and exits the process with status 1.
@@ -5072,19 +4979,6 @@ async function run(): Promise<CommanderCommand> {
       await pluginUpdateHandler(plugin, options);
     });
   // END ANT-ONLY
-
-  // Setup token command
-  program
-    .command('setup-token')
-    .description('Set up a long-lived authentication token (requires Claude subscription)')
-    .action(async () => {
-      const [{ setupTokenHandler }, { createRoot }] = await Promise.all([
-        import('./cli/handlers/util.js'),
-        import('@anthropic/ink'),
-      ]);
-      const root = await createRoot(getBaseRenderOptions(false));
-      await setupTokenHandler(root);
-    });
 
   // Agents command - list configured agents
   program

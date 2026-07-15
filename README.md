@@ -1,4 +1,4 @@
-# Claude Code Best
+# Claude Code
 
 > 一个基于 TypeScript、React/Ink 与 Bun 构建的 Claude Code CLI 逆向重构及增强项目。
 
@@ -50,15 +50,24 @@
 
 ### 模型供应商
 
-项目以 Anthropic 消息格式为核心，并包含以下供应商或兼容层：
+项目保留 Anthropic SDK 的消息、工具和流事件类型作为本地内部协议，但不提供 Anthropic 账号登录，也不默认连接 Anthropic API。运行时默认使用 OpenAI，并包含以下供应商或兼容层：
 
-- Anthropic API
+- OpenAI 及 OpenAI 兼容接口（默认）
 - AWS Bedrock
 - Google Vertex AI
 - Azure Foundry
-- OpenAI 兼容接口
 - Gemini
 - Grok
+
+OpenAI 运行配置：
+
+```bash
+OPENAI_API_KEY=your-api-key
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4o
+```
+
+没有配置 `modelType` 或 `CLAUDE_CODE_USE_*` 环境变量时，Provider 自动选择 OpenAI。`/login`、`/logout`、`claude auth` 和 `setup-token` 已移除；MCP Server 自己的 OAuth 不受影响。
 
 ## 运行架构
 
@@ -67,7 +76,7 @@
 ```text
 CLI 入口
   -> 参数解析与环境初始化
-  -> 加载配置、认证、插件、Skill 和 MCP
+  -> 加载本地 Provider 配置、插件、Skill 和 MCP
   -> 启动 Ink/React REPL
   -> 构造模型请求与会话上下文
   -> 流式接收模型响应

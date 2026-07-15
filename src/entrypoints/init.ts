@@ -7,7 +7,6 @@ import { getIsNonInteractiveSession } from 'src/bootstrap/state.js'
 import type { AttributedCounter } from '../bootstrap/state.js'
 import { getSessionCounter, setMeter } from '../bootstrap/state.js'
 import { shutdownLspServerManager } from '../services/lsp/manager.js'
-import { populateOAuthAccountInfoIfNeeded } from '../services/oauth/client.js'
 import {
   initializePolicyLimitsLoadingPromise,
   isPolicyLimitsEligible,
@@ -17,7 +16,6 @@ import {
   isEligibleForRemoteManagedSettings,
   waitForRemoteManagedSettingsToLoad,
 } from '../services/remoteManagedSettings/index.js'
-import { preconnectAnthropicApi } from '../utils/apiPreconnect.js'
 import { applyExtraCACertsFromConfig } from '../utils/caCertsConfig.js'
 import { registerCleanup } from '../utils/cleanupRegistry.js'
 import {
@@ -127,8 +125,6 @@ export const init = memoize(async (): Promise<void> => {
 
     // Populate OAuth account info if it is not already cached in config. This is needed since the
     // OAuth account info may not be populated when logging in through the VSCode extension.
-    void populateOAuthAccountInfoIfNeeded()
-    profileCheckpoint('init_after_oauth_populate')
 
     // Initialize JetBrains IDE detection asynchronously (populates cache for later sync access)
     void initJetBrainsDetection()
@@ -185,7 +181,6 @@ export const init = memoize(async (): Promise<void> => {
     // connection uses the right transport. Fire-and-forget; skipped for
     // proxy/mTLS/unix/cloud-provider where the SDK's dispatcher wouldn't
     // reuse the global pool.
-    preconnectAnthropicApi()
 
     // CCR upstreamproxy: start the local CONNECT relay so agent subprocesses
     // can reach org-configured upstreams with credential injection. Gated on

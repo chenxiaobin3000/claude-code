@@ -98,55 +98,7 @@ function isManagedOAuthContext(): boolean {
 /** Whether we are supporting direct 1P auth. */
 // this code is closely related to getAuthTokenSource
 export function isAnthropicAuthEnabled(): boolean {
-  // --bare: API-key-only, never OAuth.
-  if (isBareMode()) return false
-
-  // `claude ssh` remote: ANTHROPIC_UNIX_SOCKET tunnels API calls through a
-  // local auth-injecting proxy. The launcher sets CLAUDE_CODE_OAUTH_TOKEN as a
-  // placeholder iff the local side is a subscriber (so the remote includes the
-  // oauth-2025 beta header to match what the proxy will inject). The remote's
-  // ~/.claude settings (apiKeyHelper, settings.env.ANTHROPIC_API_KEY) MUST NOT
-  // flip this — they'd cause a header mismatch with the proxy and a bogus
-  // "invalid x-api-key" from the API. See src/ssh/sshAuthProxy.ts.
-  if (process.env.ANTHROPIC_UNIX_SOCKET) {
-    return !!process.env.CLAUDE_CODE_OAUTH_TOKEN
-  }
-
-  const settings = getSettings_DEPRECATED() || {}
-  const is3P =
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY) ||
-    settings.modelType === 'openai' ||
-    settings.modelType === 'gemini' ||
-    !!process.env.OPENAI_BASE_URL ||
-    !!process.env.GEMINI_BASE_URL
-  const apiKeyHelper = settings.apiKeyHelper
-  const hasExternalAuthToken =
-    process.env.ANTHROPIC_AUTH_TOKEN ||
-    apiKeyHelper ||
-    process.env.CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR
-
-  // Check if API key is from an external source (not managed by /login)
-  const { source: apiKeySource } = getAnthropicApiKeyWithSource({
-    skipRetrievingKeyFromApiKeyHelper: true,
-  })
-  const hasExternalApiKey =
-    apiKeySource === 'ANTHROPIC_API_KEY' || apiKeySource === 'apiKeyHelper'
-
-  // Disable Anthropic auth if:
-  // 1. Using 3rd party services (Bedrock/Vertex/Foundry)
-  // 2. User has an external API key (regardless of proxy configuration)
-  // 3. User has an external auth token (regardless of proxy configuration)
-  // this may cause issues if users have complex proxy / gateway "client-side creds" auth scenarios,
-  // e.g. if they want to set X-Api-Key to a gateway key but use Anthropic OAuth for the Authorization
-  // if we get reports of that, we should probably add an env var to force OAuth enablement
-  const shouldDisableAuth =
-    is3P ||
-    (hasExternalAuthToken && !isManagedOAuthContext()) ||
-    (hasExternalApiKey && !isManagedOAuthContext())
-
-  return !shouldDisableAuth
+  return false
 }
 
 /** Where the auth token is being sourced from, if any. */
@@ -177,7 +129,7 @@ export function getAuthTokenSource() {
     // that can't inherit the pipe FD. Distinguish by env var presence so the
     // org-mismatch message doesn't tell the user to unset a variable that
     // doesn't exist. Call sites fall through correctly — the new source is
-    // !== 'none' (cli/handlers/auth.ts → oauth_token) and not in the
+    // !== 'none' (legacy oauth_token source) and not in the
     // isEnvVarToken set (auth.ts:1844 → generic re-login message).
     if (process.env.CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR) {
       return {
@@ -1740,14 +1692,7 @@ export function getSubscriptionName(): string {
  * separate handling in the call sites above.
  */
 export function isUsing3PServices(): boolean {
-  return !!(
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_GEMINI) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_GROK)
-  )
+  return getAPIProvider() !== 'firstParty'
 }
 
 /**
