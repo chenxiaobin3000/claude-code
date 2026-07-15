@@ -1,5 +1,8 @@
 import { fileURLToPath } from 'url'
-import type { PublishDiagnosticsParams } from 'vscode-languageserver-protocol'
+import type {
+  Diagnostic as LSPDiagnostic,
+  PublishDiagnosticsParams,
+} from 'vscode-languageserver-protocol'
 import { logForDebugging } from '../../utils/debug.js'
 import { toError } from '../../utils/errors.js'
 import { logError } from '../../utils/log.js'
@@ -60,36 +63,26 @@ export function formatDiagnosticsForAttachment(
     uri = params.uri
   }
 
-  const diagnostics = params.diagnostics.map(
-    (diag: {
-      message: string
-      severity?: number
-      range: {
-        start: { line: number; character: number }
-        end: { line: number; character: number }
-      }
-      source?: string
-      code?: string | number
-    }) => ({
-      message: diag.message,
-      severity: mapLSPSeverity(diag.severity),
-      range: {
-        start: {
-          line: diag.range.start.line,
-          character: diag.range.start.character,
-        },
-        end: {
-          line: diag.range.end.line,
-          character: diag.range.end.character,
-        },
+  const diagnostics = params.diagnostics.map((diag: LSPDiagnostic) => ({
+    message:
+      typeof diag.message === 'string' ? diag.message : diag.message.value,
+    severity: mapLSPSeverity(diag.severity),
+    range: {
+      start: {
+        line: diag.range.start.line,
+        character: diag.range.start.character,
       },
-      source: diag.source,
-      code:
-        diag.code !== undefined && diag.code !== null
-          ? String(diag.code)
-          : undefined,
-    }),
-  )
+      end: {
+        line: diag.range.end.line,
+        character: diag.range.end.character,
+      },
+    },
+    source: diag.source,
+    code:
+      diag.code !== undefined && diag.code !== null
+        ? String(diag.code)
+        : undefined,
+  }))
 
   return [
     {

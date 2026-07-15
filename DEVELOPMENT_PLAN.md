@@ -42,6 +42,21 @@
 - 语音模式、录音、音频 NAPI Workspace 和相关二进制依赖已经移除。
 - 本地版本号 `2.8.3` 和 CLI 兜底版本 `2.1.888` 均不代表对应的官方版本。
 
+### 2.4 2026-07-15 工程健康快照
+
+以下结果来自当前工作区的实际静态检查，作为 P0 修复和后续验收的起始基线：
+
+- Bun workspace 当前包含 18 个子包。
+- Git 管理的 TypeScript 源码约 2,746 个文件、56 万行。
+- `bun run typecheck` 当前已通过；此前的 5 处类型错误（1 处 LSP Diagnostic 消息类型转换、4 处 Bash `ControlOperator` 集合类型）已于 2026-07-15 修复。
+- `bun run lint` 当前已通过；此前集中在 `src/utils/messages.ts` 的 16 处可选链 correctness 错误已修复，Biome 配置也已迁移至 2.5.4 schema。
+- 当前未发现正式的 `*.test.*` 或 `*.spec.*` 自动化测试文件。
+- 当前 `dist` 目录为空，`dist/cli-bun.js` 与 `dist/cli-node.js` 尚无可验证产物。
+- README 最初按源码分析生成时曾误列 `bun run health`；代码检查确认它不是本项目需要提供的公开脚本后，该命令已从 README 删除，且不纳入后续开发计划。
+- 当前模型主路径确实由 `getAPIProvider()` 固定路由至 `openai`，但 Anthropic、Bedrock、Vertex 和 Foundry 的遗留实现与依赖仍大量存在。
+
+该快照只描述当前状态，不作为长期允许失败的基线。P0 完成后，类型检查、Lint、构建和启动检查必须全部转为通过。
+
 ## 3. 与官方 v2.1.210 的主要差异
 
 状态说明：
@@ -90,16 +105,42 @@
 
 - [ ] 统一项目版本来源，移除或替换 `2.1.888` 等误导性兜底版本。
 - [ ] 增加 `PROJECT_CAPABILITIES.md` 或机器可读 capability 清单。
+- [x] 修复当前 5 处 TypeScript 错误，使 `bun run typecheck` 零错误通过（2026-07-15 已验证）。
+- [x] 修复当前 16 处 Biome correctness 错误，并将 `biome.json` schema 与实际 CLI 版本对齐（2026-07-15 已验证）。
 - [ ] 固化最小验证命令：安装、类型检查、构建、启动、单轮模型请求、工具调用。
-- [ ] 增加不依赖测试框架的冒烟脚本，覆盖 OpenAI 和另一个 OpenAI-compatible Provider。
-- [ ] 对当前 Bun、Node.js 运行边界形成明确文档。
+- [ ] 增加轻量自动化验证，优先覆盖消息格式转换、OpenAI 流适配、工具权限和 Bash/PowerShell 命令解析；测试应可独立运行，不要求恢复官方大型测试体系。
+- [ ] 增加不依赖真实付费请求的冒烟脚本，并另设可选集成检查，覆盖 OpenAI 和至少一个 OpenAI-compatible endpoint。
+- [ ] 明确 Bun bundle、Vite/Rollup Node bundle、Bun standalone EXE 三条构建链的支持边界和验证矩阵。
+- [ ] 增加 CI，至少执行依赖锁定检查、TypeScript、Biome、三类构建中的适用产物和 CLI `--version`/启动冒烟。
 - [ ] 为模型请求增加可脱敏的诊断日志，禁止记录 API Key、OAuth Token 和完整敏感 Prompt。
 
 验收标准：
 
 - 全新环境可按文档完成安装、构建和启动。
+- `bun run typecheck`、`bun run lint`、构建完整性检查和 CLI 冒烟检查全部通过。
+- Bun 与 Node CLI 产物均能执行 `--version`；支持的平台上 standalone EXE 可以启动。
 - 至少两个 OpenAI/OpenAI-compatible 模型完成流式对话与工具调用。
 - 失败时能定位 Provider、模型映射、鉴权或流解析阶段。
+
+### P1：工程结构与遗留代码治理
+
+目标：降低核心模块修改风险，收敛已经不可达的 Provider 和构建分支。
+
+- [ ] 建立明确的 Provider 接口边界，将共享消息预处理、OpenAI 请求、流事件适配和 Usage 统计分层，避免继续在 `src/services/api/claude.ts` 中扩展条件分支。
+- [ ] 在确认无运行时引用后，分阶段删除 Anthropic 直连、Bedrock、Vertex、Foundry 的不可达实现、配置和依赖；保留必要的 Anthropic 消息类型时应在文档中明确其仅为内部协议。
+- [ ] 拆分 `src/main.tsx`，按启动阶段、参数注册、运行模式和服务初始化划分模块。
+- [ ] 拆分 `src/screens/REPL.tsx`，将会话状态、输入控制、任务/Agent 状态和渲染职责分离。
+- [ ] 拆分 `src/utils/messages.ts`、`src/utils/sessionStorage.ts` 和 `src/utils/hooks.ts`，优先抽出纯函数与协议转换层，并为其补充轻量测试。
+- [ ] 为所有 workspace 统一最小脚本约定：`typecheck`、`build`、`test` 或明确的 `test:smoke`；不适用的子包需写明原因。
+- [ ] 审计根包 `devDependencies` 中实际进入生产 Bundle 的依赖，明确运行时依赖与构建期依赖，减少发布和供应链审计范围。
+- [ ] 将 Feature Flag 分为稳定、实验、内部/部署专用三组，增加依赖关系和非法组合检查；默认构建只启用有验收覆盖的稳定能力。
+
+验收标准：
+
+- 模型请求主路径不再依赖不可达的厂商 Provider 分支。
+- 关键巨石文件有清晰的领域边界，新功能不再继续扩大其职责。
+- 每个 workspace 都能被统一验证流程发现并得到明确结果。
+- Feature Flag 的默认集合、依赖关系和支持级别可由机器读取并在构建时校验。
 
 ### P1：OpenAI-compatible 模型对齐
 
@@ -223,13 +264,15 @@
 
 建议按照以下顺序推进，每一阶段完成验收后再进入下一阶段：
 
-1. P0 基线和诊断能力。
-2. OpenAI-compatible 模型配置、能力探测与协议稳定性。
-3. 权限、Sandbox、Worktree 安全。
-4. Safe Mode、Doctor、会话迁移。
-5. Agent 和后台任务状态统一。
-6. Hook、Plugin、Skill、MCP 扩展协议。
-7. 性能优化及可选产品能力。
+1. P0 静态检查、构建、冒烟、CI 和诊断能力。
+2. Provider 接口收敛及不可达厂商代码清理。
+3. OpenAI-compatible 模型配置、能力探测与协议稳定性。
+4. 核心巨石文件和 workspace 工程结构治理。
+5. 权限、Sandbox、Worktree 安全。
+6. Safe Mode、Doctor、会话迁移。
+7. Agent 和后台任务状态统一。
+8. Hook、Plugin、Skill、MCP 扩展协议。
+9. 性能优化及可选产品能力。
 
 不建议首先重写为官方原生二进制架构。该改造投入大、风险高，且不会直接解决模型协议、安全和稳定性问题。应先把当前 TypeScript 架构维护到可靠状态，再通过独立调研决定是否迁移 Rust、Go 或其他原生运行时。
 
@@ -239,7 +282,9 @@
 
 - 代码实现完成，错误路径有明确处理。
 - 配置项、环境变量和默认行为有文档。
-- 至少完成类型检查、构建和关键链路冒烟验证。
+- TypeScript 与 Biome 检查零错误通过。
+- Bun、Node 及适用平台的 standalone EXE 构建完成，并通过相应 CLI 启动冒烟。
+- 涉及消息、Provider、权限、命令解析或持久化的改动具有轻量自动化验证；无法自动化时记录人工验证步骤和结果。
 - 不记录或泄露密钥、Token、凭据文件及敏感 Prompt。
 - Windows、macOS、Linux 的差异已评估；无法支持的平台有明确提示。
 - 旧配置有迁移或兼容方案。

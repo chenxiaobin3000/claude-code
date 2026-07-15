@@ -150,9 +150,6 @@ bun run typecheck
 
 # Biome 检查
 bun run check
-
-# 完整健康检查
-bun run health
 ```
 
 构建完成后，CLI 入口位于：
@@ -197,7 +194,7 @@ bun run check
 - TypeScript 开启严格模式。
 - 工具、MCP、Agent 和工作流已经拆分为独立 workspace 包。
 - 工作流引擎强调确定性、端口隔离和可回放。
-- 提供 Biome、Knip、TypeScript、产物完整性和健康检查工具。
+- 提供 Biome、Knip、TypeScript 和产物完整性检查工具。
 - 同时支持 Bun 与 Node.js CLI 入口。
 
 ### 主要风险
