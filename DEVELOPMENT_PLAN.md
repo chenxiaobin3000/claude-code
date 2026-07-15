@@ -109,8 +109,8 @@
 - [ ] 在 `scripts/validation` 增加独立轻量验证脚本，优先覆盖消息格式转换、OpenAI 流适配、工具权限和 Bash/PowerShell 命令解析；脚本直接调用源码纯函数，以固定输入和预期输出判定结果，失败时返回非零退出码；不引入 `*.test.ts`、测试框架或官方大型测试体系，并统一并入现有 `bun run verify`，不另设第二层验证。
 - [x] 使用本地 llama.cpp 的 OpenAI-compatible endpoint 完成单轮对话与工具调用冒烟；该检查属于同一个 `bun run verify` 流程，不另设付费请求或第二层验证（2026-07-16 已完成）。
 - [x] 明确 Bun bundle、Vite/Rollup Node bundle、Bun standalone EXE 三条构建链的支持边界和验证矩阵，并并入同一个 `bun run verify`（2026-07-16 已完成三条构建链全矩阵验证）。
-- [ ] 增加 CI，至少执行依赖锁定检查、TypeScript、Biome、三类构建中的适用产物和 CLI `--version`/启动冒烟。
-- [ ] 为模型请求增加可脱敏的诊断日志，禁止记录 API Key、OAuth Token 和完整敏感 Prompt。
+- [x] 增加 Windows/Linux CI，执行依赖锁定检查、TypeScript、Biome、适用构建产物完整性检查及 CLI `--version`/`--help` 启动冒烟；统一复用 `bun run verify -- --ci`（2026-07-16 已完成本地 CI 模式验证）。
+- [x] 为模型请求增加结构化、可脱敏的诊断日志；API Key、OAuth Token、URL 凭据和完整敏感 Prompt 不进入日志或 Langfuse LLM observation，原始 API 错误在写日志和显示给用户前统一脱敏（2026-07-16 已完成固定样例、实际落盘及三构建链验证）。
 
 构建链支持边界：
 
@@ -133,6 +133,19 @@
 | 无需安装 Node.js/Bun | 不适用 | 不适用 | 构建产物属性，必须通过直接执行 EXE 验证 |
 
 矩阵必须按“构建一条、立即验证一条”的顺序运行，因为 Bun 与 Vite 构建都会重建 `dist`。`scripts/check-bundle-integrity.ts` 对未知外部运行时模块保持错误；`bun:ffi` 仅在 Bun 产物中作为运行时专用警告，`@napi-rs/keyring` 和旧 Google/Vertex 分支的 `node-fetch` 作为可选或非支持路径警告，缺失时必须安全降级。2026-07-16 实测 Bun 与 Node 产物完整性均为零错误，Windows x64 EXE 为 120.1 MiB，三种产物的版本、帮助、模型请求和工具调用全部通过。
+
+CI 验证矩阵：
+
+| CI 平台 | 依赖/静态检查 | Bun bundle | Vite/Node bundle | Windows x64 EXE | 模型与工具调用 |
+| --- | --- | --- | --- | --- | --- |
+| `ubuntu-latest` | `bun install --frozen-lockfile`、TypeScript、Biome | 构建、完整性、版本、启动 | 构建、完整性、版本、启动 | 平台不适用，明确跳过 | 跳过，不要求模型配置或凭据 |
+| `windows-latest` | `bun install --frozen-lockfile`、TypeScript、Biome | 构建、完整性、版本、启动 | 构建、完整性、版本、启动 | 构建、版本、启动 | 跳过，不要求模型配置或凭据 |
+
+GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，使用 Node.js 22 与 Bun 1.3.14；安装阶段关闭只适用于用户机器的 Chrome MCP 注册。CI 与本地共用 `scripts/verify.ts`：普通 `bun run verify` 保留本地 llama.cpp 的单轮模型请求和 `Read` 工具调用；`bun run verify -- --ci` 仅跳过这两项环境相关检查，不读取 `models.json`，其余步骤完全一致。2026-07-16 在 Windows x64 本地执行 CI 模式，三类适用产物全部通过，耗时 45.7 秒；GitHub 托管环境结果以首次 push 或 pull request 的实际运行记录为准。
+
+模型诊断安全边界：请求开始、首 Token、成功和失败事件只记录请求 ID、Provider、模型、无凭据 endpoint、消息/字符/工具数量、Token 上限、TTFT、总耗时、Usage、停止原因、HTTP 状态、错误码和 Provider 请求 ID。禁止把请求体、Headers、system/user Prompt、工具参数、工具返回值或原始错误对象传入诊断日志。`logForDebugging` 在最终写入前统一清理 Authorization、Bearer/Basic、API Key、OAuth/JWT、敏感 URL 参数和 URL 用户凭据，并截断超长内容；OpenAI 错误还会按本次请求实际使用的 API Key 和消息文本做精确替换。Langfuse LLM observation 仅保留输入、输出和工具的类型、数量、角色分布与序列化长度摘要，不再保存原文。
+
+`scripts/validation/model-diagnostics.ts` 使用固定伪 API Key、OAuth JWT、URL 凭据和唯一 Prompt 标记验证脱敏、endpoint 清理、错误截断及摘要输出，并已并入唯一的 `bun run verify` 流程。2026-07-16 使用本地 llama.cpp 完成 Bun bundle、Vite/Node bundle 和 Windows x64 EXE 的模型与 `Read` 工具全矩阵验证，新增脱敏检查同时通过，总耗时 66.0 秒；另以 `--debug-file` 执行真实请求，落盘得到请求开始、首 Token、成功三类结构化事件，Prompt 标记未写入日志。
 
 验收标准：
 

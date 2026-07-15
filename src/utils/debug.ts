@@ -12,6 +12,7 @@ import {
 } from './debugFilter.js'
 import { getClaudeConfigHomeDir, isEnvTruthy } from './envUtils.js'
 import { getFsImplementation } from './fsOperations.js'
+import { redactSensitiveText } from './logRedaction.js'
 import { writeToStderr } from './process.js'
 import { jsonStringify } from './slowOperations.js'
 
@@ -223,6 +224,8 @@ export function logForDebugging(
   if (!shouldLogDebugMessage(message)) {
     return
   }
+
+  message = redactSensitiveText(message)
 
   // Multiline messages break the jsonl output format, so make any multiline messages JSON.
   if (hasFormattedOutput && message.includes('\n')) {

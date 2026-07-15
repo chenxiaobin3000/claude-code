@@ -13,6 +13,7 @@ const packageJson = JSON.parse(
 const expectedVersion = `${packageJson.version} (Claude Code)`
 const commandTimeoutMs = 120_000
 const modelTimeoutMs = 180_000
+const ciMode = process.argv.includes('--ci')
 
 interface RunOptions {
   capture?: boolean
@@ -224,16 +225,28 @@ async function verifyReadTool(
 
 async function verifyCliArtifact(
   artifact: CliArtifact,
-  config: ModelConfig,
+  config: ModelConfig | null,
 ): Promise<void> {
   await assertVersion(artifact)
   await verifyStartup(artifact)
+  if (!config) {
+    console.log(
+      `[verify] SKIP ${artifact.label} model request and tool call in CI mode`,
+    )
+    return
+  }
   await verifyModelRequest(artifact, config)
   await verifyReadTool(artifact, config)
 }
 
 async function main(): Promise<void> {
   const startedAt = Date.now()
+
+  if (ciMode) {
+    console.log(
+      '[verify] CI mode: local model request and tool call checks are disabled',
+    )
+  }
 
   await runStep('locked dependency install', [
     bunExecutable,
@@ -242,8 +255,13 @@ async function main(): Promise<void> {
   ])
   await runStep('TypeScript typecheck', [bunExecutable, 'run', 'typecheck'])
   await runStep('Biome lint', [bunExecutable, 'run', 'lint'])
+  await runStep('model diagnostics redaction validation', [
+    bunExecutable,
+    'run',
+    'scripts/validation/model-diagnostics.ts',
+  ])
 
-  const config = resolveModelConfig()
+  const config = ciMode ? null : resolveModelConfig()
   const bunArtifact: CliArtifact = {
     label: 'Bun bundle CLI',
     command: [bunExecutable, 'dist/cli-bun.js'],
