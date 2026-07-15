@@ -15,8 +15,9 @@ export function isRunningWithBun(): boolean {
  */
 export function isInBundledMode(): boolean {
   return (
-    typeof Bun !== 'undefined' &&
-    Array.isArray(Bun.embeddedFiles) &&
-    Bun.embeddedFiles.length > 0
+    process.env.CCB_BUNDLED_MODE === '1' ||
+    (typeof Bun !== 'undefined' &&
+      Array.isArray(Bun.embeddedFiles) &&
+      Bun.embeddedFiles.length > 0)
   )
 }

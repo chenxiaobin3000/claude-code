@@ -1540,9 +1540,9 @@ export function is1PApiCustomer(): boolean {
 
   // Exclude Vertex, Bedrock, and Foundry customers
   if (
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)
+    getAPIProvider() === 'bedrock' ||
+    getAPIProvider() === 'vertex' ||
+    getAPIProvider() === 'foundry'
   ) {
     return false
   }

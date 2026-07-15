@@ -50,12 +50,9 @@
 
 ### 模型供应商
 
-项目保留 Anthropic SDK 的消息、工具和流事件类型作为本地内部协议，但不提供 Anthropic 账号登录，也不默认连接 Anthropic API。运行时默认使用 OpenAI，并包含以下供应商或兼容层：
+项目保留 Anthropic SDK 的消息、工具和流事件类型作为本地内部协议，但不提供 Anthropic 账号登录，也不默认连接 Anthropic API。模型运行时固定使用 OpenAI-compatible 协议：
 
 - OpenAI 及 OpenAI 兼容接口（默认）
-- AWS Bedrock
-- Google Vertex AI
-- Azure Foundry
 
 OpenAI 运行配置：
 
@@ -65,7 +62,7 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4o
 ```
 
-没有配置 `modelType` 或 `CLAUDE_CODE_USE_*` 环境变量时，Provider 自动选择 OpenAI。Gemini 与 Grok 的专用 Provider、环境变量和模型映射已经移除；通用 OpenAI-compatible 自定义接口仍然保留。`/login`、`/logout`、`claude auth` 和 `setup-token` 已移除；MCP Server 自己的 OAuth 不受影响。
+Provider 固定使用 OpenAI-compatible 路径，不再通过 `CLAUDE_CODE_USE_*` 环境变量选择厂商。Gemini 与 Grok 的专用 Provider、环境变量和模型映射已经移除；通用 OpenAI-compatible 自定义接口仍然保留。`/login`、`/logout`、`claude auth` 和 `setup-token` 已移除；MCP Server 自己的 OAuth 不受影响。
 
 ## 运行架构
 
@@ -142,6 +139,9 @@ bun run dev
 # Bun 构建
 bun run build
 
+# Windows standalone EXE（目标机器不需要 Node.js 或 Bun）
+bun run build:exe
+
 # Vite/Node 生产构建
 bun run build:vite
 
@@ -164,10 +164,11 @@ dist/cli-node.js
 
 ## 构建说明
 
-项目保留两条构建路径：
+项目保留三条构建路径：
 
 1. `build.ts` 使用 `Bun.build`，面向 Bun 运行时。
 2. `vite.config.ts` 使用 Vite/Rollup 生成 Node.js 兼容产物。
+3. `scripts/build-exe.ts` 使用 Bun compile 生成 `dist/ccb.exe`，其中包含 Bun Runtime，运行时不依赖本机 Node.js 或 Bun。
 
 Bun 构建会对生成代码进行兼容性处理，包括替换 `import.meta.require`，以及保护对 `globalThis.Bun` 的直接访问。修改构建流程时，应同时验证 Bun 和 Node 两种产物。
 

@@ -1,7 +1,6 @@
 import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../../services/analytics/index.js'
 import { getInitialSettings } from '../settings/settings.js'
 import type { SettingsJson } from '../settings/types.js'
-import { isEnvTruthy } from '../envUtils.js'
 
 export type APIProvider =
   | 'firstParty'
@@ -11,20 +10,11 @@ export type APIProvider =
   | 'openai'
 
 export function getAPIProvider(
-  settings: Pick<SettingsJson, 'modelType'> = getInitialSettings(),
+  _settings: Pick<SettingsJson, 'modelType'> = getInitialSettings(),
 ): APIProvider {
-  const modelType = settings.modelType
-  if (modelType === 'openai') return 'openai'
-
-  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK)) return 'bedrock'
-  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX)) return 'vertex'
-  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)) return 'foundry'
-
-  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI)) return 'openai'
-
-  // OpenAI is the default runtime provider. The Anthropic SDK remains a local
-  // type/protocol dependency, but no first-party Anthropic client is selected
-  // implicitly by this distribution.
+  // This distribution only routes model inference through the OpenAI-compatible
+  // path. The wider APIProvider union remains temporarily for internal legacy
+  // data structures while their unreachable provider branches are retired.
   return 'openai'
 }
 

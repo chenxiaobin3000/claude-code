@@ -5,19 +5,6 @@ import { updateSettingsForSource } from '../utils/settings/settings.js'
 import { getSettings_DEPRECATED } from '../utils/settings/settings.js'
 import { applyConfigEnvironmentVariables } from '../utils/managedEnv.js'
 
-function getEnvVarForProvider(provider: string): string {
-  switch (provider) {
-    case 'bedrock':
-      return 'CLAUDE_CODE_USE_BEDROCK'
-    case 'vertex':
-      return 'CLAUDE_CODE_USE_VERTEX'
-    case 'foundry':
-      return 'CLAUDE_CODE_USE_FOUNDRY'
-    default:
-      throw new Error(`Unknown provider: ${provider}`)
-  }
-}
-
 // Get merged env: process.env + settings.env (from userSettings)
 function getMergedEnv(): Record<string, string> {
   const settings = getSettings_DEPRECATED()
@@ -44,11 +31,6 @@ const call: LocalCommandCall = async (args, _context) => {
   // unset - clear settings, fallback to env vars
   if (arg === 'unset') {
     updateSettingsForSource('userSettings', { modelType: undefined })
-    // Also clear all provider-specific env vars to prevent conflicts
-    delete process.env.CLAUDE_CODE_USE_BEDROCK
-    delete process.env.CLAUDE_CODE_USE_VERTEX
-    delete process.env.CLAUDE_CODE_USE_FOUNDRY
-    delete process.env.CLAUDE_CODE_USE_OPENAI
     return {
       type: 'text',
       value: 'API provider cleared (OpenAI is the default).',
@@ -56,12 +38,7 @@ const call: LocalCommandCall = async (args, _context) => {
   }
 
   // Validate provider
-  const validProviders = [
-    'openai',
-    'bedrock',
-    'vertex',
-    'foundry',
-  ]
+  const validProviders = ['openai']
   if (!validProviders.includes(arg)) {
     return {
       type: 'text',
@@ -87,44 +64,18 @@ const call: LocalCommandCall = async (args, _context) => {
     }
   }
 
-  // Handle different provider types
-  // - 'openai' is stored in settings.json (persistent)
-  // - 'bedrock', 'vertex', 'foundry' are env-only (do NOT touch settings.json)
-  if (
-    arg === 'openai'
-  ) {
-    // Clear any cloud provider env vars to avoid conflicts
-    delete process.env.CLAUDE_CODE_USE_BEDROCK
-    delete process.env.CLAUDE_CODE_USE_VERTEX
-    delete process.env.CLAUDE_CODE_USE_FOUNDRY
-    delete process.env.CLAUDE_CODE_USE_OPENAI
-    // Update settings.json
-    updateSettingsForSource('userSettings', { modelType: arg })
-    // Ensure settings.env gets applied to process.env
-    applyConfigEnvironmentVariables()
-    return { type: 'text', value: `API provider set to ${arg}.` }
-  } else {
-    // Cloud providers: set env vars only, do NOT touch settings.json
-    delete process.env.CLAUDE_CODE_USE_OPENAI
-    delete process.env.OPENAI_API_KEY
-    delete process.env.OPENAI_BASE_URL
-    process.env[getEnvVarForProvider(arg)] = '1'
-    // Do not modify settings.json - cloud providers controlled solely by env vars
-    applyConfigEnvironmentVariables()
-    return {
-      type: 'text',
-      value: `API provider set to ${arg} (via environment variable).`,
-    }
-  }
+  updateSettingsForSource('userSettings', { modelType: 'openai' })
+  applyConfigEnvironmentVariables()
+  return { type: 'text', value: 'API provider set to openai.' }
 }
 
 const provider = {
   type: 'local',
   name: 'provider',
   description:
-    'Switch API provider (openai/bedrock/vertex/foundry)',
+    'Show or configure the OpenAI-compatible API provider',
   aliases: ['api'],
-  argumentHint: '[openai|bedrock|vertex|foundry|unset]',
+  argumentHint: '[openai|unset]',
   supportsNonInteractive: true,
   load: () => Promise.resolve({ call }),
 } satisfies Command
