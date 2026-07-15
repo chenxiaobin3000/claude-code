@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { getClaudeConfigHomeDir } from '../envUtils.js'
 
 export interface ModelRegistryEntry {
@@ -27,6 +27,23 @@ export function getModelsConfigPath(): string {
 
 export function clearModelRegistryCache(): void {
   cachedRegistry = null
+}
+
+export function saveSingleModelRegistry(entry: ModelRegistryEntry): void {
+  const registry = parseModelRegistry({
+    defaultModel: entry.model,
+    models: [entry],
+  })
+  const path = getModelsConfigPath()
+  const temporaryPath = `${path}.${process.pid}.tmp`
+
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
+  writeFileSync(temporaryPath, `${JSON.stringify(registry, null, 2)}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  })
+  renameSync(temporaryPath, path)
+  cachedRegistry = registry
 }
 
 function requiredString(value: unknown, path: string): string {

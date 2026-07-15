@@ -29,6 +29,8 @@
 
 - 默认模型及自定义模型均通过 OpenAI-compatible 协议调用。
 - 模型统一配置在 `~/.claude/models.json`：每个唯一模型 ID 绑定一个 OpenAI-compatible 地址，多个模型可以共享地址。
+- 首次配置保留原有地址、API Key、模型 ID 输入流程并生成单模型注册表；多模型由用户手动编辑 JSON。
+- `settings.json` 不再接受 `model` 或 `modelType`；会话选择来自 `--model`/`/model`，默认值只来自 `models.json.defaultModel`。
 - 模型注册表入口：`src/utils/model/modelRegistry.ts`；`/model` 直接展示注册表中的模型。
 - Provider 请求入口：`src/services/api/claude.ts`。
 - OpenAI-compatible 适配：`src/services/api/openai`。

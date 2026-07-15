@@ -1385,11 +1385,7 @@ export function getSubscriptionName(): string {
  *  - command visibility (login/logout shown for non-3P)
  *  - command availability checks (meetsAvailabilityRequirement)
  *
- * KEEP IN SYNC with providers.ts — when a new CLAUDE_CODE_USE_* env var is
- * added to getAPIProvider(), the corresponding check MUST be added here.
- * Providers whose selection is controlled purely via settings.modelType
- * (rather than env vars) are NOT covered by this function and may need
- * separate handling in the call sites above.
+ * Provider selection is fixed to the OpenAI-compatible route in providers.ts.
  */
 export function isUsing3PServices(): boolean {
   return getAPIProvider() !== 'firstParty'

@@ -185,6 +185,7 @@ import {
   normalizeModelStringForAPI,
   parseUserSpecifiedModel,
 } from './utils/model/model.js';
+import { getModelRegistryError } from './utils/model/modelRegistry.js';
 import { ensureModelStringsInitialized } from './utils/model/modelStrings.js';
 import { PERMISSION_MODES } from './utils/permissions/PermissionMode.js';
 import {
@@ -2586,10 +2587,13 @@ async function run(): Promise<CommanderCommand> {
       // Compute resolved model for hooks (use user-specified model at launch)
       setInitialMainLoopModel(getUserSpecifiedModelSetting() || null);
       const initialMainLoopModel = getInitialMainLoopModel();
-      const resolvedInitialModel = parseUserSpecifiedModel(initialMainLoopModel ?? getDefaultMainLoopModel());
+      let resolvedInitialModel: string | null =
+        !isNonInteractiveSession && getModelRegistryError() !== null
+          ? null
+          : parseUserSpecifiedModel(initialMainLoopModel ?? getDefaultMainLoopModel());
 
       let advisorModel: string | undefined;
-      if (isAdvisorEnabled()) {
+      if (isAdvisorEnabled() && resolvedInitialModel !== null) {
         const advisorOption = canUserConfigureAdvisor() ? (options as { advisor?: string }).advisor : undefined;
         if (advisorOption) {
           logForDebugging(`[AdvisorTool] --advisor ${advisorOption}`);
@@ -2789,6 +2793,14 @@ async function run(): Promise<CommanderCommand> {
       if (process.exitCode !== undefined) {
         logForDebugging('Graceful shutdown initiated, skipping further initialization');
         return;
+      }
+
+      // The first-run OpenAI setup screen creates models.json. Resolve the
+      // default only after that dialog completes, otherwise a missing registry
+      // prevents the setup UI from ever rendering.
+      if (resolvedInitialModel === null) {
+        resolvedInitialModel = parseUserSpecifiedModel(getDefaultMainLoopModel());
+        logForDebugging(`[STARTUP] Default model resolved after setup: ${resolvedInitialModel}`);
       }
 
       // Initialize LSP manager AFTER trust is established (or in non-interactive mode

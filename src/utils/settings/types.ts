@@ -354,16 +354,6 @@ export const SettingsSchema = lazySchema(() =>
       permissions: PermissionsSchema()
         .optional()
         .describe('Tool usage permissions configuration'),
-      modelType: z
-        .enum(['openai'])
-        .optional()
-        .describe(
-          'API provider type. Only "openai" is supported. Configure models in ~/.claude/models.json.',
-        ),
-      model: z
-        .string()
-        .optional()
-        .describe('Override the default model used by Claude Code'),
       // Enterprise allowlist of models
       availableModels: z
         .array(z.string())

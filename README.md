@@ -54,7 +54,7 @@
 
 - OpenAI 及 OpenAI 兼容接口（默认）
 
-模型配置位于 `~/.claude/models.json`。每个模型绑定一个 OpenAI-compatible 地址；地址可以重复，模型 ID 必须全局唯一：
+首次运行时，配置界面会依次询问地址、API Key 和模型 ID，并生成单模型 `~/.claude/models.json`。需要多个模型时再手动编辑该文件；每个模型绑定一个 OpenAI-compatible 地址，地址可以重复，模型 ID 必须全局唯一：
 
 ```json
 {
@@ -74,7 +74,7 @@
 }
 ```
 
-`apiKeyEnv` 可选，默认读取 `OPENAI_API_KEY`。配置修改后重启 CLI 生效；`/model` 使用原有选择界面切换模型，并自动路由到该模型配置的地址。仓库根目录的 `models.example.json` 可作为模板。
+`apiKeyEnv` 可选，默认读取 `OPENAI_API_KEY`。配置修改后重启 CLI 生效；`/model` 使用原有选择界面切换模型，并自动路由到该模型配置的地址。仓库根目录的 `models.example.json` 可作为多模型模板。
 
 Provider 固定使用 OpenAI-compatible 路径，不再通过 `CLAUDE_CODE_USE_*` 环境变量选择厂商。Gemini 与 Grok 的专用 Provider、环境变量和模型映射已经移除；通用 OpenAI-compatible 自定义接口仍然保留。`/login`、`/logout`、`claude auth` 和 `setup-token` 已移除；MCP Server 自己的 OAuth 不受影响。
 

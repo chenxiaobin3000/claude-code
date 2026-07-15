@@ -55,11 +55,25 @@ export const getRipgrepConfig = memoize((): RipgrepConfig => {
     }
   }
 
-  const rgRoot = path.resolve(__dirname, 'vendor', 'ripgrep')
-  const command =
+  const relativeCommand =
     process.platform === 'win32'
-      ? path.resolve(rgRoot, `${process.arch}-win32`, 'rg.exe')
-      : path.resolve(rgRoot, `${process.arch}-${process.platform}`, 'rg')
+      ? path.join(`${process.arch}-win32`, 'rg.exe')
+      : path.join(`${process.arch}-${process.platform}`, 'rg')
+  const packagedCommand = path.resolve(
+    __dirname,
+    'vendor',
+    'ripgrep',
+    relativeCommand,
+  )
+  const sourceCommand = path.resolve(
+    __dirname,
+    'src',
+    'utils',
+    'vendor',
+    'ripgrep',
+    relativeCommand,
+  )
+  const command = existsSync(packagedCommand) ? packagedCommand : sourceCommand
 
   return resolveBuiltinWithFallback(command)
 })
@@ -112,7 +126,10 @@ export function resolveBuiltinWithFallback(
     mode: 'builtin',
     command: builtinPath,
     args: [],
-    note: `no ripgrep available on ${p}; install ripgrep via apt/pkg/brew`,
+    note:
+      p === 'win32'
+        ? 'no ripgrep available on win32; run bun install or install ripgrep via winget'
+        : `no ripgrep available on ${p}; install ripgrep via apt/pkg/brew`,
   }
 }
 

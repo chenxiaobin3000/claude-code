@@ -1,16 +1,8 @@
 import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../../services/analytics/index.js'
-import { getInitialSettings } from '../settings/settings.js'
-import type { SettingsJson } from '../settings/types.js'
 
-export type APIProvider =
-  | 'firstParty'
-  | 'vertex'
-  | 'foundry'
-  | 'openai'
+export type APIProvider = 'firstParty' | 'vertex' | 'foundry' | 'openai'
 
-export function getAPIProvider(
-  _settings: Pick<SettingsJson, 'modelType'> = getInitialSettings(),
-): APIProvider {
+export function getAPIProvider(): APIProvider {
   // This distribution only routes model inference through the OpenAI-compatible
   // path. The wider APIProvider union remains temporarily for internal legacy
   // data structures while their unreachable provider branches are retired.
