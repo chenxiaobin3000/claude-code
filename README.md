@@ -6,7 +6,7 @@
 
 ## 项目概况
 
-- 根包版本：`2.8.3`
+- 根包版本：`2.1.116`
 - 运行环境：Bun `>=1.3.0`，当前开发配置为 Bun `1.3.13`、Node.js `22.22.2`
 - 语言与框架：TypeScript、React 19、Ink
 - 仓库结构：Bun workspaces monorepo
@@ -150,7 +150,12 @@ bun run typecheck
 
 # Biome 检查
 bun run check
+
+# 完整最小验证（需要已启动的本地 llama.cpp Server）
+bun run verify
 ```
+
+`bun run verify` 从根目录 `verify.config.json` 的 `llamaCpp.baseUrl` 和 `llamaCpp.model` 读取本地服务地址和模型。地址必须是回环或私有网络地址，以避免验证过程误用外部付费接口；该独立配置不会覆盖日常使用的 OpenAI Provider 设置。
 
 构建完成后，CLI 入口位于：
 

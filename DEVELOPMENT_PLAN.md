@@ -1,7 +1,7 @@
 # Claude Code 差异与后续开发计划
 
 > 文档基线：2026-07-15  
-> 本地项目：`claude-code` 2.8.3
+> 本地项目：`claude-code` 2.1.116
 > 对照版本：Claude Code 官方 v2.1.210（2026-07-14）
 
 ## 1. 文档目的
@@ -40,7 +40,7 @@
 - 官方已经转向平台原生可执行文件，本项目仍是 JS/TS 应用架构。
 - 自动化测试内容已按项目精简要求移除，当前回归主要依赖类型检查、构建检查和人工冒烟测试。
 - 语音模式、录音、音频 NAPI Workspace 和相关二进制依赖已经移除。
-- 本地版本号 `2.8.3` 和 CLI 兜底版本 `2.1.888` 均不代表对应的官方版本。
+- 本地版本号与 CLI 版本已统一为 `2.1.116`，构建版本以根目录 `package.json` 为唯一来源，源码直跑入口使用相同兜底值；该版本号不代表对应的官方版本。
 
 ### 2.4 2026-07-15 工程健康快照
 
@@ -48,9 +48,8 @@
 
 - Bun workspace 当前包含 18 个子包。
 - Git 管理的 TypeScript 源码约 2,746 个文件、56 万行。
-- `bun run typecheck` 当前已通过。
-- `bun run lint` 当前已通过；Biome 配置也已迁移至 2.5.4 schema。
 - 当前模型主路径由 `getAPIProvider()` 固定路由至 `openai`。Anthropic 账号登录、鉴权和官方模型直连已移除；Anthropic SDK 因大量内部消息、工具和流事件调用而继续作为兼容层保留。Bedrock Provider 的客户端、AWS 鉴权、模型发现、Token 计数、限流适配、配置和专用依赖已于 2026-07-15 移除；Vertex 和 Foundry 仍需分别审计。
+- 已新增统一最小验证命令 `bun run verify`，顺序覆盖锁定安装、类型检查、Lint、Bun/Vite 构建、Bun/Node CLI 版本和启动、单轮模型请求及 `Read` 工具调用。llama.cpp 地址和模型分别读取根目录 `verify.config.json` 的 `llamaCpp.baseUrl`、`llamaCpp.model`，并限制为回环或私有网络地址，不覆盖日常 Provider 配置。2026-07-15 实际执行时，安装、静态检查、两条构建链和 CLI 启动均通过；模型阶段因本地 llama.cpp Server 未启动而停止，模型请求和工具调用仍待服务启动后复验。
 
 该快照只描述当前状态，不作为长期允许失败的基线。P0 完成后，类型检查、Lint、构建和启动检查必须全部转为通过。
 
@@ -100,13 +99,12 @@
 
 目标：让后续开发可以判断“改动是否破坏核心功能”。
 
-- [ ] 统一项目版本来源，移除或替换 `2.1.888` 等误导性兜底版本。
-- [ ] 增加 `PROJECT_CAPABILITIES.md` 或机器可读 capability 清单。
+- [x] 统一项目版本来源：构建版本读取根目录 `package.json`，源码直跑入口的兜底版本同步为 `2.1.116`（2026-07-15 已验证）。
 - [x] 修复当前 5 处 TypeScript 错误，使 `bun run typecheck` 零错误通过（2026-07-15 已验证）。
 - [x] 修复当前 16 处 Biome correctness 错误，并将 `biome.json` schema 与实际 CLI 版本对齐（2026-07-15 已验证）。
-- [ ] 固化最小验证命令：安装、类型检查、构建、启动、单轮模型请求、工具调用。
+- [ ] 完成统一最小验证命令 `bun run verify` 的全链路验收：命令及安装、类型检查、Lint、Bun/Vite 构建、CLI 启动检查已固化并通过；待本地 llama.cpp Server 启动后完成单轮模型请求和 `Read` 工具调用复验。
 - [ ] 增加轻量自动化验证，优先覆盖消息格式转换、OpenAI 流适配、工具权限和 Bash/PowerShell 命令解析；测试应可独立运行，不要求恢复官方大型测试体系。
-- [ ] 增加不依赖真实付费请求的冒烟脚本，并另设可选集成检查，覆盖 OpenAI 和至少一个 OpenAI-compatible endpoint。
+- [ ] 使用本地 llama.cpp 的 OpenAI-compatible endpoint 完成单轮对话与工具调用冒烟；该检查属于同一个 `bun run verify` 流程，不另设付费请求或第二层验证。
 - [ ] 明确 Bun bundle、Vite/Rollup Node bundle、Bun standalone EXE 三条构建链的支持边界和验证矩阵。
 - [ ] 增加 CI，至少执行依赖锁定检查、TypeScript、Biome、三类构建中的适用产物和 CLI `--version`/启动冒烟。
 - [ ] 为模型请求增加可脱敏的诊断日志，禁止记录 API Key、OAuth Token 和完整敏感 Prompt。
