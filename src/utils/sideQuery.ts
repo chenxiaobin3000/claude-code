@@ -32,10 +32,10 @@ import { logForDebugging } from './debug.js'
 import { errorMessage } from './errors.js'
 import { getAPIProvider } from './model/providers.js'
 import { normalizeModelStringForAPI } from './model/model.js'
+import { resolveModelTarget } from './model/modelRegistry.js'
 import { getOpenAIClient } from '../services/api/openai/client.js'
 import {
   anthropicMessagesToOpenAI,
-  resolveOpenAIModel,
   anthropicToolsToOpenAI,
   anthropicToolChoiceToOpenAI,
 } from '@ant/model-provider'
@@ -388,8 +388,12 @@ async function sideQueryViaOpenAICompatible(
 
   const normalizedModel = normalizeModelStringForAPI(model)
 
-  const openaiModel = resolveOpenAIModel(normalizedModel)
-  const client = getOpenAIClient({ maxRetries: opts.maxRetries ?? 2 })
+  const target = resolveModelTarget(normalizedModel)
+  const openaiModel = target.model
+  const client = getOpenAIClient({
+    target,
+    maxRetries: opts.maxRetries ?? 2,
+  })
 
   // Build system prompt text
   const systemText = extractSystemText(system)

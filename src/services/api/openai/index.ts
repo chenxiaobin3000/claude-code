@@ -17,18 +17,11 @@ import { getOpenAIClient } from './client.js'
 import { updateOpenAIUsage } from './openaiShared.js'
 import {
   anthropicMessagesToOpenAI,
-  resolveOpenAIModel,
   adaptOpenAIStreamToAnthropic,
   anthropicToolsToOpenAI,
   anthropicToolChoiceToOpenAI,
 } from '@ant/model-provider'
-import { isChatGPTAuthEnabled } from './chatgptAuth.js'
-import {
-  adaptResponsesStreamToAnthropic,
-  buildResponsesRequest,
-  createChatGPTResponsesStream,
-  type ResponsesReasoningEffort,
-} from './responsesAdapter.js'
+import { resolveModelTarget } from '../../../utils/model/modelRegistry.js'
 import { normalizeMessagesForAPI } from '../../../utils/messages.js'
 import { toolToAPISchema } from '../../../utils/api.js'
 import {
@@ -72,29 +65,6 @@ import {
   isDeferredTool,
   SEARCH_EXTRA_TOOLS_TOOL_NAME,
 } from '@claude-code-best/builtin-tools/tools/SearchExtraToolsTool/prompt.js'
-
-function convertToResponsesReasoningEffort(
-  effortValue: unknown,
-): ResponsesReasoningEffort | undefined {
-  if (effortValue === 'low') return 'low'
-  if (effortValue === 'medium') return 'medium'
-  if (effortValue === 'high') return 'high'
-  if (effortValue === 'xhigh' || effortValue === 'max') return 'xhigh'
-  if (typeof effortValue === 'number') return 'high'
-  return undefined
-}
-
-function getChatGPTResponsesReasoningEffort(
-  effortValue: unknown,
-): ResponsesReasoningEffort | undefined {
-  const envOverride = process.env.CLAUDE_CODE_EFFORT_LEVEL?.toLowerCase()
-  if (envOverride === 'auto' || envOverride === 'unset') return undefined
-  return (
-    convertToResponsesReasoningEffort(envOverride) ??
-    convertToResponsesReasoningEffort(effortValue) ??
-    'medium'
-  )
-}
 
 /**
  * Mirrors the Anthropic request path's deferred-tool announcement for OpenAI.
@@ -223,7 +193,8 @@ export async function* queryModelOpenAI(
 > {
   try {
     // 1. Resolve model name
-    const openaiModel = resolveOpenAIModel(options.model)
+    const target = resolveModelTarget(options.model)
+    const openaiModel = target.model
 
     // 2. Normalize messages using shared preprocessing
     const messagesForAPI = normalizeMessagesForAPI(messages, tools)
@@ -304,10 +275,6 @@ export async function* queryModelOpenAI(
     )
     const openaiTools = anthropicToolsToOpenAI(standardTools)
     const openaiToolChoice = anthropicToolChoiceToOpenAI(options.toolChoice)
-    const reasoningEffort = getChatGPTResponsesReasoningEffort(
-      options.effortValue,
-    )
-
     // 9. Log tool filtering details
     if (useSearchExtraTools) {
       const includedDeferredTools = filteredTools.filter(t =>
@@ -349,43 +316,27 @@ export async function* queryModelOpenAI(
       `[OpenAI] Calling model=${openaiModel}, messages=${openaiMessages.length}, tools=${openaiTools.length}, thinking=${enableThinking}`,
     )
 
-    // 11. Call OpenAI API with streaming. ChatGPT subscription auth uses the
-    // Codex Responses backend; API-key/OpenAI-compatible auth keeps the
-    // existing Chat Completions adapter.
-    const adaptedStream = isChatGPTAuthEnabled()
-      ? adaptResponsesStreamToAnthropic(
-          await createChatGPTResponsesStream({
-            request: buildResponsesRequest({
-              model: openaiModel,
-              messages: openaiMessages,
-              tools: openaiTools,
-              toolChoice: openaiToolChoice,
-              reasoningEffort,
-            }),
-            signal,
-            fetchOverride: options.fetchOverride as unknown as typeof fetch,
-          }),
-          openaiModel,
-        )
-      : adaptOpenAIStreamToAnthropic(
-          await getOpenAIClient({
-            maxRetries: 0,
-            fetchOverride: options.fetchOverride as unknown as typeof fetch,
-            source: options.querySource,
-          }).chat.completions.create(
-            buildOpenAIRequestBody({
-              model: openaiModel,
-              messages: openaiMessages,
-              tools: openaiTools,
-              toolChoice: openaiToolChoice,
-              enableThinking,
-              maxTokens,
-              temperatureOverride: options.temperatureOverride,
-            }),
-            { signal },
-          ),
-          openaiModel,
-        )
+    // 11. Call the configured OpenAI-compatible endpoint with streaming.
+    const adaptedStream = adaptOpenAIStreamToAnthropic(
+      await getOpenAIClient({
+        target,
+        maxRetries: 0,
+        fetchOverride: options.fetchOverride as unknown as typeof fetch,
+        source: options.querySource,
+      }).chat.completions.create(
+        buildOpenAIRequestBody({
+          model: openaiModel,
+          messages: openaiMessages,
+          tools: openaiTools,
+          toolChoice: openaiToolChoice,
+          enableThinking,
+          maxTokens,
+          temperatureOverride: options.temperatureOverride,
+        }),
+        { signal },
+      ),
+      openaiModel,
+    )
 
     // 12. Convert OpenAI stream to Anthropic events, then process into
     //     AssistantMessage + StreamEvent (matching the Anthropic path behavior)

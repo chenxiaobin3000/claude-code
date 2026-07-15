@@ -2,17 +2,15 @@ import OpenAI from 'openai'
 import { openaiAdapter } from 'src/services/providerUsage/adapters/openai.js'
 import { updateProviderBuckets } from 'src/services/providerUsage/store.js'
 import { getProxyFetchOptions } from 'src/utils/proxy.js'
+import type { ResolvedModelTarget } from 'src/utils/model/modelRegistry.js'
 
 /**
- * Environment variables:
- *
- * OPENAI_API_KEY: Required. API key for the OpenAI-compatible endpoint.
- * OPENAI_BASE_URL: Recommended. Base URL for the endpoint (e.g. http://localhost:11434/v1).
+ * Endpoint and credential selection come from ~/.claude/models.json.
  * OPENAI_ORG_ID: Optional. Organization ID.
  * OPENAI_PROJECT_ID: Optional. Project ID.
  */
 
-let cachedClient: OpenAI | null = null
+const cachedClients = new Map<string, OpenAI>()
 
 /**
  * Wrap a fetch so that every response's rate-limit headers are fed into the
@@ -36,22 +34,25 @@ function wrapFetchForUsage(base: typeof fetch): typeof fetch {
   return wrapped as unknown as typeof fetch
 }
 
-export function getOpenAIClient(options?: {
+export function getOpenAIClient(options: {
+  target: ResolvedModelTarget
   maxRetries?: number
   fetchOverride?: typeof fetch
   source?: string
 }): OpenAI {
-  if (cachedClient) return cachedClient
-
-  const apiKey = process.env.OPENAI_API_KEY || ''
-  const baseURL = process.env.OPENAI_BASE_URL
+  const { target } = options
+  const cacheKey = `${target.baseUrl}\0${target.apiKeyEnv ?? 'OPENAI_API_KEY'}`
+  if (!options.fetchOverride) {
+    const cached = cachedClients.get(cacheKey)
+    if (cached) return cached
+  }
 
   const baseFetch = options?.fetchOverride ?? (globalThis.fetch as typeof fetch)
   const wrappedFetch = wrapFetchForUsage(baseFetch)
 
   const client = new OpenAI({
-    apiKey,
-    ...(baseURL && { baseURL }),
+    apiKey: target.apiKey,
+    baseURL: target.baseUrl,
     maxRetries: options?.maxRetries ?? 0,
     timeout: parseInt(process.env.API_TIMEOUT_MS || String(600 * 1000), 10),
     dangerouslyAllowBrowser: true,
@@ -65,8 +66,8 @@ export function getOpenAIClient(options?: {
     fetch: wrappedFetch,
   })
 
-  if (!options?.fetchOverride) {
-    cachedClient = client
+  if (!options.fetchOverride) {
+    cachedClients.set(cacheKey, client)
   }
 
   return client
@@ -74,5 +75,5 @@ export function getOpenAIClient(options?: {
 
 /** Clear the cached client (useful when env vars change). */
 export function clearOpenAIClientCache(): void {
-  cachedClient = null
+  cachedClients.clear()
 }

@@ -29,11 +29,7 @@ import { LIGHTNING_BOLT } from '../../constants/figures.js'
 import { isModelAllowed } from './modelAllowlist.js'
 import { type ModelAlias, isModelAlias } from './aliases.js'
 import { capitalize } from '../stringUtils.js'
-import {
-  CHATGPT_CODEX_DEFAULT_MODEL,
-  CHATGPT_CODEX_FAST_MODEL,
-  isChatGPTAuthMode,
-} from './chatgptModels.js'
+import { getDefaultConfiguredModel } from './modelRegistry.js'
 
 export type ModelShortName = string
 export type ModelName = string
@@ -41,13 +37,7 @@ export type ModelSetting = ModelName | ModelAlias | null
 
 export function getSmallFastModel(): ModelName {
   const provider = getAPIProvider()
-  if (provider === 'openai' && isChatGPTAuthMode()) {
-    return process.env.OPENAI_SMALL_FAST_MODEL ?? CHATGPT_CODEX_FAST_MODEL
-  }
-  // Provider-specific small fast model
-  if (provider === 'openai' && process.env.OPENAI_SMALL_FAST_MODEL) {
-    return process.env.OPENAI_SMALL_FAST_MODEL
-  }
+  if (provider === 'openai') return getDefaultConfiguredModel()
   // Anthropic-specific or fallback
   return process.env.ANTHROPIC_SMALL_FAST_MODEL || getDefaultHaikuModel()
 }
@@ -82,7 +72,7 @@ export function getUserSpecifiedModelSetting(): ModelSetting | undefined {
     specifiedModel = modelOverride
   } else {
     const settings = getSettings_DEPRECATED() || {}
-    specifiedModel = process.env.ANTHROPIC_MODEL || settings.model || undefined
+    specifiedModel = settings.model || undefined
   }
 
   // Ignore the user-specified model if it's not in the availableModels allowlist.
@@ -118,34 +108,23 @@ export function getBestModel(): ModelName {
 }
 
 /**
- * Resolve the provider's primary model from its env var (e.g. OPENAI_MODEL).
- * Returns undefined for providers that don't have a primary-model env var
- * (Vertex, Foundry, firstParty).
+ * Resolve the provider's primary model from the model registry.
  */
 function getProviderPrimaryModel(): ModelName | undefined {
   const provider = getAPIProvider()
-  if (provider === 'openai') return process.env.OPENAI_MODEL
+  if (provider === 'openai') return getDefaultConfiguredModel()
   return undefined
 }
 
 // @[MODEL LAUNCH]: Update the default Opus model (3P providers may lag so keep defaults unchanged).
 export function getDefaultOpusModel(): ModelName {
   const provider = getAPIProvider()
-  if (provider === 'openai' && isChatGPTAuthMode()) {
-    return CHATGPT_CODEX_DEFAULT_MODEL
-  }
-  // For OpenAI provider, check OPENAI_DEFAULT_OPUS_MODEL first
-  if (provider === 'openai' && process.env.OPENAI_DEFAULT_OPUS_MODEL) {
-    return process.env.OPENAI_DEFAULT_OPUS_MODEL
-  }
+  if (provider === 'openai') return getDefaultConfiguredModel()
   // Anthropic-specific override (for first-party and other 3P providers)
   if (process.env.ANTHROPIC_DEFAULT_OPUS_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
   }
-  // 3P providers: if user set a primary model (e.g. OPENAI_MODEL=glm-5.1),
-  // fall back to it instead of a hardcoded Anthropic model. This prevents
-  // sideQuery / background tasks from sending requests to Anthropic's API
-  // when the user configured a third-party provider.
+  // 3P providers fall back to their primary configured model.
   const primaryModel = getProviderPrimaryModel()
   if (primaryModel) return primaryModel
   if (provider !== 'firstParty') {
@@ -157,13 +136,7 @@ export function getDefaultOpusModel(): ModelName {
 // @[MODEL LAUNCH]: Update the default Sonnet model (3P providers may lag so keep defaults unchanged).
 export function getDefaultSonnetModel(): ModelName {
   const provider = getAPIProvider()
-  if (provider === 'openai' && isChatGPTAuthMode()) {
-    return CHATGPT_CODEX_DEFAULT_MODEL
-  }
-  // For OpenAI provider, check OPENAI_DEFAULT_SONNET_MODEL first
-  if (provider === 'openai' && process.env.OPENAI_DEFAULT_SONNET_MODEL) {
-    return process.env.OPENAI_DEFAULT_SONNET_MODEL
-  }
+  if (provider === 'openai') return getDefaultConfiguredModel()
   // Anthropic-specific override (for first-party and other 3P providers)
   if (process.env.ANTHROPIC_DEFAULT_SONNET_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
@@ -182,13 +155,7 @@ export function getDefaultSonnetModel(): ModelName {
 // @[MODEL LAUNCH]: Update the default Haiku model (3P providers may lag so keep defaults unchanged).
 export function getDefaultHaikuModel(): ModelName {
   const provider = getAPIProvider()
-  if (provider === 'openai' && isChatGPTAuthMode()) {
-    return CHATGPT_CODEX_FAST_MODEL
-  }
-  // For OpenAI provider, check OPENAI_DEFAULT_HAIKU_MODEL first
-  if (provider === 'openai' && process.env.OPENAI_DEFAULT_HAIKU_MODEL) {
-    return process.env.OPENAI_DEFAULT_HAIKU_MODEL
-  }
+  if (provider === 'openai') return getDefaultConfiguredModel()
   // Anthropic-specific override (for first-party and other 3P providers)
   if (process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL

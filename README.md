@@ -54,13 +54,27 @@
 
 - OpenAI 及 OpenAI 兼容接口（默认）
 
-OpenAI 运行配置：
+模型配置位于 `~/.claude/models.json`。每个模型绑定一个 OpenAI-compatible 地址；地址可以重复，模型 ID 必须全局唯一：
 
-```bash
-OPENAI_API_KEY=your-api-key
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4o
+```json
+{
+  "defaultModel": "Qwen3.5-9B-Q6_K.gguf",
+  "models": [
+    {
+      "model": "Qwen3.5-9B-Q6_K.gguf",
+      "baseUrl": "http://127.0.0.1:8080/v1",
+      "displayName": "Qwen 3.5 9B"
+    },
+    {
+      "model": "deepseek-chat",
+      "baseUrl": "https://api.deepseek.com/v1",
+      "apiKeyEnv": "DEEPSEEK_API_KEY"
+    }
+  ]
+}
 ```
+
+`apiKeyEnv` 可选，默认读取 `OPENAI_API_KEY`。配置修改后重启 CLI 生效；`/model` 使用原有选择界面切换模型，并自动路由到该模型配置的地址。仓库根目录的 `models.example.json` 可作为模板。
 
 Provider 固定使用 OpenAI-compatible 路径，不再通过 `CLAUDE_CODE_USE_*` 环境变量选择厂商。Gemini 与 Grok 的专用 Provider、环境变量和模型映射已经移除；通用 OpenAI-compatible 自定义接口仍然保留。`/login`、`/logout`、`claude auth` 和 `setup-token` 已移除；MCP Server 自己的 OAuth 不受影响。
 
@@ -71,7 +85,7 @@ Provider 固定使用 OpenAI-compatible 路径，不再通过 `CLAUDE_CODE_USE_*
 ```text
 CLI 入口
   -> 参数解析与环境初始化
-  -> 加载本地 Provider 配置、插件、Skill 和 MCP
+  -> 加载本地模型注册表、插件、Skill 和 MCP
   -> 启动 Ink/React REPL
   -> 构造模型请求与会话上下文
   -> 流式接收模型响应
@@ -155,7 +169,7 @@ bun run check
 bun run verify
 ```
 
-`bun run verify` 从根目录 `verify.config.json` 的 `llamaCpp.baseUrl` 和 `llamaCpp.model` 读取本地服务地址和模型。地址必须是回环或私有网络地址，以避免验证过程误用外部付费接口；该独立配置不会覆盖日常使用的 OpenAI Provider 设置。
+`bun run verify` 使用 `~/.claude/models.json` 中的默认模型。默认模型地址必须是回环或私有网络地址，以避免验证过程误用外部付费接口。
 
 构建完成后，CLI 入口位于：
 

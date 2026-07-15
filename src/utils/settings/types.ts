@@ -358,7 +358,7 @@ export const SettingsSchema = lazySchema(() =>
         .enum(['openai'])
         .optional()
         .describe(
-          'API provider type. Only "openai" is supported. Configure OPENAI_API_KEY, OPENAI_BASE_URL, and OPENAI_MODEL for OpenAI-compatible endpoints.',
+          'API provider type. Only "openai" is supported. Configure models in ~/.claude/models.json.',
         ),
       model: z
         .string()

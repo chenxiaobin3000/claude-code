@@ -1340,10 +1340,9 @@ async function run(): Promise<CommanderCommand> {
         'Restore files to state at the specified user message and exit (requires --resume)',
       ).hideHelp(),
     )
-    // @[MODEL LAUNCH]: Update the example model ID in the --model help text.
     .option(
       '--model <model>',
-      `Model for the current session. Provide an alias for the latest model (e.g. 'sonnet' or 'opus') or a model's full name (e.g. 'claude-sonnet-4-6').`,
+      'Model for the current session. Must match a model ID configured in ~/.claude/models.json.',
     )
     .addOption(
       new Option('--effort <level>', `Effort level for the current session (low, medium, high, max)`).argParser(

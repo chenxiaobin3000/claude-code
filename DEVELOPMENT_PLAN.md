@@ -28,8 +28,8 @@
 ### 2.2 当前模型基线
 
 - 默认模型及自定义模型均通过 OpenAI-compatible 协议调用。
-- 模型由 `OPENAI_MODEL`、`OPENAI_BASE_URL` 和相关 OpenAI 配置指定。
-- 模型配置入口：`src/utils/model/configs.ts`。
+- 模型统一配置在 `~/.claude/models.json`：每个唯一模型 ID 绑定一个 OpenAI-compatible 地址，多个模型可以共享地址。
+- 模型注册表入口：`src/utils/model/modelRegistry.ts`；`/model` 直接展示注册表中的模型。
 - Provider 请求入口：`src/services/api/claude.ts`。
 - OpenAI-compatible 适配：`src/services/api/openai`。
 - 不规划任何非 OpenAI-compatible 协议的专用模型接入。
@@ -49,7 +49,8 @@
 - Bun workspace 当前包含 18 个子包。
 - Git 管理的 TypeScript 源码约 2,746 个文件、56 万行。
 - 当前模型主路径由 `getAPIProvider()` 固定路由至 `openai`。Anthropic 账号登录、鉴权和官方模型直连已移除；Anthropic SDK 因大量内部消息、工具和流事件调用而继续作为兼容层保留。Bedrock Provider 的客户端、AWS 鉴权、模型发现、Token 计数、限流适配、配置和专用依赖已于 2026-07-15 移除；Vertex 和 Foundry 仍需分别审计。
-- 已新增统一最小验证命令 `bun run verify`，顺序覆盖锁定安装、类型检查、Lint、Bun/Vite 构建、Bun/Node CLI 版本和启动、单轮模型请求及 `Read` 工具调用。llama.cpp 地址和模型分别读取根目录 `verify.config.json` 的 `llamaCpp.baseUrl`、`llamaCpp.model`，并限制为回环或私有网络地址，不覆盖日常 Provider 配置。2026-07-15 实际执行时，安装、静态检查、两条构建链和 CLI 启动均通过；模型阶段因本地 llama.cpp Server 未启动而停止，模型请求和工具调用仍待服务启动后复验。
+- 已新增统一最小验证命令 `bun run verify`，顺序覆盖锁定安装、类型检查、Lint、Bun/Vite 构建、Bun/Node CLI 版本和启动、单轮模型请求及 `Read` 工具调用。验证直接使用 `~/.claude/models.json` 的默认模型，并限制为回环或私有网络地址。2026-07-15 实际执行时，安装、静态检查、两条构建链和 CLI 启动均通过；模型阶段因本地 llama.cpp Server 未启动而停止，模型请求和工具调用仍待服务启动后复验。
+- 多模型注册表已于 2026-07-15 完成：重复模型 ID 和无效默认模型会在加载时失败；同地址模型复用 OpenAI Client，不同地址使用独立 Client；旧 `OPENAI_MODEL`、`OPENAI_BASE_URL`、角色模型环境变量、模型映射和 `providers.json` 注册表已从运行链移除。类型检查、Lint、Bun 构建、Vite 构建及 Bun/Node CLI 启动验证通过。
 
 该快照只描述当前状态，不作为长期允许失败的基线。P0 完成后，类型检查、Lint、构建和启动检查必须全部转为通过。
 
@@ -145,10 +146,10 @@
 
 目标：建立统一、可配置的 OpenAI-compatible 模型调用链。
 
-- [ ] 将 `configs.ts`、`model.ts` 和 `modelOptions.ts` 中的模型配置改为 Provider-neutral 结构。
-- [ ] 以 `OPENAI_MODEL` 和自定义模型配置为真实模型 ID，不再依赖 Claude 系列别名映射。
+- [x] 建立以模型为核心的 `~/.claude/models.json` 注册表；每个模型配置唯一 ID 和 OpenAI-compatible 地址，地址允许重复（2026-07-15 已完成）。
+- [x] `/model` 保留原有 UI 流程并直接展示注册模型；请求按所选模型解析地址和凭据，不再依赖 `OPENAI_MODEL`、`OPENAI_BASE_URL` 或 Claude 模型映射（2026-07-15 已完成）。
 - [ ] 按接口能力配置上下文窗口、最大输出 Token、推理参数、Prompt Cache 和价格。
-- [ ] 完善 OpenAI 模型映射的 fallback 策略，禁止把内部占位模型 ID 直接传给服务端。
+- [x] 移除 OpenAI 模型映射和隐式 fallback；未注册模型在发送请求前直接报错（2026-07-15 已完成）。
 - [ ] 增加启动时模型能力探测，减少对模型名称的硬编码判断。
 - [ ] 核对 OpenAI Chat Completions 的推理参数、工具选择、流事件和 Usage 字段。
 - [ ] 对不兼容 OpenAI 协议的 endpoint 给出清晰错误，不增加专用适配分支。

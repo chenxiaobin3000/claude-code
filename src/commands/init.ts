@@ -242,7 +242,7 @@ const command = {
     const missing = getMissingOpenAIConfig()
     if (missing.length > 0) {
       throw new Error(
-        `OpenAI-compatible API configuration is incomplete: missing ${missing.join(', ')}. Restart the interactive CLI to run setup, or configure OPENAI_API_KEY, OPENAI_BASE_URL, and OPENAI_MODEL in your environment or user settings.`,
+        `OpenAI-compatible model configuration is invalid: ${missing.join('; ')}`,
       )
     }
 

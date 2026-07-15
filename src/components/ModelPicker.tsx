@@ -1,7 +1,7 @@
 import capitalize from 'lodash-es/capitalize.js';
 import * as React from 'react';
 import { useCallback, useMemo, useState } from 'react';
-import { has1mContext } from '../utils/context.js';
+import { has1mContext, modelSupports1M } from '../utils/context.js';
 import { useExitOnCtrlCDWithKeybindings } from 'src/hooks/useExitOnCtrlCDWithKeybindings.js';
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -33,6 +33,7 @@ import {
   parseUserSpecifiedModel,
 } from '../utils/model/model.js';
 import { getModelOptions } from '../utils/model/modelOptions.js';
+import { getAPIProvider } from '../utils/model/providers.js';
 import { getSettingsForSource, updateSettingsForSource } from '../utils/settings/settings.js';
 import { ConfigurableShortcutHint } from './ConfigurableShortcutHint.js';
 import { Select } from './CustomSelect/index.js';
@@ -84,6 +85,8 @@ export function ModelPicker({
 
   const handleToggle1M = useCallback(() => {
     if (!focusedValue || focusedValue === NO_PREFERENCE) return;
+    const resolved = resolveOptionModel(focusedValue);
+    if (!resolved || !modelSupports1M(resolved)) return;
     // Key on the base value so lookups in handleSelect / is1MMarked match the
     // initializer — predefined 1M options arrive with a `[1m]` suffix in
     // `focusedValue`, which would diverge from the base-value key set.
@@ -112,7 +115,7 @@ export function ModelPicker({
   // This handles edge cases where the user's current model (e.g., 'haiku' for 3P users)
   // is not in the base options but should still be selectable and shown as selected
   const optionsWithInitial = useMemo(() => {
-    if (initial !== null && !modelOptions.some(opt => opt.value === initial)) {
+    if (getAPIProvider() !== 'openai' && initial !== null && !modelOptions.some(opt => opt.value === initial)) {
       return [
         ...modelOptions,
         {

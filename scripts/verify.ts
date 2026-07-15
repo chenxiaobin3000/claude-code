@@ -3,6 +3,7 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { resolveModelTarget } from '../src/utils/model/modelRegistry.js'
 
 const projectRoot = resolve(import.meta.dir, '..')
 const bunExecutable = process.execPath
@@ -104,16 +105,8 @@ async function assertVersion(
 }
 
 interface ModelConfig {
-  apiKey: string
   baseUrl: string
   model: string
-}
-
-interface VerificationConfig {
-  llamaCpp?: {
-    baseUrl?: string
-    model?: string
-  }
 }
 
 function isLocalAddress(hostname: string): boolean {
@@ -125,54 +118,27 @@ function isLocalAddress(hostname: string): boolean {
   return match ? Number(match[1]) >= 16 && Number(match[1]) <= 31 : false
 }
 
-async function resolveModelConfig(): Promise<ModelConfig> {
-  const configPath = join(projectRoot, 'verify.config.json')
-  let configured: VerificationConfig
-  try {
-    configured = JSON.parse(
-      await readFile(configPath, 'utf8'),
-    ) as VerificationConfig
-  } catch (error) {
-    throw new Error(`Cannot read ${configPath}: ${String(error)}`)
-  }
-  const baseUrl = configured.llamaCpp?.baseUrl?.trim().replace(/\/$/, '') || ''
-  const model = configured.llamaCpp?.model?.trim() || ''
-
-  if (!baseUrl || !model) {
-    throw new Error(
-      'Configure llamaCpp.baseUrl and llamaCpp.model in verify.config.json before running verification.',
-    )
-  }
+function resolveModelConfig(): ModelConfig {
+  const configured = resolveModelTarget()
+  const { baseUrl, model } = configured
 
   let endpoint: URL
   try {
     endpoint = new URL(baseUrl)
   } catch {
     throw new Error(
-      `Configured OPENAI_BASE_URL is invalid: ${JSON.stringify(baseUrl)}`,
+      `Configured model baseUrl is invalid: ${JSON.stringify(baseUrl)}`,
     )
   }
   if (!isLocalAddress(endpoint.hostname)) {
     throw new Error(
-      `Configured OPENAI_BASE_URL is not a local llama.cpp address: ${endpoint.origin}. Verification will not call an external endpoint.`,
+      `Configured default model does not use a local llama.cpp address: ${endpoint.origin}. Verification will not call an external endpoint.`,
     )
   }
 
   console.log(`[verify] llama.cpp endpoint: ${baseUrl}`)
   console.log(`[verify] llama.cpp model: ${model}`)
-  return {
-    apiKey: 'llama.cpp',
-    baseUrl,
-    model,
-  }
-}
-
-function modelEnv(config: ModelConfig): Record<string, string> {
-  return {
-    OPENAI_API_KEY: config.apiKey,
-    OPENAI_BASE_URL: config.baseUrl,
-    OPENAI_MODEL: config.model,
-  }
+  return { baseUrl, model }
 }
 
 async function verifyModelRequest(config: ModelConfig): Promise<void> {
@@ -186,6 +152,8 @@ async function verifyModelRequest(config: ModelConfig): Promise<void> {
       '--bare',
       '--output-format',
       'text',
+      '--model',
+      config.model,
       '--tools',
       '',
       '--max-turns',
@@ -193,7 +161,7 @@ async function verifyModelRequest(config: ModelConfig): Promise<void> {
       '--no-session-persistence',
       `Reply with exactly ${marker} and nothing else.`,
     ],
-    { capture: true, env: modelEnv(config), timeoutMs: modelTimeoutMs },
+    { capture: true, timeoutMs: modelTimeoutMs },
   )
   assertIncludes(result.stdout, marker, 'single-turn model output')
 }
@@ -215,6 +183,8 @@ async function verifyReadTool(config: ModelConfig): Promise<void> {
         '--verbose',
         '--output-format',
         'stream-json',
+        '--model',
+        config.model,
         '--tools',
         'Read',
         '--allowed-tools',
@@ -226,7 +196,7 @@ async function verifyReadTool(config: ModelConfig): Promise<void> {
         '--no-session-persistence',
         `You must call the Read tool for ${fixturePath}. After reading it, reply with TOOL_SMOKE_OK followed by the exact file content. Do not guess the content.`,
       ],
-      { capture: true, env: modelEnv(config), timeoutMs: modelTimeoutMs },
+      { capture: true, timeoutMs: modelTimeoutMs },
     )
 
     assertIncludes(result.stdout, '"type":"tool_use"', 'structured CLI output')
@@ -264,7 +234,7 @@ async function main(): Promise<void> {
   )
   assertIncludes(help.stdout, 'Claude Code', 'Node CLI help')
 
-  const config = await resolveModelConfig()
+  const config = resolveModelConfig()
   await verifyModelRequest(config)
   await verifyReadTool(config)
 

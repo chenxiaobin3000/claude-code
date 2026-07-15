@@ -12,6 +12,7 @@ import { formatNumber } from './format.js';
 import { getIdeClientName, type IDEExtensionInstallationStatus, isJetBrainsIde, toIDEDisplayName } from './ide.js';
 import { getClaudeAiUserDefaultModelDescription, modelDisplayString } from './model/model.js';
 import { getAPIProvider } from './model/providers.js';
+import { getModelsConfigPath, resolveModelTarget } from './model/modelRegistry.js';
 import { getMTLSConfig } from './mtls.js';
 import { checkInstall } from './nativeInstaller/index.js';
 import { getProxyUrl } from './proxy.js';
@@ -363,11 +364,13 @@ export function buildAPIProviderProperties(): Property[] {
       });
     }
   } else if (apiProvider === 'openai') {
-    const openaiBaseUrl = process.env.OPENAI_BASE_URL;
-    properties.push({
-      label: 'OpenAI base URL',
-      value: openaiBaseUrl,
-    });
+    try {
+      const target = resolveModelTarget();
+      properties.push({ label: 'Default model', value: target.model });
+      properties.push({ label: 'OpenAI base URL', value: target.baseUrl });
+    } catch {
+      properties.push({ label: 'Model configuration', value: getModelsConfigPath() });
+    }
   }
 
   const proxyUrl = getProxyUrl();

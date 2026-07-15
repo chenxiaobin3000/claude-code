@@ -38,6 +38,10 @@ import {
   CHATGPT_CODEX_MODEL_OPTIONS,
   isChatGPTAuthMode,
 } from './chatgptModels.js'
+import {
+  getConfiguredModels,
+  getDefaultConfiguredModel,
+} from './modelRegistry.js'
 
 // @[MODEL LAUNCH]: Update all the available and default model option strings below.
 
@@ -81,24 +85,13 @@ export function getDefaultOptionForUser(fastMode = false): ModelOption {
 
 function getCustomSonnetOption(): ModelOption | undefined {
   const is3P = getAPIProvider() !== 'firstParty'
-  const provider = getAPIProvider()
-  // Use provider-specific DEFAULT_SONNET_MODEL
-  const customSonnetModel =
-    provider === 'openai'
-      ? process.env.OPENAI_DEFAULT_SONNET_MODEL
-      : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
+  const customSonnetModel = process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
   // When a 3P user has a custom sonnet model string, show it directly
   if (is3P && customSonnetModel) {
     const is1m = has1mContext(customSonnetModel)
     // Use appropriate NAME/DESCRIPTION env vars based on provider
-    const nameEnv =
-      provider === 'openai'
-        ? process.env.OPENAI_DEFAULT_SONNET_MODEL_NAME
-        : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL_NAME
-    const descEnv =
-      provider === 'openai'
-        ? process.env.OPENAI_DEFAULT_SONNET_MODEL_DESCRIPTION
-        : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION
+    const nameEnv = process.env.ANTHROPIC_DEFAULT_SONNET_MODEL_NAME
+    const descEnv = process.env.ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION
     return {
       value: 'sonnet',
       label: nameEnv ?? customSonnetModel,
@@ -124,24 +117,13 @@ function getSonnet46Option(): ModelOption {
 
 function getCustomOpusOption(): ModelOption | undefined {
   const is3P = getAPIProvider() !== 'firstParty'
-  const provider = getAPIProvider()
-  // Use provider-specific DEFAULT_OPUS_MODEL
-  const customOpusModel =
-    provider === 'openai'
-      ? process.env.OPENAI_DEFAULT_OPUS_MODEL
-      : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
+  const customOpusModel = process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
   // When a 3P user has a custom opus model string, show it directly
   if (is3P && customOpusModel) {
     const is1m = has1mContext(customOpusModel)
     // Use appropriate NAME/DESCRIPTION env vars based on provider
-    const nameEnv =
-      provider === 'openai'
-        ? process.env.OPENAI_DEFAULT_OPUS_MODEL_NAME
-        : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL_NAME
-    const descEnv =
-      provider === 'openai'
-        ? process.env.OPENAI_DEFAULT_OPUS_MODEL_DESCRIPTION
-        : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION
+    const nameEnv = process.env.ANTHROPIC_DEFAULT_OPUS_MODEL_NAME
+    const descEnv = process.env.ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION
     return {
       value: 'opus',
       label: nameEnv ?? customOpusModel,
@@ -209,23 +191,12 @@ export function getOpus46_1MOption(fastMode = false): ModelOption {
 
 function getCustomHaikuOption(): ModelOption | undefined {
   const is3P = getAPIProvider() !== 'firstParty'
-  const provider = getAPIProvider()
-  // Use provider-specific DEFAULT_HAIKU_MODEL
-  const customHaikuModel =
-    provider === 'openai'
-      ? process.env.OPENAI_DEFAULT_HAIKU_MODEL
-      : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
+  const customHaikuModel = process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
   // When a 3P user has a custom haiku model string, show it directly
   if (is3P && customHaikuModel) {
     // Use appropriate NAME/DESCRIPTION env vars based on provider
-    const nameEnv =
-      provider === 'openai'
-        ? process.env.OPENAI_DEFAULT_HAIKU_MODEL_NAME
-        : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME
-    const descEnv =
-      provider === 'openai'
-        ? process.env.OPENAI_DEFAULT_HAIKU_MODEL_DESCRIPTION
-        : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION
+    const nameEnv = process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME
+    const descEnv = process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION
     return {
       value: 'haiku',
       label: nameEnv ?? customHaikuModel,
@@ -535,6 +506,24 @@ function getKnownModelOption(model: string): ModelOption | null {
 }
 
 export function getModelOptions(fastMode = false): ModelOption[] {
+  if (getAPIProvider() === 'openai') {
+    const defaultModel = getDefaultConfiguredModel()
+    return filterModelOptionsByAllowlist([
+      {
+        value: null,
+        label: 'Default (recommended)',
+        description: `Use the configured default model (${defaultModel})`,
+        descriptionForModel: `Default model (${defaultModel})`,
+      },
+      ...getConfiguredModels().map(entry => ({
+        value: entry.model,
+        label: entry.displayName ?? entry.model,
+        description: entry.description ?? entry.baseUrl,
+        descriptionForModel: `${entry.description ?? entry.displayName ?? entry.model} (${entry.model})`,
+      })),
+    ])
+  }
+
   const options = getModelOptionsBase(fastMode)
 
   // Add the custom model from the ANTHROPIC_CUSTOM_MODEL_OPTION env var

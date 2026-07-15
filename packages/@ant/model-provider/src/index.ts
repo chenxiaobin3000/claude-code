@@ -23,7 +23,6 @@ export type { ClientFactories } from './client/types.js'
 export * from './types/index.js'
 
 // Provider model mappings
-export { resolveOpenAIModel } from './providers/openai/modelMapping.js'
 
 // Error utilities
 export {

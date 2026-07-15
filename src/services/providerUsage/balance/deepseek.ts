@@ -1,46 +1,48 @@
 import type { ProviderBalance } from '../types.js'
 import type { BalanceProvider } from './types.js'
+import { getConfiguredModels } from '../../../utils/model/modelRegistry.js'
 
 /**
  * DeepSeek exposes balance at `GET /user/balance`.
  *
- * Enabled when:
- *   - OPENAI_BASE_URL points at api.deepseek.com, OR
- *   - DEEPSEEK_API_KEY is set (explicit opt-in).
+ * Enabled when a configured model points at api.deepseek.com.
  *
  * Response shape:
  *   { is_available: true, balance_infos: [{ currency:"USD", total_balance:"5.00", ... }, ...] }
  */
 
-function getBaseUrl(): string | null {
-  const url = process.env.OPENAI_BASE_URL
-  if (url && /\bapi\.deepseek\.com\b/i.test(url)) return url.replace(/\/+$/, '')
-  if (process.env.DEEPSEEK_API_KEY) return 'https://api.deepseek.com'
-  return null
-}
-
-function getApiKey(): string | null {
-  return process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY || null
+function getDeepSeekTarget(): { baseUrl: string; apiKey: string } | null {
+  try {
+    const entry = getConfiguredModels().find(model =>
+      /\bapi\.deepseek\.com\b/i.test(model.baseUrl),
+    )
+    if (!entry) return null
+    const apiKey = process.env[entry.apiKeyEnv ?? 'OPENAI_API_KEY'] ?? ''
+    return apiKey
+      ? { baseUrl: entry.baseUrl.replace(/\/+$/, ''), apiKey }
+      : null
+  } catch {
+    return null
+  }
 }
 
 export const deepseekBalanceProvider: BalanceProvider = {
   providerId: 'deepseek',
 
   isEnabled(): boolean {
-    return getBaseUrl() !== null && getApiKey() !== null
+    return getDeepSeekTarget() !== null
   },
 
   async fetchBalance(signal?: AbortSignal): Promise<ProviderBalance | null> {
-    const base = getBaseUrl()
-    const key = getApiKey()
-    if (!base || !key) return null
+    const target = getDeepSeekTarget()
+    if (!target) return null
 
     let res: Response
     try {
-      res = await fetch(`${base}/user/balance`, {
+      res = await fetch(`${target.baseUrl}/user/balance`, {
         method: 'GET',
         headers: {
-          Authorization: `Bearer ${key}`,
+          Authorization: `Bearer ${target.apiKey}`,
           Accept: 'application/json',
         },
         signal,

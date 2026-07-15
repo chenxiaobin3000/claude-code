@@ -1,13 +1,11 @@
-import {
-  resolveOpenAIModel,
-} from '@ant/model-provider'
 import { getMainLoopModel } from './model/model.js'
+import { resolveModelTarget } from './model/modelRegistry.js'
 import { getAPIProvider } from './model/providers.js'
 
 function resolveProviderModel(anthropicModel: string): string {
   switch (getAPIProvider()) {
     case 'openai':
-      return resolveOpenAIModel(anthropicModel)
+      return resolveModelTarget(anthropicModel).model
     default:
       return anthropicModel
   }

@@ -35,6 +35,7 @@
   ],
   "files": [
     "dist",
+    "models.example.json",
     "scripts/postinstall.cjs",
     "scripts/run-parallel.mjs",
     "scripts/setup-chrome-mcp.mjs"
