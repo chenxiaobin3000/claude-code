@@ -211,8 +211,6 @@ export function sanitizeAutonomyFailureForPersistence(
     lower.includes('api_error') ||
     lower.includes('provider') ||
     lower.includes('openai') ||
-    lower.includes('gemini') ||
-    lower.includes('grok') ||
     lower.includes('anthropic') ||
     lower.includes('bedrock') ||
     lower.includes('vertex')

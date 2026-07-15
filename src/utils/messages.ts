@@ -2541,7 +2541,7 @@ export function normalizeMessagesForAPI(
 
                   // When tool search is NOT enabled, strip tool-search-only fields
                   // like 'caller', but preserve other provider metadata attached to
-                  // the block (for example Gemini thought signatures on tool_use).
+                  // the block (for example provider metadata on tool_use).
                   const { caller: _caller, ...toolUseRest } =
                     block as ToolUseBlock &
                       Record<string, unknown> & { caller?: unknown }

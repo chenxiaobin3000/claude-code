@@ -24,8 +24,6 @@ export function isOpenAIThinkingEnabled(model: string): boolean {
   // Explicit enable
   if (isEnvTruthy(process.env.OPENAI_ENABLE_THINKING)) return true
   // Auto-detect from model name (DeepSeek and MiMo models support thinking mode).
-  // Grok is intentionally excluded — Grok reasoning models reason automatically
-  // and do NOT require thinking/enable_thinking request body parameters.
   const modelLower = model.toLowerCase()
   return modelLower.includes('deepseek') || modelLower.includes('mimo')
 }

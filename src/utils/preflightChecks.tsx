@@ -11,7 +11,7 @@ export interface PreflightCheckResult {
 
 async function checkEndpoints(): Promise<PreflightCheckResult> {
   // Skip connectivity check — users may use third-party API providers
-  // (OpenAI, Gemini, Grok, etc.) or be behind restricted networks.
+  // (OpenAI-compatible endpoints, etc.) or be behind restricted networks.
   return { success: true };
 }
 

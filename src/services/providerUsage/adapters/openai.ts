@@ -56,7 +56,7 @@ function computeUtilization(
  *   x-ratelimit-limit-requests     / x-ratelimit-remaining-requests     / x-ratelimit-reset-requests
  *   x-ratelimit-limit-tokens       / x-ratelimit-remaining-tokens       / x-ratelimit-reset-tokens
  *
- * Works for OpenAI, DeepSeek, Moonshot, Grok (xAI) and many self-hosted
+ * Works for OpenAI, DeepSeek, Moonshot and many self-hosted
  * OpenAI-compatible gateways.
  */
 export const openaiAdapter: ProviderUsageAdapter = {

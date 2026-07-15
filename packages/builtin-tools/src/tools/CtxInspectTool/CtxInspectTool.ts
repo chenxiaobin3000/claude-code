@@ -91,10 +91,7 @@ Use this to understand your context budget before deciding whether to snip old m
     // Prompt caching is an API-level feature controlled by the provider, not
     // a user-facing toggle. Report as enabled only for providers known to
     // support Anthropic-style prompt caching (first-party, Bedrock, Vertex).
-    const promptCachingEnabled =
-      !model.startsWith('openai/') &&
-      !model.startsWith('grok/') &&
-      !model.startsWith('gemini/')
+    const promptCachingEnabled = !model.startsWith('openai/')
 
     const summaryParts = [
       focused ? `Focus: ${focused}` : 'Overall context summary',

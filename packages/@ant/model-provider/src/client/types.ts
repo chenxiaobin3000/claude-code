@@ -17,19 +17,4 @@ export interface ClientFactories {
     fetchOverride?: unknown
     source?: string
   }) => unknown
-
-  /** Stream Gemini generate content */
-  streamGeminiGenerateContent: (params: {
-    model: string
-    signal?: AbortSignal
-    fetchOverride?: unknown
-    body: Record<string, unknown>
-  }) => AsyncIterable<unknown>
-
-  /** Get Grok client (OpenAI-compatible) */
-  getGrokClient: (params: {
-    maxRetries: number
-    fetchOverride?: unknown
-    source?: string
-  }) => unknown
 }

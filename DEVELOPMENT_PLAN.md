@@ -1,7 +1,7 @@
 # Claude Code 差异与后续开发计划
 
 > 文档基线：2026-07-15  
-> 本地项目：`claude-code-best` 2.8.3  
+> 本地项目：`claude-code` 2.8.3
 > 对照版本：Claude Code 官方 v2.1.210（2026-07-14）
 
 ## 1. 文档目的
@@ -15,9 +15,8 @@
 ### 2.1 已有核心能力
 
 - 交互式 CLI、流式输出、工具调用和上下文压缩。
-- OpenAI、Gemini、Grok 及部分 OpenAI-compatible 模型适配，OpenAI 为默认 Provider。
-- Amazon Bedrock、Google Vertex、Microsoft Foundry 独立凭据通道。
-- Anthropic SDK 仅保留为本地消息、工具和流事件类型依赖；Anthropic 官方直连和账号登录已移除。
+- 模型运行时只使用 OpenAI 及 OpenAI-compatible 接口，OpenAI 为默认 Provider。
+- Anthropic SDK 仅作为本地消息、工具和流事件类型依赖，不作为模型供应商；Anthropic 官方直连和账号登录已移除。
 - MCP、Plugin、Skill、Hook 和自定义命令。
 - Agent、后台 Session、Coordinator 和 Agent Team 相关实现。
 - `/monitor`、`/autofix-pr`、`/ultraplan`、`/ultrareview`、`/recap`、`/goal`。
@@ -28,12 +27,12 @@
 
 ### 2.2 当前模型基线
 
-- 默认 Opus 系列最高配置到 Claude Opus 4.7。
-- 默认 Sonnet 系列最高配置到 Claude Sonnet 4.6。
+- 默认模型及自定义模型均通过 OpenAI-compatible 协议调用。
+- 模型由 `OPENAI_MODEL`、`OPENAI_BASE_URL` 和相关 OpenAI 配置指定。
 - 模型配置入口：`src/utils/model/configs.ts`。
 - Provider 请求入口：`src/services/api/claude.ts`。
-- Bedrock/Vertex/Foundry 客户端及未启用的旧直连实现：`src/services/api/client.ts`。
-- OpenAI、Gemini、Grok 适配：`src/services/api/openai`、`gemini`、`grok`。
+- OpenAI-compatible 适配：`src/services/api/openai`。
+- 不规划任何非 OpenAI-compatible 协议的专用模型接入。
 
 ### 2.3 已知工程状态
 
@@ -50,11 +49,10 @@
 - **已有**：本地已经存在主体实现。
 - **部分**：存在相似实现，但协议、行为或稳定性没有完全对齐。
 - **缺失**：当前代码搜索未发现完整实现。
-- **外部依赖**：依赖 Anthropic 服务端、账号资格或官方桌面端，不适合只靠本地代码复刻。
+- **外部依赖**：依赖官方服务端、账号资格或官方桌面端，不适合只靠本地代码复刻。
 
 | 模块 | 官方现状 | 本地状态 | 主要差异 |
 | --- | --- | --- | --- |
-| 模型 | Sonnet 5、Opus 4.8，Sonnet 5 原生 1M 上下文 | 缺失 | 当前主要到 Sonnet 4.6、Opus 4.7 |
 | 运行时 | 平台原生可执行文件 | 部分 | 本地仍以 TypeScript、Bun/Node 为主 |
 | Safe Mode | `--safe-mode` 禁用项目自定义能力排障 | 缺失 | 未发现完整 safe-mode 开关 |
 | 会话迁移 | `/cd` 保留会话迁移到新目录 | 缺失 | 没有官方同等语义的会话迁移 |
@@ -79,8 +77,8 @@
 1. 优先解决协议兼容、安全和数据完整性，再增加界面型功能。
 2. 不以模拟官方版本号代替能力检测；功能必须有明确的 capability 判断。
 3. 不直接照搬依赖官方云端的功能，先明确服务端接口、账号权限和替代方案。
-4. 新 Provider 统一接入 Provider 层，不在业务代码中散落厂商判断。
-5. 新模型必须同时补齐模型 ID、上下文、Thinking、价格、显示名称和 Provider 映射。
+4. 模型供应商必须通过 OpenAI-compatible 协议接入，不新增厂商专用 Provider 分支。
+5. 新模型必须同时补齐模型 ID、上下文、推理参数、价格、显示名称和兼容能力判断。
 6. 保持语音功能移除状态，除非后续单独立项恢复。
 7. 在不恢复大型测试体系的前提下，至少保留构建、类型检查和关键链路冒烟验证。
 
@@ -103,23 +101,23 @@
 - 至少两个 OpenAI/OpenAI-compatible 模型完成流式对话与工具调用。
 - 失败时能定位 Provider、模型映射、鉴权或流解析阶段。
 
-### P1：模型和 Provider 对齐
+### P1：OpenAI-compatible 模型对齐
 
-目标：补齐当前最直接影响使用的模型差异。
+目标：建立统一、可配置的 OpenAI-compatible 模型调用链。
 
-- [ ] 在 `src/utils/model/configs.ts` 增加 Sonnet 5 和 Opus 4.8。
-- [ ] 更新 `model.ts`、`modelOptions.ts`、`modelCapabilities.ts` 和模型显示名称。
-- [ ] 补齐 1M 上下文、Adaptive Thinking、最大输出 Token 和 Prompt Cache 能力判断。
-- [ ] 更新 Bedrock、Vertex、Foundry 的实际模型 ID；不可用时给出清晰提示。
-- [ ] 更新 OpenAI、Gemini、Grok 映射的 fallback 策略，避免把不存在的 Claude ID直接传给第三方。
-- [ ] 增加启动时模型能力探测，减少硬编码版本判断。
-- [ ] 核对 API Beta Header、Thinking 参数、工具选择和 Usage 字段。
+- [ ] 将 `configs.ts`、`model.ts` 和 `modelOptions.ts` 中的模型配置改为 Provider-neutral 结构。
+- [ ] 以 `OPENAI_MODEL` 和自定义模型配置为真实模型 ID，不再依赖 Claude 系列别名映射。
+- [ ] 按接口能力配置上下文窗口、最大输出 Token、推理参数、Prompt Cache 和价格。
+- [ ] 完善 OpenAI 模型映射的 fallback 策略，禁止把内部占位模型 ID 直接传给服务端。
+- [ ] 增加启动时模型能力探测，减少对模型名称的硬编码判断。
+- [ ] 核对 OpenAI Chat Completions 的推理参数、工具选择、流事件和 Usage 字段。
+- [ ] 对不兼容 OpenAI 协议的 endpoint 给出清晰错误，不增加专用适配分支。
 
 验收标准：
 
-- `/model` 正确显示可用模型，不展示当前 Provider 不支持的条目。
-- Sonnet 5、Opus 4.8 在支持的 Provider 上可以流式响应和调用工具。
-- 1M 上下文、Thinking 和价格统计与实际模型能力一致。
+- `/model` 正确显示 OpenAI 或当前 OpenAI-compatible endpoint 可用的模型。
+- 至少两个 OpenAI-compatible 模型可以流式响应并调用工具。
+- 上下文、推理参数、Prompt Cache 和价格统计与实际模型能力一致。
 
 ### P1：权限、Sandbox 和 Worktree 安全
 
@@ -226,7 +224,7 @@
 建议按照以下顺序推进，每一阶段完成验收后再进入下一阶段：
 
 1. P0 基线和诊断能力。
-2. Sonnet 5、Opus 4.8 与 Provider 协议。
+2. OpenAI-compatible 模型配置、能力探测与协议稳定性。
 3. 权限、Sandbox、Worktree 安全。
 4. Safe Mode、Doctor、会话迁移。
 5. Agent 和后台任务状态统一。

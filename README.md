@@ -56,8 +56,6 @@
 - AWS Bedrock
 - Google Vertex AI
 - Azure Foundry
-- Gemini
-- Grok
 
 OpenAI 运行配置：
 
@@ -67,7 +65,7 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4o
 ```
 
-没有配置 `modelType` 或 `CLAUDE_CODE_USE_*` 环境变量时，Provider 自动选择 OpenAI。`/login`、`/logout`、`claude auth` 和 `setup-token` 已移除；MCP Server 自己的 OAuth 不受影响。
+没有配置 `modelType` 或 `CLAUDE_CODE_USE_*` 环境变量时，Provider 自动选择 OpenAI。Gemini 与 Grok 的专用 Provider、环境变量和模型映射已经移除；通用 OpenAI-compatible 自定义接口仍然保留。`/login`、`/logout`、`claude auth` 和 `setup-token` 已移除；MCP Server 自己的 OAuth 不受影响。
 
 ## 运行架构
 

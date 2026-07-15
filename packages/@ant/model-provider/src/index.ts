@@ -3,7 +3,7 @@
 //
 // This package owns the model calling logic and provides:
 // - Core query functions (queryModelWithStreaming, etc.)
-// - Provider implementations (Anthropic, OpenAI, Gemini, Grok)
+// - Provider implementations (Anthropic-compatible and OpenAI-compatible)
 // - Type definitions (Message, Tool, Usage, etc.)
 // - Dependency injection hooks (analytics, cost tracking, etc.)
 //
@@ -24,31 +24,6 @@ export * from './types/index.js'
 
 // Provider model mappings
 export { resolveOpenAIModel } from './providers/openai/modelMapping.js'
-export { resolveGrokModel } from './providers/grok/modelMapping.js'
-export { resolveGeminiModel } from './providers/gemini/modelMapping.js'
-
-// Gemini provider utilities
-export { anthropicMessagesToGemini } from './providers/gemini/convertMessages.js'
-export {
-  anthropicToolsToGemini,
-  anthropicToolChoiceToGemini,
-} from './providers/gemini/convertTools.js'
-export { adaptGeminiStreamToAnthropic } from './providers/gemini/streamAdapter.js'
-export {
-  GEMINI_THOUGHT_SIGNATURE_FIELD,
-  type GeminiContent,
-  type GeminiGenerateContentRequest,
-  type GeminiPart,
-  type GeminiStreamChunk,
-  type GeminiTool,
-  type GeminiFunctionCallingConfig,
-  type GeminiFunctionDeclaration,
-  type GeminiFunctionCall,
-  type GeminiFunctionResponse,
-  type GeminiInlineData,
-  type GeminiUsageMetadata,
-  type GeminiCandidate,
-} from './providers/gemini/types.js'
 
 // Error utilities
 export {

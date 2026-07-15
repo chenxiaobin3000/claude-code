@@ -298,8 +298,6 @@ export function buildAPIProviderProperties(): Property[] {
       bedrock: 'AWS Bedrock',
       vertex: 'Google Vertex AI',
       foundry: 'Microsoft Foundry',
-      gemini: 'Gemini API',
-      grok: 'Grok API',
       openai: 'OpenAI API',
     }[apiProvider];
     properties.push({
@@ -384,18 +382,6 @@ export function buildAPIProviderProperties(): Property[] {
         value: 'Microsoft Foundry auth skipped',
       });
     }
-  } else if (apiProvider === 'gemini') {
-    const geminiBaseUrl = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
-    properties.push({
-      label: 'Gemini base URL',
-      value: geminiBaseUrl,
-    });
-  } else if (apiProvider === 'grok') {
-    const grokBaseUrl = process.env.GROK_BASE_URL;
-    properties.push({
-      label: 'Grok base URL',
-      value: grokBaseUrl,
-    });
   } else if (apiProvider === 'openai') {
     const openaiBaseUrl = process.env.OPENAI_BASE_URL;
     properties.push({

@@ -647,8 +647,7 @@ export function assistantMessageToMessageParam(
     } else {
       return {
         role: 'assistant',
-        content: message.message!.content!.map((_, i) => {
-          const contentBlock = stripGeminiProviderMetadata(_)
+        content: message.message!.content!.map((contentBlock, i) => {
           return {
             ...contentBlock,
             ...(i === message.message!.content!.length - 1 &&
@@ -671,26 +670,8 @@ export function assistantMessageToMessageParam(
     content:
       typeof message.message!.content === 'string'
         ? message.message!.content
-        : (message.message!.content!.map(
-            stripGeminiProviderMetadata,
-          ) as BetaContentBlockParam[]),
+        : (message.message!.content as BetaContentBlockParam[]),
   }
-}
-
-function stripGeminiProviderMetadata<T extends BetaContentBlockParam | string>(
-  contentBlock: T,
-): T {
-  if (
-    typeof contentBlock === 'string' ||
-    !('_geminiThoughtSignature' in (contentBlock as object))
-  ) {
-    return contentBlock
-  }
-
-  const obj = contentBlock as unknown as Record<string, unknown>
-  const { _geminiThoughtSignature: _unusedGeminiThoughtSignature, ...rest } =
-    obj
-  return rest as unknown as T
 }
 
 export type Options = {
@@ -1349,31 +1330,6 @@ async function* queryModel(
       messagesForAPI,
       systemPrompt,
       tools,
-      signal,
-      options,
-    )
-    return
-  }
-
-  if (getAPIProvider() === 'gemini') {
-    const { queryModelGemini } = await import('./gemini/index.js')
-    yield* queryModelGemini(
-      messagesForAPI,
-      systemPrompt,
-      filteredTools,
-      signal,
-      options,
-      thinkingConfig,
-    )
-    return
-  }
-
-  if (getAPIProvider() === 'grok') {
-    const { queryModelGrok } = await import('./grok/index.js')
-    yield* queryModelGrok(
-      messagesForAPI,
-      systemPrompt,
-      filteredTools,
       signal,
       options,
     )

@@ -1,9 +1,8 @@
 /**
  * Shared utilities for OpenAI-compatible API paths.
  *
- * Both the OpenAI path (queryModelOpenAI) and Grok path (queryModelGrok) use
- * the same adapters (openaiStreamAdapter, openaiConvertMessages), so the event
- * processing logic should be shared rather than duplicated.
+ * The OpenAI-compatible path uses shared adapters for streaming and message
+ * conversion, so event processing stays centralized.
  */
 
 /**

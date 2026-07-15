@@ -48,9 +48,6 @@ export function getSmallFastModel(): ModelName {
   if (provider === 'openai' && process.env.OPENAI_SMALL_FAST_MODEL) {
     return process.env.OPENAI_SMALL_FAST_MODEL
   }
-  if (provider === 'gemini' && process.env.GEMINI_SMALL_FAST_MODEL) {
-    return process.env.GEMINI_SMALL_FAST_MODEL
-  }
   // Anthropic-specific or fallback
   return process.env.ANTHROPIC_SMALL_FAST_MODEL || getDefaultHaikuModel()
 }
@@ -128,8 +125,6 @@ export function getBestModel(): ModelName {
 function getProviderPrimaryModel(): ModelName | undefined {
   const provider = getAPIProvider()
   if (provider === 'openai') return process.env.OPENAI_MODEL
-  if (provider === 'gemini') return process.env.GEMINI_MODEL
-  if (provider === 'grok') return process.env.GROK_MODEL
   return undefined
 }
 
@@ -142,10 +137,6 @@ export function getDefaultOpusModel(): ModelName {
   // For OpenAI provider, check OPENAI_DEFAULT_OPUS_MODEL first
   if (provider === 'openai' && process.env.OPENAI_DEFAULT_OPUS_MODEL) {
     return process.env.OPENAI_DEFAULT_OPUS_MODEL
-  }
-  // For Gemini provider, check GEMINI_DEFAULT_OPUS_MODEL
-  if (provider === 'gemini' && process.env.GEMINI_DEFAULT_OPUS_MODEL) {
-    return process.env.GEMINI_DEFAULT_OPUS_MODEL
   }
   // Anthropic-specific override (for first-party and other 3P providers)
   if (process.env.ANTHROPIC_DEFAULT_OPUS_MODEL) {
@@ -173,10 +164,6 @@ export function getDefaultSonnetModel(): ModelName {
   if (provider === 'openai' && process.env.OPENAI_DEFAULT_SONNET_MODEL) {
     return process.env.OPENAI_DEFAULT_SONNET_MODEL
   }
-  // For Gemini provider, check GEMINI_DEFAULT_SONNET_MODEL
-  if (provider === 'gemini' && process.env.GEMINI_DEFAULT_SONNET_MODEL) {
-    return process.env.GEMINI_DEFAULT_SONNET_MODEL
-  }
   // Anthropic-specific override (for first-party and other 3P providers)
   if (process.env.ANTHROPIC_DEFAULT_SONNET_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
@@ -201,10 +188,6 @@ export function getDefaultHaikuModel(): ModelName {
   // For OpenAI provider, check OPENAI_DEFAULT_HAIKU_MODEL first
   if (provider === 'openai' && process.env.OPENAI_DEFAULT_HAIKU_MODEL) {
     return process.env.OPENAI_DEFAULT_HAIKU_MODEL
-  }
-  // For Gemini provider, check GEMINI_DEFAULT_HAIKU_MODEL
-  if (provider === 'gemini' && process.env.GEMINI_DEFAULT_HAIKU_MODEL) {
-    return process.env.GEMINI_DEFAULT_HAIKU_MODEL
   }
   // Anthropic-specific override (for first-party and other 3P providers)
   if (process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL) {

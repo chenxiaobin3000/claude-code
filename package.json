@@ -1,20 +1,19 @@
 {
-  "name": "claude-code-best",
+  "name": "claude-code",
   "version": "2.8.3",
-  "description": "Reverse-engineered Anthropic Claude Code CLI — interactive AI coding assistant in the terminal",
+  "description": "Claude Code CLI — interactive AI coding assistant in the terminal",
   "type": "module",
   "author": "claude-code-best <claude-code-best@proton.me>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/claude-code-best/claude-code.git"
+    "url": "git+https://github.com/chenxiaobin3000/claude-code.git"
   },
-  "homepage": "https://github.com/claude-code-best/claude-code#readme",
+  "homepage": "https://github.com/chenxiaobin3000/claude-code#readme",
   "bugs": {
-    "url": "https://github.com/claude-code-best/claude-code/issues"
+    "url": "https://github.com/chenxiaobin3000/claude-code/issues"
   },
   "keywords": [
     "claude",
-    "anthropic",
     "cli",
     "ai",
     "coding-assistant",

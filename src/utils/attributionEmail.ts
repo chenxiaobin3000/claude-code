@@ -6,8 +6,6 @@ const MODEL_EMAIL_MAP: Array<{ keywords: string[]; email: string }> = [
     keywords: ['gpt', 'dall-e', 'o1-', 'o3-', 'o4-'],
     email: 'openai@claude-code-best.win',
   },
-  { keywords: ['gemini'], email: 'google-gemini@claude-code-best.win' },
-  { keywords: ['grok'], email: 'xai-org@claude-code-best.win' },
   { keywords: ['glm'], email: 'zai-org@claude-code-best.win' },
   { keywords: ['deepseek'], email: 'deepseek-ai@claude-code-best.win' },
   { keywords: ['qwen'], email: 'QwenLM@claude-code-best.win' },

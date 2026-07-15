@@ -13,10 +13,6 @@ function getEnvVarForProvider(provider: string): string {
       return 'CLAUDE_CODE_USE_VERTEX'
     case 'foundry':
       return 'CLAUDE_CODE_USE_FOUNDRY'
-    case 'gemini':
-      return 'CLAUDE_CODE_USE_GEMINI'
-    case 'grok':
-      return 'CLAUDE_CODE_USE_GROK'
     default:
       throw new Error(`Unknown provider: ${provider}`)
   }
@@ -53,8 +49,6 @@ const call: LocalCommandCall = async (args, _context) => {
     delete process.env.CLAUDE_CODE_USE_VERTEX
     delete process.env.CLAUDE_CODE_USE_FOUNDRY
     delete process.env.CLAUDE_CODE_USE_OPENAI
-    delete process.env.CLAUDE_CODE_USE_GEMINI
-    delete process.env.CLAUDE_CODE_USE_GROK
     return {
       type: 'text',
       value: 'API provider cleared (OpenAI is the default).',
@@ -64,8 +58,6 @@ const call: LocalCommandCall = async (args, _context) => {
   // Validate provider
   const validProviders = [
     'openai',
-    'gemini',
-    'grok',
     'bedrock',
     'vertex',
     'foundry',
@@ -95,48 +87,17 @@ const call: LocalCommandCall = async (args, _context) => {
     }
   }
 
-  // Check env vars when switching to grok (including settings.env)
-  if (arg === 'grok') {
-    const mergedEnv = getMergedEnv()
-    const hasKey = !!(mergedEnv.GROK_API_KEY || mergedEnv.XAI_API_KEY)
-    if (!hasKey) {
-      updateSettingsForSource('userSettings', { modelType: 'grok' })
-      return {
-        type: 'text',
-        value: `Switched to Grok provider.\nWarning: Missing env var: GROK_API_KEY (or XAI_API_KEY)\nConfigure it via settings.json env or set manually.`,
-      }
-    }
-  }
-
-  // Check env vars when switching to gemini (including settings.env)
-  if (arg === 'gemini') {
-    const mergedEnv = getMergedEnv()
-    const hasKey = !!mergedEnv.GEMINI_API_KEY
-    // GEMINI_BASE_URL is optional (has default)
-    if (!hasKey) {
-      updateSettingsForSource('userSettings', { modelType: 'gemini' })
-      return {
-        type: 'text',
-        value: `Switched to Gemini provider.\nWarning: Missing env var: GEMINI_API_KEY\nSet it in your environment or settings.json.`,
-      }
-    }
-  }
-
   // Handle different provider types
-  // - 'openai', 'gemini', 'grok' are stored in settings.json (persistent)
+  // - 'openai' is stored in settings.json (persistent)
   // - 'bedrock', 'vertex', 'foundry' are env-only (do NOT touch settings.json)
   if (
-    arg === 'openai' ||
-    arg === 'gemini' ||
-    arg === 'grok'
+    arg === 'openai'
   ) {
     // Clear any cloud provider env vars to avoid conflicts
     delete process.env.CLAUDE_CODE_USE_BEDROCK
     delete process.env.CLAUDE_CODE_USE_VERTEX
     delete process.env.CLAUDE_CODE_USE_FOUNDRY
     delete process.env.CLAUDE_CODE_USE_OPENAI
-    delete process.env.CLAUDE_CODE_USE_GEMINI
-    delete process.env.CLAUDE_CODE_USE_GROK
     // Update settings.json
     updateSettingsForSource('userSettings', { modelType: arg })
     // Ensure settings.env gets applied to process.env
@@ -147,8 +108,6 @@ const call: LocalCommandCall = async (args, _context) => {
     delete process.env.CLAUDE_CODE_USE_OPENAI
     delete process.env.OPENAI_API_KEY
     delete process.env.OPENAI_BASE_URL
-    delete process.env.CLAUDE_CODE_USE_GEMINI
-    delete process.env.CLAUDE_CODE_USE_GROK
     process.env[getEnvVarForProvider(arg)] = '1'
     // Do not modify settings.json - cloud providers controlled solely by env vars
     applyConfigEnvironmentVariables()
@@ -163,9 +122,9 @@ const provider = {
   type: 'local',
   name: 'provider',
   description:
-    'Switch API provider (openai/gemini/grok/bedrock/vertex/foundry)',
+    'Switch API provider (openai/bedrock/vertex/foundry)',
   aliases: ['api'],
-  argumentHint: '[openai|gemini|grok|bedrock|vertex|foundry|unset]',
+  argumentHint: '[openai|bedrock|vertex|foundry|unset]',
   supportsNonInteractive: true,
   load: () => Promise.resolve({ call }),
 } satisfies Command
