@@ -16,7 +16,6 @@ import { startMdmRawRead } from './utils/settings/mdm/rawRead.js';
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 startMdmRawRead();
 
-
 import { feature } from 'bun:bundle';
 import { Command as CommanderCommand, InvalidArgumentError, Option } from '@commander-js/extra-typings';
 import chalk from 'chalk';
@@ -31,10 +30,7 @@ import { init, initializeTelemetryAfterTrust } from './entrypoints/init.js';
 import { addToHistory } from './history.js';
 import type { Root } from '@anthropic/ink';
 import { launchRepl } from './replLauncher.js';
-import {
-  hasGrowthBookEnvOverride,
-  initializeGrowthBook,
-} from './services/analytics/growthbook.js';
+import { hasGrowthBookEnvOverride, initializeGrowthBook } from './services/analytics/growthbook.js';
 import { fetchBootstrapData } from './services/api/bootstrap.js';
 import {
   type DownloadResult,
@@ -44,11 +40,7 @@ import {
 } from './services/api/filesApi.js';
 import { prefetchPassesEligibility } from './services/api/referral.js';
 import type { McpSdkServerConfig, McpServerConfig, ScopedMcpServerConfig } from './services/mcp/types.js';
-import {
-  isPolicyAllowed,
-  loadPolicyLimits,
-  waitForPolicyLimitsToLoad,
-} from './services/policyLimits/index.js';
+import { isPolicyAllowed, loadPolicyLimits, waitForPolicyLimitsToLoad } from './services/policyLimits/index.js';
 import { loadRemoteManagedSettings } from './services/remoteManagedSettings/index.js';
 import type { ToolInputJSONSchema } from './Tool.js';
 import {
@@ -66,10 +58,7 @@ import {
 import { isAgentSwarmsEnabled } from './utils/agentSwarmsEnabled.js';
 import { count, uniq } from './utils/array.js';
 import { installAsciicastRecorder } from './utils/asciicast.js';
-import {
-  getSubscriptionType,
-  isClaudeAISubscriber,
-} from './utils/auth.js';
+import { getSubscriptionType, isClaudeAISubscriber } from './utils/auth.js';
 import {
   checkHasTrustDialogAccepted,
   getGlobalConfig,
@@ -2447,11 +2436,7 @@ async function run(): Promise<CommanderCommand> {
         // Promise.all join in print.ts. The void getUserContext() in
         // startDeferredPrefetches becomes a memoize cache-hit.
         void getUserContext();
-        // Kick ensureModelStringsInitialized now — for Bedrock this triggers
-        // a 100-200ms profile fetch that was awaited serially at
-        // print.ts:739. updateBedrockModelStrings is sequential()-wrapped so
-        // the await joins the in-flight fetch. Non-Bedrock is a sync
-        // early-return (zero-cost).
+        // Initialize provider-specific model strings before startup joins.
         void ensureModelStringsInitialized();
       }
 
@@ -2796,7 +2781,6 @@ async function run(): Promise<CommanderCommand> {
           }
           agentDef.pendingSnapshotUpdate = undefined;
         }
-
       }
 
       // If gracefulShutdown was initiated (e.g., user rejected trust dialog),

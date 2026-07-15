@@ -253,14 +253,6 @@ export const SettingsSchema = lazySchema(() =>
         .string()
         .optional()
         .describe('Path to a script that outputs authentication values'),
-      awsCredentialExport: z
-        .string()
-        .optional()
-        .describe('Path to a script that exports AWS credentials'),
-      awsAuthRefresh: z
-        .string()
-        .optional()
-        .describe('Path to a script that refreshes AWS authentication'),
       gcpAuthRefresh: z
         .string()
         .optional()
@@ -389,7 +381,7 @@ export const SettingsSchema = lazySchema(() =>
         .optional()
         .describe(
           'Override mapping from Anthropic model ID (e.g. "claude-opus-4-6") to provider-specific ' +
-            'model ID (e.g. a Bedrock inference profile ARN). Typically set in managed settings by ' +
+            'provider model ID. Typically set in managed settings by ' +
             'enterprise administrators.',
         ),
       // Whether to automatically approve all MCP servers in the project

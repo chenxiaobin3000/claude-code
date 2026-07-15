@@ -4,7 +4,6 @@ import type { SettingsJson } from '../settings/types.js'
 
 export type APIProvider =
   | 'firstParty'
-  | 'bedrock'
   | 'vertex'
   | 'foundry'
   | 'openai'

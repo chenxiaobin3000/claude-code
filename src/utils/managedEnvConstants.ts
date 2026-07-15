@@ -4,8 +4,7 @@
  *
  * When CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST is truthy in the spawn env, these
  * are stripped from settings-sourced env so the host's routing config isn't
- * overridden by a user's ~/.claude/settings.json — e.g. a Bedrock setup for
- * terminal CLI that would break a host that only supports first-party auth.
+ * overridden by a user's ~/.claude/settings.json.
  *
  * @[MODEL LAUNCH]: New models usually don't need changes here —
  * VERTEX_REGION_CLAUDE_* is prefix-matched. New providers or new routing
@@ -20,7 +19,6 @@ const PROVIDER_MANAGED_ENV_VARS = new Set([
   'CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST',
   // Endpoint config (base URLs, project/resource identifiers)
   'ANTHROPIC_BASE_URL',
-  'ANTHROPIC_BEDROCK_BASE_URL',
   'ANTHROPIC_VERTEX_BASE_URL',
   'ANTHROPIC_FOUNDRY_BASE_URL',
   'ANTHROPIC_FOUNDRY_RESOURCE',
@@ -31,9 +29,7 @@ const PROVIDER_MANAGED_ENV_VARS = new Set([
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_AUTH_TOKEN',
   'CLAUDE_CODE_OAUTH_TOKEN',
-  'AWS_BEARER_TOKEN_BEDROCK',
   'ANTHROPIC_FOUNDRY_API_KEY',
-  'CLAUDE_CODE_SKIP_BEDROCK_AUTH',
   'CLAUDE_CODE_SKIP_VERTEX_AUTH',
   'CLAUDE_CODE_SKIP_FOUNDRY_AUTH',
   // Model defaults — often set to provider-specific ID formats
@@ -69,7 +65,6 @@ const PROVIDER_MANAGED_ENV_VARS = new Set([
   'OPENAI_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES',
   'OPENAI_SMALL_FAST_MODEL',
   'ANTHROPIC_SMALL_FAST_MODEL',
-  'ANTHROPIC_SMALL_FAST_MODEL_AWS_REGION',
   'CLAUDE_CODE_SUBAGENT_MODEL',
 ])
 
@@ -92,8 +87,6 @@ export function isProviderManagedEnvVar(key: string): boolean {
  */
 export const DANGEROUS_SHELL_SETTINGS = [
   'apiKeyHelper',
-  'awsAuthRefresh',
-  'awsCredentialExport',
   'gcpAuthRefresh',
   'otelHeadersHelper',
   'statusLine',
@@ -110,7 +103,7 @@ export const DANGEROUS_SHELL_SETTINGS = [
  * Dangerous env vars (NOT in this list):
  *
  * === REDIRECT TO ATTACKER-CONTROLLED SERVER ===
- * - ANTHROPIC_BASE_URL, ANTHROPIC_BEDROCK_BASE_URL, ANTHROPIC_FOUNDRY_BASE_URL, ANTHROPIC_VERTEX_BASE_URL
+ * - ANTHROPIC_BASE_URL, ANTHROPIC_FOUNDRY_BASE_URL, ANTHROPIC_VERTEX_BASE_URL
  * - HTTP_PROXY, HTTPS_PROXY, NO_PROXY, http_proxy, https_proxy, no_proxy
  * - OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
  *
@@ -121,7 +114,6 @@ export const DANGEROUS_SHELL_SETTINGS = [
  * === SWITCH TO ATTACKER-CONTROLLED PROJECT ===
  * - ANTHROPIC_FOUNDRY_RESOURCE
  * - ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN
- * - AWS_BEARER_TOKEN_BEDROCK
  */
 export const SAFE_ENV_VARS = new Set([
   'ANTHROPIC_CUSTOM_HEADERS',
@@ -164,7 +156,6 @@ export const SAFE_ENV_VARS = new Set([
   'OPENAI_SMALL_FAST_MODEL',
   'ANTHROPIC_FOUNDRY_API_KEY',
   'ANTHROPIC_MODEL',
-  'ANTHROPIC_SMALL_FAST_MODEL_AWS_REGION',
   'ANTHROPIC_SMALL_FAST_MODEL',
   'AWS_DEFAULT_REGION',
   'AWS_PROFILE',
@@ -181,7 +172,6 @@ export const SAFE_ENV_VARS = new Set([
   'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS',
   'CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL',
   'CLAUDE_CODE_MAX_OUTPUT_TOKENS',
-  'CLAUDE_CODE_SKIP_BEDROCK_AUTH',
   'CLAUDE_CODE_SKIP_FOUNDRY_AUTH',
   'CLAUDE_CODE_SKIP_VERTEX_AUTH',
   'CLAUDE_CODE_SUBAGENT_MODEL',

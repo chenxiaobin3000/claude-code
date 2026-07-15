@@ -48,12 +48,9 @@
 
 - Bun workspace 当前包含 18 个子包。
 - Git 管理的 TypeScript 源码约 2,746 个文件、56 万行。
-- `bun run typecheck` 当前已通过；此前的 5 处类型错误（1 处 LSP Diagnostic 消息类型转换、4 处 Bash `ControlOperator` 集合类型）已于 2026-07-15 修复。
-- `bun run lint` 当前已通过；此前集中在 `src/utils/messages.ts` 的 16 处可选链 correctness 错误已修复，Biome 配置也已迁移至 2.5.4 schema。
-- 当前未发现正式的 `*.test.*` 或 `*.spec.*` 自动化测试文件。
-- 当前 `dist` 目录为空，`dist/cli-bun.js` 与 `dist/cli-node.js` 尚无可验证产物。
-- README 最初按源码分析生成时曾误列 `bun run health`；代码检查确认它不是本项目需要提供的公开脚本后，该命令已从 README 删除，且不纳入后续开发计划。
-- 当前模型主路径确实由 `getAPIProvider()` 固定路由至 `openai`，但 Anthropic、Bedrock、Vertex 和 Foundry 的遗留实现与依赖仍大量存在。
+- `bun run typecheck` 当前已通过。
+- `bun run lint` 当前已通过；Biome 配置也已迁移至 2.5.4 schema。
+- 当前模型主路径由 `getAPIProvider()` 固定路由至 `openai`。Anthropic 账号登录、鉴权和官方模型直连已移除；Anthropic SDK 因大量内部消息、工具和流事件调用而继续作为兼容层保留。Bedrock Provider 的客户端、AWS 鉴权、模型发现、Token 计数、限流适配、配置和专用依赖已于 2026-07-15 移除；Vertex 和 Foundry 仍需分别审计。
 
 该快照只描述当前状态，不作为长期允许失败的基线。P0 完成后，类型检查、Lint、构建和启动检查必须全部转为通过。
 
@@ -122,12 +119,15 @@
 - 至少两个 OpenAI/OpenAI-compatible 模型完成流式对话与工具调用。
 - 失败时能定位 Provider、模型映射、鉴权或流解析阶段。
 
-### P1：工程结构与遗留代码治理
+### P1：工程结构与 Provider 边界治理
 
-目标：降低核心模块修改风险，收敛已经不可达的 Provider 和构建分支。
+目标：降低核心模块修改风险，明确 OpenAI 模型主路径与 Anthropic SDK 内部兼容层的边界。
 
 - [ ] 建立明确的 Provider 接口边界，将共享消息预处理、OpenAI 请求、流事件适配和 Usage 统计分层，避免继续在 `src/services/api/claude.ts` 中扩展条件分支。
-- [ ] 在确认无运行时引用后，分阶段删除 Anthropic 直连、Bedrock、Vertex、Foundry 的不可达实现、配置和依赖；保留必要的 Anthropic 消息类型时应在文档中明确其仅为内部协议。
+- [ ] 保留 Anthropic SDK 作为内部消息、工具和流事件兼容层，梳理并记录其实际调用范围；不得仅因模型 Provider 固定为 OpenAI 就删除 SDK 类型或共享处理逻辑。
+- [ ] 明确移除范围仅包括 Anthropic 账号登录、账号鉴权和官方模型直连入口，并增加检查防止这些入口被意外恢复。
+- [x] 完成 Bedrock 非主路径审计并删除专用 Provider 实现、AWS 鉴权配置和依赖，同时保留共享 Anthropic SDK 消息兼容逻辑（2026-07-15 已验证 Bun/Vite 构建及 Bun/Node CLI 启动）。
+- [ ] 对 Vertex、Foundry 非主路径分支分别做引用和运行时审计；只有确认不承担共享 SDK 兼容职责且不可达后，才删除对应实现、配置或依赖。
 - [ ] 拆分 `src/main.tsx`，按启动阶段、参数注册、运行模式和服务初始化划分模块。
 - [ ] 拆分 `src/screens/REPL.tsx`，将会话状态、输入控制、任务/Agent 状态和渲染职责分离。
 - [ ] 拆分 `src/utils/messages.ts`、`src/utils/sessionStorage.ts` 和 `src/utils/hooks.ts`，优先抽出纯函数与协议转换层，并为其补充轻量测试。
@@ -137,7 +137,8 @@
 
 验收标准：
 
-- 模型请求主路径不再依赖不可达的厂商 Provider 分支。
+- OpenAI-compatible 模型请求主路径清晰，Anthropic SDK 兼容层的保留原因和调用边界有明确文档。
+- 不存在 Anthropic 账号登录、账号鉴权或官方模型直连的可用入口。
 - 关键巨石文件有清晰的领域边界，新功能不再继续扩大其职责。
 - 每个 workspace 都能被统一验证流程发现并得到明确结果。
 - Feature Flag 的默认集合、依赖关系和支持级别可由机器读取并在构建时校验。
@@ -265,7 +266,7 @@
 建议按照以下顺序推进，每一阶段完成验收后再进入下一阶段：
 
 1. P0 静态检查、构建、冒烟、CI 和诊断能力。
-2. Provider 接口收敛及不可达厂商代码清理。
+2. Provider 接口收敛及 Anthropic SDK 兼容边界梳理。
 3. OpenAI-compatible 模型配置、能力探测与协议稳定性。
 4. 核心巨石文件和 workspace 工程结构治理。
 5. 权限、Sandbox、Worktree 安全。

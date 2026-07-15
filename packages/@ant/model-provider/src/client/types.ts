@@ -3,7 +3,7 @@
  * Authentication is handled externally — main project provides factory implementations.
  */
 export interface ClientFactories {
-  /** Get Anthropic client (1st party, Bedrock, Foundry, Vertex) */
+  /** Get Anthropic client (1st party, Foundry, Vertex) */
   getAnthropicClient: (params: {
     model?: string
     maxRetries: number

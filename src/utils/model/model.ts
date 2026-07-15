@@ -120,7 +120,7 @@ export function getBestModel(): ModelName {
 /**
  * Resolve the provider's primary model from its env var (e.g. OPENAI_MODEL).
  * Returns undefined for providers that don't have a primary-model env var
- * (Bedrock, Vertex, Foundry, firstParty).
+ * (Vertex, Foundry, firstParty).
  */
 function getProviderPrimaryModel(): ModelName | undefined {
   const provider = getAPIProvider()
@@ -198,7 +198,7 @@ export function getDefaultHaikuModel(): ModelName {
   const primaryModel = getProviderPrimaryModel()
   if (primaryModel) return primaryModel
 
-  // Haiku 4.5 is available on all platforms (first-party, Foundry, Bedrock, Vertex)
+  // Haiku 4.5 is available on all supported platforms.
   return getModelStrings().haiku45
 }
 
@@ -345,7 +345,7 @@ export function firstPartyNameToCanonical(name: ModelName): ModelShortName {
  * @returns The short name (e.g., 'claude-3-5-haiku') if found, or the original name if no mapping exists
  */
 export function getCanonicalName(fullModelName: ModelName): ModelShortName {
-  // Resolve overridden model IDs (e.g. Bedrock ARNs) back to canonical names.
+  // Resolve overridden model IDs back to canonical names.
   // resolved is always a 1P-format ID, so firstPartyNameToCanonical can handle it.
   return firstPartyNameToCanonical(resolveOverriddenModel(fullModelName))
 }

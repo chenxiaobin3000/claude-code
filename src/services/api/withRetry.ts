@@ -7,7 +7,6 @@ import {
 } from '@anthropic-ai/sdk'
 import type { QuerySource } from 'src/constants/querySource.js'
 import type { SystemAPIErrorMessage } from 'src/types/message.js'
-import { isAwsCredentialsProviderError } from 'src/utils/aws.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import { logError } from 'src/utils/log.js'
 import { createSystemAPIErrorMessage } from 'src/utils/messages.js'
@@ -17,7 +16,6 @@ import {
 } from 'src/utils/model/providers.js'
 import {
   clearApiKeyHelperCache,
-  clearAwsCredentialsCache,
   clearGcpCredentialsCache,
   getClaudeAIOAuthTokens,
   handleOAuth401Error,
@@ -215,7 +213,6 @@ export async function* withRetry<T>(
       // Get a fresh client instance on first attempt or after authentication errors
       // - 401 for first-party API authentication failures
       // - 403 "OAuth token has been revoked" (another process refreshed the token)
-      // - Bedrock-specific auth errors (403 or CredentialsProviderError)
       // - Vertex-specific auth errors (credential refresh failures, 401)
       // - ECONNRESET/EPIPE: stale keep-alive socket; disable pooling and reconnect
       const isStaleConnection = isStaleConnectionError(lastError)
@@ -236,7 +233,6 @@ export async function* withRetry<T>(
         client === null ||
         (lastError instanceof APIError && lastError.status === 401) ||
         isOAuthTokenRevokedError(lastError) ||
-        isBedrockAuthError(lastError) ||
         isVertexAuthError(lastError) ||
         isStaleConnection
       ) {
@@ -374,9 +370,8 @@ export async function* withRetry<T>(
         throw new CannotRetryError(error, retryContext)
       }
 
-      // AWS/GCP errors aren't always APIError, but can be retried
-      const handledCloudAuthError =
-        handleAwsCredentialError(error) || handleGcpCredentialError(error)
+      // GCP errors aren't always APIError, but can be retried
+      const handledCloudAuthError = handleGcpCredentialError(error)
       if (
         !handledCloudAuthError &&
         (!(error instanceof APIError) || !shouldRetry(error))
@@ -626,33 +621,6 @@ function isOAuthTokenRevokedError(error: unknown): boolean {
     error.status === 403 &&
     (error.message?.includes('OAuth token has been revoked') ?? false)
   )
-}
-
-function isBedrockAuthError(error: unknown): boolean {
-  if (getAPIProvider() === 'bedrock') {
-    // AWS libs reject without an API call if .aws holds a past Expiration value
-    // otherwise, API calls that receive expired tokens give generic 403
-    // "The security token included in the request is invalid"
-    if (
-      isAwsCredentialsProviderError(error) ||
-      (error instanceof APIError && error.status === 403)
-    ) {
-      return true
-    }
-  }
-  return false
-}
-
-/**
- * Clear AWS auth caches if appropriate.
- * @returns true if action was taken.
- */
-function handleAwsCredentialError(error: unknown): boolean {
-  if (isBedrockAuthError(error)) {
-    clearAwsCredentialsCache()
-    return true
-  }
-  return false
 }
 
 // google-auth-library throws plain Error (no typed name like AWS's

@@ -58,11 +58,7 @@ import {
   toolToAPISchema,
 } from '../../utils/api.js'
 import { getOauthAccountInfo } from '../../utils/auth.js'
-import {
-  getBedrockExtraBodyParamsBetas,
-  getMergedBetas,
-  getModelBetas,
-} from '../../utils/betas.js'
+import { getMergedBetas, getModelBetas } from '../../utils/betas.js'
 import { getOrCreateUserID } from '../../utils/config.js'
 import {
   CAPPED_DEFAULT_MAX_TOKENS,
@@ -105,8 +101,6 @@ import {
   extractQuotaStatusFromHeaders,
 } from '../claudeAiLimits.js'
 import { getAPIContextManagement } from '../compact/apiMicrocompact.js'
-import { bedrockAdapter } from '../providerUsage/adapters/bedrock.js'
-import { updateProviderBuckets } from '../providerUsage/store.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER')
@@ -201,7 +195,6 @@ import { count } from '../../utils/array.js'
 import { insertBlockAfterToolResults } from '../../utils/contentArray.js'
 import { validateBoundedIntEnvVar } from '../../utils/envValidation.js'
 import { safeParseJSON } from '../../utils/json.js'
-import { getInferenceProfileBackingModel } from '../../utils/model/bedrock.js'
 import {
   normalizeModelStringForAPI,
   parseUserSpecifiedModel,
@@ -385,15 +378,6 @@ export function getCacheControl({
  * TTLs when GrowthBook's disk cache updates mid-request.
  */
 function should1hCacheTTL(querySource?: QuerySource): boolean {
-  // 3P Bedrock users get 1h TTL when opted in via env var — they manage their own billing
-  // No GrowthBook gating needed since 3P users don't have GrowthBook configured
-  if (
-    getAPIProvider() === 'bedrock' &&
-    isEnvTruthy(process.env.ENABLE_PROMPT_CACHING_1H_BEDROCK)
-  ) {
-    return true
-  }
-
   // Latch eligibility in bootstrap state for session stability — prevents
   // mid-session overage flips from changing the cache_control TTL, which
   // would bust the server-side prompt cache (~20K tokens per flip).
@@ -1066,12 +1050,7 @@ async function* queryModel(
   // Also naturally handles rollback/undo since removed messages won't be in the array.
   const previousRequestId = getPreviousRequestIdFromMessages(messages)
 
-  const resolvedModel =
-    getAPIProvider() === 'bedrock' &&
-    options.model.includes('application-inference-profile')
-      ? ((await getInferenceProfileBackingModel(options.model)) ??
-        options.model)
-      : options.model
+  const resolvedModel = options.model
 
   queryCheckpoint('query_tool_schema_build_start')
   const isAgenticQuery =
@@ -1588,12 +1567,7 @@ async function* queryModel(
       betasParams.push(CONTEXT_1M_BETA_HEADER)
     }
 
-    // For Bedrock, include model-based betas (no tool search header — self-built search)
-    const bedrockBetas =
-      getAPIProvider() === 'bedrock'
-        ? [...getBedrockExtraBodyParamsBetas(retryContext.model)]
-        : []
-    const extraBodyParams = getExtraBodyParams(bedrockBetas)
+    const extraBodyParams = getExtraBodyParams([])
 
     const outputConfig: BetaOutputConfig = {
       ...((extraBodyParams.output_config as BetaOutputConfig) ?? {}),
@@ -2463,16 +2437,6 @@ async function* queryModel(
       const resp = streamResponse as unknown as Response | undefined
       if (resp) {
         extractQuotaStatusFromHeaders(resp.headers)
-        // Non-Anthropic providers that flow through this same client path
-        // (Bedrock) expose their own throttle headers — let their adapter
-        // overwrite the store with its bucket(s). Anthropic's adapter runs
-        // inside extractQuotaStatusFromHeaders.
-        if (getAPIProvider() === 'bedrock') {
-          updateProviderBuckets(
-            'bedrock',
-            bedrockAdapter.parseHeaders(resp.headers),
-          )
-        }
         // Store headers for gateway detection
         responseHeaders = resp.headers
       }
