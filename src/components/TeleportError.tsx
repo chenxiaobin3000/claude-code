@@ -73,12 +73,11 @@ export function TeleportError({
         <Dialog title="Remote feature unavailable" onCancel={onCancel}>
           <Box flexDirection="column">
             <Text dimColor>Teleport requires Anthropic account login.</Text>
-            <Text dimColor>This distribution uses local OpenAI-compatible credentials and does not provide account login.</Text>
+            <Text dimColor>
+              This distribution uses local OpenAI-compatible credentials and does not provide account login.
+            </Text>
           </Box>
-          <Select
-            options={[{ label: 'Exit', value: 'exit' }]}
-            onChange={onCancel}
-          />
+          <Select options={[{ label: 'Exit', value: 'exit' }]} onChange={onCancel} />
         </Dialog>
       );
     }

@@ -36,9 +36,9 @@ export function getAnthropicApiKey(): null {
   return null
 }
 
-export function getAnthropicApiKeyWithSource(_opts: {
-  skipRetrievingKeyFromApiKeyHelper?: boolean
-} = {}): {
+export function getAnthropicApiKeyWithSource(
+  _opts: { skipRetrievingKeyFromApiKeyHelper?: boolean } = {},
+): {
   key: null
   source: ApiKeySource
 } {
@@ -222,7 +222,11 @@ export function getOtelHeadersFromHelper(): Record<string, string> {
       .trim()
     if (!result) throw new Error('otelHeadersHelper returned no value')
     const parsed: unknown = jsonParse(result)
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
       throw new Error('otelHeadersHelper must return a JSON object')
     }
     for (const value of Object.values(parsed)) {

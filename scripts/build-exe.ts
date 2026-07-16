@@ -2,9 +2,9 @@ import { mkdir, readFile, stat } from 'fs/promises'
 import { getMacroDefines, DEFAULT_BUILD_FEATURES } from './defines.ts'
 
 const outfile = 'dist/claude-code.exe'
-const packageJson = JSON.parse(
-  await readFile('package.json', 'utf8'),
-) as { version: string }
+const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
+  version: string
+}
 const windowsVersion = `${packageJson.version}.0`
 
 const envFeatures = Object.keys(process.env)

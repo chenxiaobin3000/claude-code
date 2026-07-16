@@ -30,11 +30,7 @@ import {
   getMemoryFiles,
   shouldShowClaudeMdExternalIncludesWarning,
 } from './utils/claudemd.js';
-import {
-  checkHasTrustDialogAccepted,
-  getGlobalConfig,
-  saveGlobalConfig,
-} from './utils/config.js';
+import { checkHasTrustDialogAccepted, getGlobalConfig, saveGlobalConfig } from './utils/config.js';
 import { updateDeepLinkTerminalPreference } from './utils/deepLink/terminalPreference.js';
 import { isEnvTruthy } from './utils/envUtils.js';
 import { type FpsMetrics, FpsTracker } from './utils/fpsTracker.js';

@@ -2,10 +2,7 @@ import type { LocalJSXCommandContext } from '../../commands.js';
 import type { LocalJSXCommandOnDone } from '../../types/command.js';
 import { runExtraUsage } from './extra-usage-core.js';
 
-export async function call(
-  onDone: LocalJSXCommandOnDone,
-  context: LocalJSXCommandContext,
-): Promise<null> {
+export async function call(onDone: LocalJSXCommandOnDone, context: LocalJSXCommandContext): Promise<null> {
   const result = await runExtraUsage();
 
   if (result.type === 'message') {

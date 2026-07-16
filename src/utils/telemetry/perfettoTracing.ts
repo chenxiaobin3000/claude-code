@@ -1106,4 +1106,3 @@ export function resetPerfettoTracer(): void {
 export async function triggerPeriodicWriteForTesting(): Promise<void> {
   await periodicWrite()
 }
-

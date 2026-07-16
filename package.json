@@ -83,7 +83,7 @@
     "@anthropic-ai/sdk": "^0.81.0",
     "@anthropic/ink": "workspace:*",
     "@aws-sdk/credential-provider-node": "^3.972.36",
-    "@biomejs/biome": "^2.4.12",
+    "@biomejs/biome": "2.5.4",
     "@claude-code-best/agent-tools": "workspace:*",
     "@claude-code-best/builtin-tools": "workspace:*",
     "@claude-code-best/mcp-client": "workspace:*",

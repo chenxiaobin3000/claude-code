@@ -54,7 +54,9 @@ for (const path of runtimeBoundaryFiles) {
 const subprocessEnv = await source('src/utils/subprocessEnv.ts')
 const legacySecretMatches = subprocessEnv.match(/ANTHROPIC_FOUNDRY_API_KEY/g)
 if (legacySecretMatches?.length !== 1) {
-  fail('legacy Foundry API key must appear exactly once in subprocess secret filtering')
+  fail(
+    'legacy Foundry API key must appear exactly once in subprocess secret filtering',
+  )
 }
 
 if (getAPIProvider() !== 'openai') {

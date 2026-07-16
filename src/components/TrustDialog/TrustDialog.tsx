@@ -99,14 +99,7 @@ export function TrustDialog({ onDone, commands }: Props): React.ReactNode {
       hasOtelHeadersHelper,
       hasDangerousEnvVars,
     });
-  }, [
-    hasMcpServers,
-    hasHooks,
-    hasAnyBashExecution,
-    hasApiKeyHelper,
-    hasOtelHeadersHelper,
-    hasDangerousEnvVars,
-  ]);
+  }, [hasMcpServers, hasHooks, hasAnyBashExecution, hasApiKeyHelper, hasOtelHeadersHelper, hasDangerousEnvVars]);
 
   function onChange(value: 'enable_all' | 'exit') {
     if (value === 'exit') {

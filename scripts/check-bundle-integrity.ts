@@ -78,9 +78,7 @@ const BUN_MODULES = new Set(['bun', 'bun:ffi', 'bun:test', 'bun:sqlite'])
 // Optional or unsupported branches may intentionally retain a guarded runtime
 // import. Missing modules must degrade cleanly and are warnings, not evidence
 // that the supported OpenAI-compatible CLI path is broken.
-const OPTIONAL_RUNTIME_MODULES = new Set([
-  '@napi-rs/keyring',
-])
+const OPTIONAL_RUNTIME_MODULES = new Set(['@napi-rs/keyring'])
 
 // macOS JXA / native 框架（通过 ObjC.import，非真正的 require）
 const NATIVE_FRAMEWORKS = new Set([

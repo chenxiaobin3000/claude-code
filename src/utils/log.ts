@@ -164,10 +164,7 @@ export function logError(error: unknown): void {
   }
   try {
     // Check if error reporting should be disabled
-    if (
-      process.env.DISABLE_ERROR_REPORTING ||
-      isEssentialTrafficOnly()
-    ) {
+    if (process.env.DISABLE_ERROR_REPORTING || isEssentialTrafficOnly()) {
       return
     }
 

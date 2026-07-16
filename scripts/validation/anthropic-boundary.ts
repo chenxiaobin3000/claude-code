@@ -13,7 +13,8 @@ function fail(message: string): never {
 
 function forbid(path: string, text: string, patterns: RegExp[]): void {
   for (const pattern of patterns) {
-    if (pattern.test(text)) fail(`${path} contains forbidden pattern ${pattern}`)
+    if (pattern.test(text))
+      fail(`${path} contains forbidden pattern ${pattern}`)
   }
 }
 
@@ -30,16 +31,26 @@ forbid(authPath, auth, [
 if (!/isAnthropicAuthEnabled\(\): boolean \{\s*return false\s*\}/s.test(auth)) {
   fail('Anthropic account authentication must remain fail-closed')
 }
-if (!/getClaudeAIOAuthTokens\(\): OAuthTokens \| null \{\s*return null\s*\}/s.test(auth)) {
+if (
+  !/getClaudeAIOAuthTokens\(\): OAuthTokens \| null \{\s*return null\s*\}/s.test(
+    auth,
+  )
+) {
   fail('Claude account token lookup must remain disabled')
 }
 
 const providersPath = 'src/utils/model/providers.ts'
 const providers = await source(providersPath)
-if (!/getAPIProvider\(\): APIProvider \{\s*return 'openai'\s*\}/s.test(providers)) {
+if (
+  !/getAPIProvider\(\): APIProvider \{\s*return 'openai'\s*\}/s.test(providers)
+) {
   fail('runtime provider must remain OpenAI-compatible')
 }
-if (!/isFirstPartyAnthropicBaseUrl\(\): boolean \{\s*return false\s*\}/s.test(providers)) {
+if (
+  !/isFirstPartyAnthropicBaseUrl\(\): boolean \{\s*return false\s*\}/s.test(
+    providers,
+  )
+) {
   fail('Anthropic first-party endpoint detection must remain fail-closed')
 }
 
@@ -61,8 +72,13 @@ const claude = await source(claudePath)
 forbid(claudePath, claude, [/export async function verifyApiKey\s*\(/])
 const routeStart = claude.indexOf("if (getAPIProvider() === 'openai')")
 const routeDelegate = claude.indexOf('yield* queryModelOpenAI(', routeStart)
-const routeTail = routeDelegate < 0 ? '' : claude.slice(routeDelegate, routeDelegate + 500)
-if (routeStart < 0 || routeDelegate < 0 || !/\r?\n    return\r?\n/.test(routeTail)) {
+const routeTail =
+  routeDelegate < 0 ? '' : claude.slice(routeDelegate, routeDelegate + 500)
+if (
+  routeStart < 0 ||
+  routeDelegate < 0 ||
+  !/\r?\n {4}return\r?\n/.test(routeTail)
+) {
   fail('main model query must delegate to OpenAI and return before legacy code')
 }
 
