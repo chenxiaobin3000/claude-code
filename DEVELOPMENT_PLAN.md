@@ -157,7 +157,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - `bun run typecheck`、`bun run lint`、构建完整性检查和 CLI 冒烟检查全部通过。
 - Bun 与 Node CLI 产物均能执行 `--version`；支持的平台上 standalone EXE 可以启动。
 - 至少两个 OpenAI/OpenAI-compatible 模型完成流式对话与工具调用。
-- 失败时能定位 Provider、模型映射、鉴权或流解析阶段。
+- 失败时能定位 Provider、模型注册与解析、鉴权或流解析阶段。
 
 ## 6. 后续开发路线图
 
@@ -298,6 +298,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 以下能力应单独评估，不作为核心兼容阻塞项：
 
 - [ ] 浏览器控制：优先采用公开 MCP/浏览器协议，不绑定官方 Chrome 私有服务。
+- [ ] VS Code 插件：提供会话交互、代码上下文传递、Diff 预览与权限确认，并通过稳定的公开协议连接 CLI，避免与编辑器进程内实现强耦合。
 
 ## 7. 推荐实施顺序
 

@@ -11,6 +11,14 @@
 - **代码质量**: Biome 2（linter + formatter）、Husky + lint-staged
 - **包管理**: Bun workspace monorepo
 
+## Windows Shell 约定
+
+- 在 Windows 上优先使用 PowerShell 工具执行 `git`、`bun`、`npm`、构建和其他终端命令。
+- 除非任务明确依赖 POSIX Shell、`.sh` 脚本或 Git Bash，否则不要使用 Bash 工具。
+- 工具已经位于正确的项目工作目录，不要在命令前添加 `cd` 或 `Set-Location`。
+- 必须使用 Bash 时，Windows 路径 `C:\dev\claude-code` 在 Git Bash 中应写为 `/c/dev/claude-code`，在 WSL 中应写为 `/mnt/c/dev/claude-code`；不得写成 `/dev/claude-code`。
+- PowerShell 命令使用 Windows 路径和 PowerShell 语法，不要混用 Bash 的环境变量、重定向或路径写法。
+
 ## Monorepo 工作空间
 
 ```yaml
