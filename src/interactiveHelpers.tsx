@@ -25,7 +25,6 @@ import { handleMcpjsonServerApprovals } from './services/mcpServerApproval.js';
 import { AppStateProvider } from './state/AppState.js';
 import { onChangeAppState } from './state/onChangeAppState.js';
 import { ThemeProvider } from '@anthropic/ink';
-import { normalizeApiKeyForConfig } from './utils/authPortable.js';
 import {
   getExternalClaudeMdIncludes,
   getMemoryFiles,
@@ -33,12 +32,11 @@ import {
 } from './utils/claudemd.js';
 import {
   checkHasTrustDialogAccepted,
-  getCustomApiKeyStatus,
   getGlobalConfig,
   saveGlobalConfig,
 } from './utils/config.js';
 import { updateDeepLinkTerminalPreference } from './utils/deepLink/terminalPreference.js';
-import { isEnvTruthy, isRunningOnHomespace } from './utils/envUtils.js';
+import { isEnvTruthy } from './utils/envUtils.js';
 import { type FpsMetrics, FpsTracker } from './utils/fpsTracker.js';
 import { updateGithubRepoPathMapping } from './utils/githubRepoPathMapping.js';
 import { applyConfigEnvironmentVariables } from './utils/managedEnv.js';
@@ -251,22 +249,6 @@ export async function showSetupScreens(
       logEvent('tengu_grove_policy_exited', {});
       gracefulShutdownSync(0);
       return false;
-    }
-  }
-
-  // Check for custom API key
-  // On homespace, ANTHROPIC_API_KEY is preserved in process.env for child
-  // processes but ignored by Claude Code itself (see auth.ts).
-  if (process.env.ANTHROPIC_API_KEY && !isRunningOnHomespace()) {
-    const customApiKeyTruncated = normalizeApiKeyForConfig(process.env.ANTHROPIC_API_KEY);
-    const keyStatus = getCustomApiKeyStatus(customApiKeyTruncated);
-    if (keyStatus === 'new') {
-      const { ApproveApiKey } = await import('./components/ApproveApiKey.js');
-      await showSetupDialog<boolean>(
-        root,
-        done => <ApproveApiKey customApiKeyTruncated={customApiKeyTruncated} onDone={done} />,
-        { onChangeAppState },
-      );
     }
   }
 

@@ -10,7 +10,6 @@ import clear from './commands/clear/index.js'
 import color from './commands/color/index.js'
 import commit from './commands/commit.js'
 import copy from './commands/copy/index.js'
-import desktop from './commands/desktop/index.js'
 import commitPushPr from './commands/commit-push-pr.js'
 import compact from './commands/compact/index.js'
 import config from './commands/config/index.js'
@@ -26,13 +25,10 @@ import init from './commands/init.js'
 import initVerifiers from './commands/init-verifiers.js'
 import keybindings from './commands/keybindings/index.js'
 import lang from './commands/lang/index.js'
-import installGitHubApp from './commands/install-github-app/index.js'
-import installSlackApp from './commands/install-slack-app/index.js'
 import breakCache, {
   breakCacheNonInteractive,
 } from './commands/break-cache/index.js'
 import mcp from './commands/mcp/index.js'
-import mobile from './commands/mobile/index.js'
 import onboarding from './commands/onboarding/index.js'
 import pr_comments from './commands/pr_comments/index.js'
 import releaseNotes from './commands/release-notes/index.js'
@@ -40,16 +36,9 @@ import rename from './commands/rename/index.js'
 import resume from './commands/resume/index.js'
 import review, { ultrareview } from './commands/review.js'
 import session from './commands/session/index.js'
-import share from './commands/share/index.js'
 import skills from './commands/skills/index.js'
 import status from './commands/status/index.js'
 import tasks from './commands/tasks/index.js'
-import teleport from './commands/teleport/index.js'
-import agentsPlatform from './commands/agents-platform/index.js'
-import scheduleCommand from './commands/schedule/index.js'
-import memoryStoresCommand from './commands/memory-stores/index.js'
-import skillStoreCommand from './commands/skill-store/index.js'
-import vaultCommand from './commands/vault/index.js'
 import localVaultCommand from './commands/local-vault/index.js'
 import localMemoryCommand from './commands/local-memory/index.js'
 import securityReview from './commands/security-review.js'
@@ -91,11 +80,6 @@ const forceSnip = feature('HISTORY_SNIP')
 const workflowsCmd = feature('WORKFLOW_SCRIPTS')
   ? (
       require('./commands/workflows/index.js') as typeof import('./commands/workflows/index.js')
-    ).default
-  : null
-const webCmd = feature('CCR_REMOTE_SETUP')
-  ? (
-      require('./commands/remote-setup/index.js') as typeof import('./commands/remote-setup/index.js')
     ).default
   : null
 const clearSkillIndexCache = feature('EXPERIMENTAL_SKILL_SEARCH')
@@ -168,7 +152,6 @@ import thinkback from './commands/thinkback/index.js'
 import thinkbackPlay from './commands/thinkback-play/index.js'
 import permissions from './commands/permissions/index.js'
 import plan from './commands/plan/index.js'
-import fast from './commands/fast/index.js'
 import passes from './commands/passes/index.js'
 import privacySettings from './commands/privacy-settings/index.js'
 import hooks from './commands/hooks/index.js'
@@ -217,16 +200,12 @@ import {
   clearPluginSkillsCache,
 } from './utils/plugins/loadPluginCommands.js'
 import memoize from 'lodash-es/memoize.js'
-import { isUsing3PServices, isClaudeAISubscriber } from './utils/auth.js'
-import { isFirstPartyAnthropicBaseUrl } from './utils/model/providers.js'
 import env from './commands/env/index.js'
 import exit from './commands/exit/index.js'
 import exportCommand from './commands/export/index.js'
 import model from './commands/model/index.js'
 import tag from './commands/tag/index.js'
 import outputStyle from './commands/output-style/index.js'
-import remoteEnv from './commands/remote-env/index.js'
-import rateLimitOptions from './commands/rate-limit-options/index.js'
 import statusline from './commands/statusline.js'
 import effort from './commands/effort/index.js'
 // stats/index.ts re-exports usage — /stats is now an alias of /usage
@@ -245,7 +224,6 @@ const usageReport: Command = {
     return real.getPromptForCommand(args, context)
   },
 }
-import oauthRefresh from './commands/oauth-refresh/index.js'
 import debugToolCall from './commands/debug-tool-call/index.js'
 import { getSettingSourceName } from './utils/settings/constants.js'
 import {
@@ -279,7 +257,6 @@ export const INTERNAL_ONLY_COMMANDS = [
   resetLimits,
   resetLimitsNonInteractive,
   antTrace,
-  oauthRefresh,
 ].filter(Boolean)
 
 // Declared as a function so that we don't run this until getCommands is called,
@@ -287,11 +264,6 @@ export const INTERNAL_ONLY_COMMANDS = [
 const COMMANDS = memoize((): Command[] => [
   addDir,
   advisor,
-  agentsPlatform,
-  scheduleCommand,
-  memoryStoresCommand,
-  skillStoreCommand,
-  vaultCommand,
   localVaultCommand,
   localMemoryCommand,
   autonomy,
@@ -306,14 +278,12 @@ const COMMANDS = memoize((): Command[] => [
   compact,
   config,
   copy,
-  desktop,
   context,
   contextNonInteractive,
   diff,
   doctor,
   effort,
   exit,
-  fast,
   files,
   heapDump,
   help,
@@ -321,15 +291,11 @@ const COMMANDS = memoize((): Command[] => [
   init,
   keybindings,
   lang,
-  installGitHubApp,
-  installSlackApp,
   mcp,
   memory,
-  mobile,
   mode,
   model,
   outputStyle,
-  remoteEnv,
   plugin,
   pr_comments,
   releaseNotes,
@@ -349,12 +315,10 @@ const COMMANDS = memoize((): Command[] => [
   rewind,
   securityReview,
   terminalSetup,
-  rateLimitOptions,
   usage,
   usageReport,
   vim,
   webTools,
-  ...(webCmd ? [webCmd] : []),
   ...(forkCmd ? [forkCmd] : []),
   ...(buddy ? [buddy] : []),
   ...(poor ? [poor] : []),
@@ -407,8 +371,6 @@ const COMMANDS = memoize((): Command[] => [
   breakCache,
   breakCacheNonInteractive,
   issue,
-  share,
-  teleport,
   tui,
   tuiNonInteractive,
   onboarding,
@@ -488,29 +450,8 @@ const getWorkflowCommands = feature('WORKFLOW_SCRIPTS')
  */
 export function meetsAvailabilityRequirement(cmd: Command): boolean {
   if (!cmd.availability || cmd.availability.length === 0) return true
-  for (const a of cmd.availability) {
-    switch (a) {
-      case 'claude-ai':
-        if (isClaudeAISubscriber()) return true
-        break
-      case 'console':
-        // Console API key user = direct 1P API customer (not 3P, not claude.ai).
-        // Excludes 3P (Bedrock/Vertex/Foundry) who don't set ANTHROPIC_BASE_URL
-        // and gateway users who proxy through a custom base URL.
-        if (
-          !isClaudeAISubscriber() &&
-          !isUsing3PServices() &&
-          isFirstPartyAnthropicBaseUrl()
-        )
-          return true
-        break
-      default: {
-        const _exhaustive: never = a
-        void _exhaustive
-        break
-      }
-    }
-  }
+  // Anthropic account-gated commands are intentionally unavailable. Built-in
+  // commands are omitted from COMMANDS; this also blocks plugin reintroduction.
   return false
 }
 
@@ -705,7 +646,6 @@ export const REMOTE_SAFE_COMMANDS: Set<Command> = new Set([
   keybindings, // Keybinding management
   statusline, // Status line toggle
   stickers, // Stickers
-  mobile, // Mobile QR code
 ])
 
 /**

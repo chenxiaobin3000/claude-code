@@ -167,7 +167,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 - [ ] 建立明确的 Provider 接口边界，将共享消息预处理、OpenAI 请求、流事件适配和 Usage 统计分层，避免继续在 `src/services/api/claude.ts` 中扩展条件分支。
 - [ ] 保留 Anthropic SDK 作为内部消息、工具和流事件兼容层，梳理并记录其实际调用范围；不得仅因模型 Provider 固定为 OpenAI 就删除 SDK 类型或共享处理逻辑。
-- [ ] 明确移除范围仅包括 Anthropic 账号登录、账号鉴权和官方模型直连入口，并增加检查防止这些入口被意外恢复。
+- [x] 明确移除范围仅包括 Anthropic 账号登录、账号鉴权和官方模型直连入口，并增加检查防止这些入口被意外恢复（2026-07-16 已移除账号鉴权实现、官方直连回退和账号专属命令，并接入 `anthropic-boundary` 验证）。
 - [x] 完成 Bedrock 非主路径审计并删除专用 Provider 实现、AWS 鉴权配置和依赖，同时保留共享 Anthropic SDK 消息兼容逻辑（2026-07-15 已验证 Bun/Vite 构建及 Bun/Node CLI 启动）。
 - [ ] 对 Vertex、Foundry 非主路径分支分别做引用和运行时审计；只有确认不承担共享 SDK 兼容职责且不可达后，才删除对应实现、配置或依赖。
 - [ ] 拆分 `src/main.tsx`，按启动阶段、参数注册、运行模式和服务初始化划分模块。

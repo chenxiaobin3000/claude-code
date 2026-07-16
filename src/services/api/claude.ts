@@ -505,63 +505,6 @@ export function getAPIMetadata() {
   }
 }
 
-export async function verifyApiKey(
-  apiKey: string,
-  isNonInteractiveSession: boolean,
-): Promise<boolean> {
-  // Skip API verification if running in print mode (isNonInteractiveSession)
-  if (isNonInteractiveSession) {
-    return true
-  }
-
-  try {
-    // WARNING: if you change this to use a non-Haiku model, this request will fail in 1P unless it uses getCLISyspromptPrefix.
-    const model = getSmallFastModel()
-    const betas = getModelBetas(model)
-    return await returnValue(
-      withRetry(
-        () =>
-          getAnthropicClient({
-            apiKey,
-            maxRetries: 3,
-            model,
-            source: 'verify_api_key',
-          }),
-        async anthropic => {
-          const messages: MessageParam[] = [{ role: 'user', content: 'test' }]
-          await anthropic.beta.messages.create({
-            model,
-            max_tokens: 1,
-            messages,
-            temperature: 1,
-            ...(betas.length > 0 && { betas: betas.filter(Boolean) }),
-            metadata: getAPIMetadata(),
-            ...getExtraBodyParams(),
-          })
-          return true
-        },
-        { maxRetries: 2, model, thinkingConfig: { type: 'disabled' } }, // Use fewer retries for API key verification
-      ),
-    )
-  } catch (errorFromRetry) {
-    let error = errorFromRetry
-    if (errorFromRetry instanceof CannotRetryError) {
-      error = errorFromRetry.originalError
-    }
-    logError(error)
-    // Check for authentication error
-    if (
-      error instanceof Error &&
-      error.message.includes(
-        '{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}',
-      )
-    ) {
-      return false
-    }
-    throw error
-  }
-}
-
 export function userMessageToMessageParam(
   message: UserMessage,
   addCache = false,
