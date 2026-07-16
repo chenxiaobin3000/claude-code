@@ -9,7 +9,7 @@ import {
 import { extractHeredocs, restoreHeredocs } from './heredoc.js'
 import { quote, tryParseShellCommand } from './shellQuote.js'
 
-type ControlOperatorValue = ControlOperator
+type ControlOperatorValue = ControlOperator['op']
 
 /**
  * Generates placeholder strings with random salt to prevent injection attacks.

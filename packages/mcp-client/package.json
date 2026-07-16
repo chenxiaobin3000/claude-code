@@ -5,6 +5,16 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
+    "test:smoke": "bun run ../../scripts/validation/workspace-smoke.ts"
+  },
+  "workspaceValidation": {
+    "build": {
+      "applicable": false,
+      "reason": "Source-only internal package; bundled by the root CLI build."
+    }
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@claude-code-best/agent-tools": "workspace:*",

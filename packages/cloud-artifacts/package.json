@@ -4,6 +4,9 @@
   "private": true,
   "description": "Cloudflare Worker + R2 HTML artifact host (POST /upload → hash URL)",
   "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "test:smoke": "bun run ../../scripts/validation/workspace-smoke.ts",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "setup": "bash scripts/setup.sh",

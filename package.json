@@ -56,6 +56,7 @@
     "check:fix": "biome check --fix .",
     "prepare": "husky",
     "check:bundle": "bun run scripts/check-bundle-integrity.ts",
+    "workspaces:verify": "bun run scripts/verify-workspaces.ts",
     "verify": "bun run scripts/verify.ts",
     "check:unused": "knip-bun",
     "postinstall": "node scripts/run-parallel.mjs scripts/postinstall.cjs scripts/setup-chrome-mcp.mjs",

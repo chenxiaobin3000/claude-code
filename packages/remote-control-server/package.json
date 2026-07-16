@@ -6,9 +6,11 @@
     "dev": "bun run --watch src/index.ts",
     "dev:web": "cd web && bunx vite",
     "start": "bun run src/index.ts",
+    "build": "bun run build:web && bun build src/index.ts --outfile=dist/server.js --target=bun",
     "build:web": "cd web && bunx vite build",
     "preview:web": "cd web && bunx vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false && tsc -p web/tsconfig.json --noEmit --pretty false",
+    "test:smoke": "bun run ../../scripts/validation/workspace-smoke.ts"
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.170",

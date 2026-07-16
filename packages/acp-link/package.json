@@ -14,6 +14,8 @@
   ],
   "scripts": {
     "build": "tsc",
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
+    "test:smoke": "bun run ../../scripts/validation/workspace-smoke.ts",
     "dev": "ACP_RCS_URL=http://localhost:3000 ACP_RCS_TOKEN=test-my-key bun run src/cli/bin.ts ccb-bun -- --acp",
     "dev:remote": "ACP_RCS_URL=https://remote-control.claude-code-best.win/ ACP_RCS_TOKEN=test-my-key bun run src/cli/bin.ts ccb-bun -- --acp",
     "dev:manager": "ACP_RCS_URL=http://localhost:3000 ACP_RCS_TOKEN=test-my-key bun run src/cli/bin.ts --manager",

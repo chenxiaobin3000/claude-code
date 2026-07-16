@@ -7,6 +7,8 @@
  *   theme/       — Theme system (ThemeProvider, ThemedBox, ThemedText, design-system)
  */
 
+/// <reference path="./types/ink-jsx.d.ts" />
+
 // ============================================================
 // Core API (render/createRoot)
 // ============================================================

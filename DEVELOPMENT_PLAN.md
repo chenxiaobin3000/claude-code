@@ -49,6 +49,7 @@
 以下状态由 2026-07-15 至 2026-07-16 的实际检查和验收确认，后续改动不得降低这些基线能力：
 
 - Bun workspace 当前包含 18 个子包。
+- 18 个 workspace 均遵循机器可检查的最小脚本契约：必须提供独立 `typecheck` 和 `test`/`test:smoke`；有独立产物的包必须提供 `build`，源码直引包则必须在 `workspaceValidation.build.reason` 中说明不适用原因。统一由 `bun run workspaces:verify` 发现和执行，并已接入唯一总入口 `bun run verify`。
 - Git 管理的 TypeScript 源码约 2,746 个文件、56 万行。
 - 当前模型主路径由 `getAPIProvider()` 固定路由至 `openai`。Anthropic 账号登录、鉴权和官方模型直连已移除；Anthropic SDK 因大量内部消息、工具和流事件调用而继续作为兼容层保留。Bedrock Provider 已于 2026-07-15 移除；Vertex 客户端、GCP 鉴权、区域配置、专用请求行为和依赖已于 2026-07-16 移除；Foundry 客户端、Azure Identity 鉴权、专用配置和依赖也已于 2026-07-16 移除。
 - 已新增统一最小验证命令 `bun run verify`，顺序覆盖锁定安装、类型检查、Lint，以及 Bun bundle、Vite/Rollup Node bundle、Windows x64 standalone EXE 三条构建链的完整性、版本、启动、单轮模型请求和 `Read` 工具调用。验证直接使用 `~/.claude/models.json` 的默认模型，并限制为回环或私有网络地址。2026-07-16 使用本地 llama.cpp（Qwen3.5-9B-Q6_K，65,536 上下文）完成三构建链全矩阵复验，所有检查通过，总耗时 69.1 秒。
@@ -151,7 +152,15 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 2026-07-16 第二模型实测：显式选择 `deepseek-v4-flash` 后，单轮流式请求返回预期标记；随后仅开放并允许 `Read` 工具读取根目录 `package.json`，模型正确发起工具调用并返回版本 `2.1.116`。测试使用 `OPENAI_MAX_TOKENS=4096`，未记录 API Key 或完整 Prompt。本地功能基线已完成验收；跨平台 CI 仍以 GitHub 托管环境首次实际运行记录作为最终证据。
 
-### 5.6 基线约束
+### 5.6 Workspace 验证契约
+
+`scripts/verify-workspaces.ts` 从根 `package.json.workspaces` 自动发现子包，不维护固定名单。每个 workspace 必须提供可独立运行的 `typecheck` 及 `test`/`test:smoke`；存在发布、服务或部署产物时还必须提供 `build`，否则必须通过 `workspaceValidation.build.applicable=false` 和非空 `reason` 明确说明由根 CLI 构建链统一打包。当前 14 个源码直引内部包明确标记为无需独立构建，`acp-link`、`workflow-engine`、`remote-control-server` 和 `cloud-artifacts` 分别执行实际构建。
+
+轻量冒烟统一调用 `scripts/validation/workspace-smoke.ts`，不引入 `*.test.ts` 或测试框架：源码包导入公开入口；发布包检查并导入构建产物；`acp-link` 验证 CLI 帮助；Cloudflare Worker 使用固定请求验证本地响应；Remote Control Server 使用临时本机端口验证 `/health`。验证器支持 `contract`、`typecheck`、`build`、`smoke` 和默认全流程模式，便于定位失败，但不形成第二个总验收层级。
+
+2026-07-16 Windows x64 实测：18/18 workspace 契约、独立 TypeScript 和轻量冒烟全部通过，4/4 适用构建通过；`bun run verify -- --ci` 随后完成锁定安装、Biome、源码验证、workspace 全流程、Bun bundle、Vite/Node bundle 和 Windows standalone EXE 验证，总耗时 109.5 秒。普通模式同次执行到 Bun CLI 模型请求前的全部项目均通过，模型请求因本地 llama.cpp 的 `127.0.0.1:33350` 未监听而未在本次复验；此前记录的本地模型验收结论不变。
+
+### 5.7 基线约束
 
 - 全新环境可按文档完成安装、构建和启动。
 - `bun run typecheck`、`bun run lint`、构建完整性检查和 CLI 冒烟检查全部通过。
@@ -177,7 +186,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - [x] 继续收缩 `ReplController.tsx` 的查询生命周期和运行时编排（2026-07-16 已完成：新增 `query`、`runtime` 分层，并将查询统计、流事件适配、单次查询执行、整轮并发/取消收尾、Remote/Direct Connect/SSH、Pipe/Inbox/Mailbox、Prompt 提交、会话恢复/回退及 Agent 提交动作迁出；transcript 分支迁入独立 `TranscriptScreen`，控制器由 5903 行降至 4300 行以内，并将 `repl-boundary` 上限同步收紧。`bun run verify --ci` 于 Windows 全部通过，用时 64.2 秒）。
 - [x] 继续拆分 `ReplController.tsx` 中的主 Prompt 屏幕、Dialog 层和取消/退出交互（2026-07-16 已完成：`ReplController.tsx` 收口为稳定导出入口，低于 1800 行上限；剩余查询、提交和运行时编排明确迁入 `ReplRuntimeController.tsx`，主 Prompt/Transcript 投影迁入 `view/ReplView.tsx`，Dialog 与消息选择副作用迁入 `interaction/ReplDialogLayer.tsx`、`ReplMessageSelector.tsx`，取消和退出分别迁入 `useCancelInteraction.ts`、`useExitInteraction.tsx`。`repl-boundary` 同时限制入口规模、各层 800 行上限，并禁止主视图直接发起查询、切换会话、局部压缩或初始化远程运行时；`bun run verify --ci` 于 Windows 全部通过，用时 71.7 秒）。
 - [ ] 拆分 `src/utils/messages.ts`、`src/utils/sessionStorage.ts` 和 `src/utils/hooks.ts`，优先抽出纯函数与协议转换层，并在 `scripts/validation` 中补充轻量验证脚本。
-- [ ] 为所有 workspace 统一最小脚本约定：`typecheck`、`build`、`test` 或明确的 `test:smoke`；不适用的子包需写明原因。
+- [x] 为所有 workspace 统一最小脚本约定：`typecheck`、`build`、`test` 或明确的 `test:smoke`；不适用的子包需写明原因（2026-07-16 已完成：18/18 workspace 契约、独立类型检查和轻量冒烟通过；4 个独立产物构建通过，14 个源码直引包记录机器可读的不适用原因；统一并入 `bun run verify`，CI 模式全流程耗时 109.5 秒）。
 - [ ] 审计根包 `devDependencies` 中实际进入生产 Bundle 的依赖，明确运行时依赖与构建期依赖，减少发布和供应链审计范围。
 - [ ] 将 Feature Flag 分为稳定、实验、内部/部署专用三组，增加依赖关系和非法组合检查；默认构建只启用有验收覆盖的稳定能力。
 

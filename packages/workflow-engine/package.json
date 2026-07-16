@@ -60,7 +60,8 @@
   },
   "scripts": {
     "build": "bun run scripts/build.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
+    "test:smoke": "bun run ../../scripts/validation/workspace-smoke.ts",
     "prepublishOnly": "bun run build"
   }
 }

@@ -272,6 +272,11 @@ async function main(): Promise<void> {
   ])
   await runStep('TypeScript typecheck', [bunExecutable, 'run', 'typecheck'])
   await runStep('Biome lint', [bunExecutable, 'run', 'lint'])
+  await runStep('workspace contract, checks, builds, and smoke', [
+    bunExecutable,
+    'run',
+    'workspaces:verify',
+  ])
   for (const script of validationScripts) {
     await runStep(`source validation: ${script}`, [
       bunExecutable,

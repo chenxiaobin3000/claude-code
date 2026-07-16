@@ -10,6 +10,16 @@
     "./tools/*": "./src/tools/*",
     "./utils": "./src/utils.ts"
   },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
+    "test:smoke": "bun run ../../scripts/validation/workspace-smoke.ts"
+  },
+  "workspaceValidation": {
+    "build": {
+      "applicable": false,
+      "reason": "Source-only internal package; bundled by the root CLI build."
+    }
+  },
   "dependencies": {
     "@claude-code-best/agent-tools": "workspace:*",
     "marked": "^17.0.6"
