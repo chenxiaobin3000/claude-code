@@ -10,6 +10,7 @@
  */
 
 import { logError } from '../../utils/log.js'
+import { getModelRegistryError } from '../../utils/model/modelRegistry.js'
 
 /** The canonical Anthropic API host for workspace (non-subscription) endpoints. */
 const WORKSPACE_API_HOST = 'api.anthropic.com'
@@ -77,9 +78,7 @@ export function assertSubscriptionBaseUrl(url: string): void {
  * The warning is informational — the calling code decides what to do.
  */
 export function assertNoAnthropicEnvForOpenAI(): void {
-  const hasOpenAIMode = Boolean(
-    process.env['OPENAI_API_KEY'] || process.env['OPENAI_BASE_URL'],
-  )
+  const hasOpenAIMode = getModelRegistryError() === null
   const hasAnthropicKey = Boolean(process.env['ANTHROPIC_API_KEY'])
 
   if (hasOpenAIMode && hasAnthropicKey) {

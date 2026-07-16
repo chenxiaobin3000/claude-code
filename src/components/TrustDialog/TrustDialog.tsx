@@ -16,7 +16,6 @@ import { Select } from '../CustomSelect/index.js';
 import { PermissionDialog } from '../permissions/PermissionDialog.js';
 import {
   getApiKeyHelperSources,
-  getAwsCommandsSources,
   getBashPermissionSources,
   getDangerousEnvVarsSources,
   getGcpCommandsSources,
@@ -46,9 +45,6 @@ export function TrustDialog({ onDone, commands }: Props): React.ReactNode {
   // Check for apiKeyHelper which executes arbitrary commands
   const apiKeyHelperSources = getApiKeyHelperSources();
   const hasApiKeyHelper = apiKeyHelperSources.length > 0;
-  // Check for AWS commands which execute arbitrary commands
-  const awsCommandsSources = getAwsCommandsSources();
-  const hasAwsCommands = awsCommandsSources.length > 0;
   // Check for GCP commands which execute arbitrary commands
   const gcpCommandsSources = getGcpCommandsSources();
   const hasGcpCommands = gcpCommandsSources.length > 0;
@@ -104,7 +100,6 @@ export function TrustDialog({ onDone, commands }: Props): React.ReactNode {
       hasHooks,
       hasBashExecution: hasAnyBashExecution,
       hasApiKeyHelper,
-      hasAwsCommands,
       hasGcpCommands,
       hasOtelHeadersHelper,
       hasDangerousEnvVars,
@@ -114,7 +109,6 @@ export function TrustDialog({ onDone, commands }: Props): React.ReactNode {
     hasHooks,
     hasAnyBashExecution,
     hasApiKeyHelper,
-    hasAwsCommands,
     hasGcpCommands,
     hasOtelHeadersHelper,
     hasDangerousEnvVars,
@@ -139,7 +133,6 @@ export function TrustDialog({ onDone, commands }: Props): React.ReactNode {
       hasHooks,
       hasBashExecution: hasAnyBashExecution,
       hasApiKeyHelper,
-      hasAwsCommands,
       hasGcpCommands,
       hasOtelHeadersHelper,
       hasDangerousEnvVars,

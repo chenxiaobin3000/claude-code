@@ -7,6 +7,7 @@ import type {
 import { isLangfuseEnabled } from './client.js'
 import { sanitizeToolInput, sanitizeToolOutput } from './sanitize.js'
 import { logForDebugging } from 'src/utils/debug.js'
+import { summarizeModelPayload } from 'src/utils/logRedaction.js'
 import { getCoreUserData } from 'src/utils/user.js'
 
 export type { LangfuseSpan }
@@ -74,7 +75,6 @@ export function createTrace(params: {
 
 const PROVIDER_GENERATION_NAMES: Record<string, string> = {
   firstParty: 'ChatAnthropic',
-  bedrock: 'ChatBedrockAnthropic',
   vertex: 'ChatVertexAnthropic',
   foundry: 'ChatFoundry',
   openai: 'ChatOpenAI',
@@ -122,8 +122,11 @@ export function recordLLMObservation(
       {
         model: params.model,
         input: params.tools
-          ? { messages: params.input, tools: params.tools }
-          : params.input,
+          ? {
+              messages: summarizeModelPayload(params.input),
+              tools: summarizeModelPayload(params.tools),
+            }
+          : summarizeModelPayload(params.input),
         metadata: {
           provider: params.provider,
           model: params.model,
@@ -161,7 +164,7 @@ export function recordLLMObservation(
     const cacheRead = params.usage.cache_read_input_tokens ?? 0
     const cacheCreation = params.usage.cache_creation_input_tokens ?? 0
     gen.update({
-      output: params.output,
+      output: summarizeModelPayload(params.output),
       usageDetails: {
         input: params.usage.input_tokens + cacheCreation + cacheRead,
         output: params.usage.output_tokens,

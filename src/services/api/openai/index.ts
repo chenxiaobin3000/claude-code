@@ -17,18 +17,11 @@ import { getOpenAIClient } from './client.js'
 import { updateOpenAIUsage } from './openaiShared.js'
 import {
   anthropicMessagesToOpenAI,
-  resolveOpenAIModel,
   adaptOpenAIStreamToAnthropic,
   anthropicToolsToOpenAI,
   anthropicToolChoiceToOpenAI,
 } from '@ant/model-provider'
-import { isChatGPTAuthEnabled } from './chatgptAuth.js'
-import {
-  adaptResponsesStreamToAnthropic,
-  buildResponsesRequest,
-  createChatGPTResponsesStream,
-  type ResponsesReasoningEffort,
-} from './responsesAdapter.js'
+import { resolveModelTarget } from '../../../utils/model/modelRegistry.js'
 import { normalizeMessagesForAPI } from '../../../utils/messages.js'
 import { toolToAPISchema } from '../../../utils/api.js'
 import {
@@ -36,6 +29,12 @@ import {
   toolMatchesName,
 } from '../../../Tool.js'
 import { logForDebugging } from '../../../utils/debug.js'
+import {
+  collectSensitiveStrings,
+  createSafeError,
+  sanitizeErrorDetails,
+  summarizeModelPayload,
+} from '../../../utils/logRedaction.js'
 import { addToTotalSessionCost } from '../../../cost-tracker.js'
 import { calculateUSDCost } from '../../../utils/modelCost.js'
 import {
@@ -72,29 +71,12 @@ import {
   isDeferredTool,
   SEARCH_EXTRA_TOOLS_TOOL_NAME,
 } from '@claude-code-best/builtin-tools/tools/SearchExtraToolsTool/prompt.js'
-
-function convertToResponsesReasoningEffort(
-  effortValue: unknown,
-): ResponsesReasoningEffort | undefined {
-  if (effortValue === 'low') return 'low'
-  if (effortValue === 'medium') return 'medium'
-  if (effortValue === 'high') return 'high'
-  if (effortValue === 'xhigh' || effortValue === 'max') return 'xhigh'
-  if (typeof effortValue === 'number') return 'high'
-  return undefined
-}
-
-function getChatGPTResponsesReasoningEffort(
-  effortValue: unknown,
-): ResponsesReasoningEffort | undefined {
-  const envOverride = process.env.CLAUDE_CODE_EFFORT_LEVEL?.toLowerCase()
-  if (envOverride === 'auto' || envOverride === 'unset') return undefined
-  return (
-    convertToResponsesReasoningEffort(envOverride) ??
-    convertToResponsesReasoningEffort(effortValue) ??
-    'medium'
-  )
-}
+import {
+  logModelRequestError,
+  logModelRequestFirstToken,
+  logModelRequestStart,
+  logModelRequestSuccess,
+} from '../modelDiagnostics.js'
 
 /**
  * Mirrors the Anthropic request path's deferred-tool announcement for OpenAI.
@@ -221,9 +203,16 @@ export async function* queryModelOpenAI(
   StreamEvent | AssistantMessage | SystemAPIErrorMessage,
   void
 > {
+  const requestId = randomUUID()
+  const requestStartedAt = Date.now()
+  let diagnosticModel = options.model
+  let sensitiveRequestValues: string[] = []
+
   try {
     // 1. Resolve model name
-    const openaiModel = resolveOpenAIModel(options.model)
+    const target = resolveModelTarget(options.model)
+    const openaiModel = target.model
+    diagnosticModel = openaiModel
 
     // 2. Normalize messages using shared preprocessing
     const messagesForAPI = normalizeMessagesForAPI(messages, tools)
@@ -304,10 +293,10 @@ export async function* queryModelOpenAI(
     )
     const openaiTools = anthropicToolsToOpenAI(standardTools)
     const openaiToolChoice = anthropicToolChoiceToOpenAI(options.toolChoice)
-    const reasoningEffort = getChatGPTResponsesReasoningEffort(
-      options.effortValue,
-    )
-
+    sensitiveRequestValues = [
+      target.apiKey,
+      ...collectSensitiveStrings(openaiMessages),
+    ]
     // 9. Log tool filtering details
     if (useSearchExtraTools) {
       const includedDeferredTools = filteredTools.filter(t =>
@@ -345,47 +334,45 @@ export async function* queryModelOpenAI(
       options.maxOutputTokensOverride,
     )
 
+    const inputSummary = summarizeModelPayload(openaiMessages)
+    logModelRequestStart({
+      requestId,
+      provider: 'openai',
+      model: openaiModel,
+      endpoint: target.baseUrl,
+      messageCount: openaiMessages.length,
+      inputChars: inputSummary.serializedChars,
+      toolCount: openaiTools.length,
+      maxOutputTokens: maxTokens,
+      thinking: enableThinking,
+      source: options.querySource,
+    })
+
     logForDebugging(
       `[OpenAI] Calling model=${openaiModel}, messages=${openaiMessages.length}, tools=${openaiTools.length}, thinking=${enableThinking}`,
     )
 
-    // 11. Call OpenAI API with streaming. ChatGPT subscription auth uses the
-    // Codex Responses backend; API-key/OpenAI-compatible auth keeps the
-    // existing Chat Completions adapter.
-    const adaptedStream = isChatGPTAuthEnabled()
-      ? adaptResponsesStreamToAnthropic(
-          await createChatGPTResponsesStream({
-            request: buildResponsesRequest({
-              model: openaiModel,
-              messages: openaiMessages,
-              tools: openaiTools,
-              toolChoice: openaiToolChoice,
-              reasoningEffort,
-            }),
-            signal,
-            fetchOverride: options.fetchOverride as unknown as typeof fetch,
-          }),
-          openaiModel,
-        )
-      : adaptOpenAIStreamToAnthropic(
-          await getOpenAIClient({
-            maxRetries: 0,
-            fetchOverride: options.fetchOverride as unknown as typeof fetch,
-            source: options.querySource,
-          }).chat.completions.create(
-            buildOpenAIRequestBody({
-              model: openaiModel,
-              messages: openaiMessages,
-              tools: openaiTools,
-              toolChoice: openaiToolChoice,
-              enableThinking,
-              maxTokens,
-              temperatureOverride: options.temperatureOverride,
-            }),
-            { signal },
-          ),
-          openaiModel,
-        )
+    // 11. Call the configured OpenAI-compatible endpoint with streaming.
+    const adaptedStream = adaptOpenAIStreamToAnthropic(
+      await getOpenAIClient({
+        target,
+        maxRetries: 0,
+        fetchOverride: options.fetchOverride as unknown as typeof fetch,
+        source: options.querySource,
+      }).chat.completions.create(
+        buildOpenAIRequestBody({
+          model: openaiModel,
+          messages: openaiMessages,
+          tools: openaiTools,
+          toolChoice: openaiToolChoice,
+          enableThinking,
+          maxTokens,
+          temperatureOverride: options.temperatureOverride,
+        }),
+        { signal },
+      ),
+      openaiModel,
+    )
 
     // 12. Convert OpenAI stream to Anthropic events, then process into
     //     AssistantMessage + StreamEvent (matching the Anthropic path behavior)
@@ -402,13 +389,23 @@ export async function* queryModelOpenAI(
       cache_read_input_tokens: 0,
     }
     let ttftMs = 0
-    const start = Date.now()
+    let firstTokenLogged = false
+    const start = requestStartedAt
 
     for await (const event of adaptedStream) {
       switch (event.type) {
         case 'message_start': {
           partialMessage = event.message
           ttftMs = Date.now() - start
+          if (!firstTokenLogged) {
+            firstTokenLogged = true
+            logModelRequestFirstToken({
+              requestId,
+              provider: 'openai',
+              model: openaiModel,
+              ttftMs,
+            })
+          }
           if (event.message.usage) {
             usage = {
               ...usage,
@@ -513,6 +510,27 @@ export async function* queryModelOpenAI(
       } as StreamEvent
     }
 
+    const toolCallCount = collectedMessages.reduce((count, message) => {
+      if (!Array.isArray(message.message.content)) return count
+      return (
+        count +
+        message.message.content.filter(
+          block => typeof block !== 'string' && block.type === 'tool_use',
+        ).length
+      )
+    }, 0)
+    logModelRequestSuccess({
+      requestId,
+      provider: 'openai',
+      model: openaiModel,
+      durationMs: Date.now() - start,
+      ttftMs: firstTokenLogged ? ttftMs : null,
+      inputTokens: usage.input_tokens,
+      outputTokens: usage.output_tokens,
+      stopReason,
+      toolCallCount,
+    })
+
     // Record LLM observation in Langfuse (no-op if not configured)
     recordLLMObservation(options.langfuseTrace ?? null, {
       model: openaiModel,
@@ -547,14 +565,21 @@ export async function* queryModelOpenAI(
       }
     }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    logForDebugging(`[OpenAI] Error: ${errorMessage}`, { level: 'error' })
+    const sanitizedError = sanitizeErrorDetails(error, {
+      secrets: sensitiveRequestValues,
+    })
+    logModelRequestError({
+      requestId,
+      provider: 'openai',
+      model: diagnosticModel,
+      durationMs: Date.now() - requestStartedAt,
+      error: sanitizedError,
+    })
+    const safeError = createSafeError(sanitizedError)
     yield createAssistantAPIErrorMessage({
-      content: `API Error: ${errorMessage}`,
+      content: `API Error: ${sanitizedError.message}`,
       apiError: 'api_error',
-      error: (error instanceof Error
-        ? error
-        : new Error(String(error))) as unknown as SDKAssistantMessageError,
+      error: safeError as unknown as SDKAssistantMessageError,
     })
   }
 }

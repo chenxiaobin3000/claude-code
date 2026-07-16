@@ -24,34 +24,18 @@ const ANTHROPIC_TIERS = [
   },
 ] as const
 
-const OPENAI_TIERS = [
-  {
-    modelEnvVar: 'OPENAI_DEFAULT_OPUS_MODEL',
-    capabilitiesEnvVar: 'OPENAI_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES',
-  },
-  {
-    modelEnvVar: 'OPENAI_DEFAULT_SONNET_MODEL',
-    capabilitiesEnvVar: 'OPENAI_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES',
-  },
-  {
-    modelEnvVar: 'OPENAI_DEFAULT_HAIKU_MODEL',
-    capabilitiesEnvVar: 'OPENAI_DEFAULT_HAIKU_MODEL_SUPPORTED_CAPABILITIES',
-  },
-] as const
-
 /**
  * Check whether a 3p model capability override is set for a model that matches one of
- * the pinned ANTHROPIC_DEFAULT_*_MODEL or OPENAI_DEFAULT_*_MODEL env vars.
+ * the pinned ANTHROPIC_DEFAULT_*_MODEL env vars.
  */
 export const get3PModelCapabilityOverride = memoize(
   (model: string, capability: ModelCapabilityOverride): boolean | undefined => {
     if (getAPIProvider() === 'firstParty') {
       return undefined
     }
+    if (getAPIProvider() === 'openai') return undefined
     const m = model.toLowerCase()
-    // Choose the appropriate tier list based on provider
-    const tiers = getAPIProvider() === 'openai' ? OPENAI_TIERS : ANTHROPIC_TIERS
-    for (const tier of tiers) {
+    for (const tier of ANTHROPIC_TIERS) {
       const pinned = process.env[tier.modelEnvVar]
       const capabilities = process.env[tier.capabilitiesEnvVar]
       if (!pinned || capabilities === undefined) continue

@@ -848,7 +848,7 @@ export async function runHeadless(
   headlessProfilerCheckpoint('after_loadInitialMessages')
 
   // Ensure model strings are initialized before generating model options.
-  // For Bedrock users, this waits for the profile fetch to get correct region strings.
+  // Ensure provider-specific model strings are initialized.
   await ensureModelStringsInitialized()
   headlessProfilerCheckpoint('after_modelStrings')
 
@@ -2987,7 +2987,6 @@ function runHeadlessStreaming(
   // extension via handleAuthDone → mcp_reconnect.
   const oauthAuthPromises = new Map<string, Promise<void>>()
 
-
   // This is essentially spawning a parallel async task- we have two
   // running in parallel- one reading from stdin and adding to the
   // queue to be processed and another reading from the queue,
@@ -4567,11 +4566,7 @@ async function handleInitializeRequest(
       // getAccountInformation() returns undefined under 3P providers, so the
       // other fields are all absent. apiProvider disambiguates "not logged
       // in" (firstParty + tokenSource:none) from "3P, login not applicable".
-      apiProvider: getAPIProvider() as
-        | 'firstParty'
-        | 'bedrock'
-        | 'vertex'
-        | 'foundry',
+      apiProvider: getAPIProvider() as 'firstParty' | 'vertex' | 'foundry',
     },
     pid: process.pid,
   }

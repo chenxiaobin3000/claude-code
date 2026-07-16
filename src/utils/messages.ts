@@ -309,15 +309,14 @@ export const SYNTHETIC_MESSAGES = new Set([
 ])
 
 export function isSyntheticMessage(message: Message): boolean {
+  const content = message.message?.content
   return (
     message.type !== 'progress' &&
     message.type !== 'attachment' &&
     message.type !== 'system' &&
-    Array.isArray(message.message?.content) &&
-    message.message?.content[0]?.type === 'text' &&
-    SYNTHETIC_MESSAGES.has(
-      (message.message?.content[0] as { text: string }).text,
-    )
+    Array.isArray(content) &&
+    content[0]?.type === 'text' &&
+    SYNTHETIC_MESSAGES.has((content[0] as { text: string }).text)
   )
 }
 
@@ -850,13 +849,12 @@ type ToolUseRequestMessage = NormalizedAssistantMessage & {
 export function isToolUseRequestMessage(
   message: Message,
 ): message is ToolUseRequestMessage {
+  const content = message.message?.content
   return (
     message.type === 'assistant' &&
     // Note: stop_reason === 'tool_use' is unreliable -- it's not always set correctly
-    Array.isArray(message.message?.content) &&
-    (message.message?.content as Array<{ type: string }>).some(
-      _ => _.type === 'tool_use',
-    )
+    Array.isArray(content) &&
+    (content as Array<{ type: string }>).some(_ => _.type === 'tool_use')
   )
 }
 
@@ -867,11 +865,11 @@ type ToolUseResultMessage = NormalizedUserMessage & {
 export function isToolUseResultMessage(
   message: Message,
 ): message is ToolUseResultMessage {
+  const content = message.message?.content
   return (
     message.type === 'user' &&
-    ((Array.isArray(message.message?.content) &&
-      (message.message?.content as Array<{ type: string }>)[0]?.type ===
-        'tool_result') ||
+    ((Array.isArray(content) &&
+      (content as Array<{ type: string }>)[0]?.type === 'tool_result') ||
       Boolean(message.toolUseResult))
   )
 }
@@ -1128,26 +1126,18 @@ export function getToolResultIDs(normalizedMessages: NormalizedMessage[]): {
   [toolUseID: string]: boolean
 } {
   return Object.fromEntries(
-    normalizedMessages.flatMap(_ =>
-      _.type === 'user' &&
-      Array.isArray(_.message?.content) &&
-      (_.message?.content as Array<{ type: string }>)[0]?.type === 'tool_result'
-        ? [
-            [
-              (
-                (
-                  _.message?.content as Array<{ type: string }>
-                )[0] as ToolResultBlockParam
-              ).tool_use_id,
-              (
-                (
-                  _.message?.content as Array<{ type: string }>
-                )[0] as ToolResultBlockParam
-              ).is_error ?? false,
-            ],
-          ]
-        : ([] as [string, boolean][]),
-    ),
+    normalizedMessages.flatMap(_ => {
+      if (_.type !== 'user') return []
+      const content = _.message?.content
+      if (!Array.isArray(content)) return []
+      const toolResult = content[0] as ToolResultBlockParam | undefined
+      return toolResult?.type === 'tool_result'
+        ? ([[toolResult.tool_use_id, toolResult.is_error ?? false]] as [
+            string,
+            boolean,
+          ][])
+        : []
+    }),
   )
 }
 
@@ -1160,14 +1150,16 @@ export function getSiblingToolUseIDs(
     return new Set()
   }
 
-  const unnormalizedMessage = messages.find(
-    (_): _ is AssistantMessage =>
-      _.type === 'assistant' &&
-      Array.isArray(_.message?.content) &&
-      (_.message?.content as Array<{ type: string; id?: string }>).some(
+  const unnormalizedMessage = messages.find((_): _ is AssistantMessage => {
+    if (_.type !== 'assistant') return false
+    const content = _.message?.content
+    return (
+      Array.isArray(content) &&
+      (content as Array<{ type: string; id?: string }>).some(
         block => block.type === 'tool_use' && block.id === toolUseID,
-      ),
-  )
+      )
+    )
+  })
   if (!unnormalizedMessage) {
     return new Set()
   }
@@ -1179,13 +1171,14 @@ export function getSiblingToolUseIDs(
   )
 
   return new Set(
-    siblingMessages.flatMap(_ =>
-      Array.isArray(_.message?.content)
-        ? (_.message?.content as Array<{ type: string; id?: string }>)
+    siblingMessages.flatMap(_ => {
+      const content = _.message?.content
+      return Array.isArray(content)
+        ? (content as Array<{ type: string; id?: string }>)
             .filter(_ => _.type === 'tool_use')
             .map(_ => _.id!)
-        : [],
-    ),
+        : []
+    }),
   )
 }
 
@@ -1755,15 +1748,13 @@ export function getToolUseIDs(
   normalizedMessages: NormalizedMessage[],
 ): Set<string> {
   return new Set(
-    normalizedMessages
-      .filter(
-        (_): _ is NormalizedAssistantMessage<BetaToolUseBlock> =>
-          _.type === 'assistant' &&
-          Array.isArray(_.message?.content) &&
-          (_.message?.content as Array<{ type: string }>)[0]?.type ===
-            'tool_use',
-      )
-      .map(_ => (_.message?.content as Array<BetaToolUseBlock>)[0].id),
+    normalizedMessages.flatMap(_ => {
+      if (_.type !== 'assistant') return []
+      const content = _.message?.content
+      if (!Array.isArray(content)) return []
+      const toolUse = content[0] as BetaToolUseBlock | undefined
+      return toolUse?.type === 'tool_use' ? [toolUse.id] : []
+    }),
   )
 }
 
@@ -1789,12 +1780,12 @@ export function reorderAttachmentsForAPI(messages: Message[]): Message[] {
       pendingAttachments.push(message as AttachmentMessage)
     } else {
       // Check if this is a stopping point
+      const content = message.message?.content
       const isStoppingPoint =
         message.type === 'assistant' ||
         (message.type === 'user' &&
-          Array.isArray(message.message?.content) &&
-          (message.message?.content as Array<{ type: string }>)[0]?.type ===
-            'tool_result')
+          Array.isArray(content) &&
+          (content as Array<{ type: string }>)[0]?.type === 'tool_result')
 
       if (isStoppingPoint && pendingAttachments.length > 0) {
         // Hit a stopping point — attachments stop here (go after the stopping point).
@@ -3201,9 +3192,10 @@ export function getAssistantMessageText(message: Message): string | null {
   }
 
   // For content blocks array, extract and concatenate text blocks
-  if (Array.isArray(message.message?.content)) {
+  const content = message.message?.content
+  if (Array.isArray(content)) {
     return (
-      (message.message?.content as Array<{ type: string; text?: string }>)
+      (content as Array<{ type: string; text?: string }>)
         .filter(block => block.type === 'text')
         .map(block => block.text ?? '')
         .join('\n')
@@ -5115,8 +5107,9 @@ export function shouldShowUserMessage(
 
 export function isThinkingMessage(message: Message): boolean {
   if (message.type !== 'assistant') return false
-  if (!Array.isArray(message.message?.content)) return false
-  return (message.message?.content as Array<{ type: string }>).every(
+  const content = message.message?.content
+  if (!Array.isArray(content)) return false
+  return (content as Array<{ type: string }>).every(
     block => block.type === 'thinking' || block.type === 'redacted_thinking',
   )
 }
@@ -5133,9 +5126,10 @@ export function countToolCalls(
   let count = 0
   for (const msg of messages) {
     if (!msg) continue
-    if (msg.type === 'assistant' && Array.isArray(msg.message?.content)) {
+    const content = msg.message?.content
+    if (msg.type === 'assistant' && Array.isArray(content)) {
       const hasToolUse = (
-        msg.message?.content as Array<{ type: string; name?: string }>
+        content as Array<{ type: string; name?: string }>
       ).some(
         (block): block is ToolUseBlock =>
           block.type === 'tool_use' && block.name === toolName,
@@ -5164,9 +5158,10 @@ export function hasSuccessfulToolCall(
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i]
     if (!msg) continue
-    if (msg.type === 'assistant' && Array.isArray(msg.message?.content)) {
+    const content = msg.message?.content
+    if (msg.type === 'assistant' && Array.isArray(content)) {
       const toolUse = (
-        msg.message?.content as Array<{
+        content as Array<{
           type: string
           name?: string
           id?: string
@@ -5188,9 +5183,10 @@ export function hasSuccessfulToolCall(
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i]
     if (!msg) continue
-    if (msg.type === 'user' && Array.isArray(msg.message?.content)) {
+    const content = msg.message?.content
+    if (msg.type === 'user' && Array.isArray(content)) {
       const toolResult = (
-        msg.message?.content as Array<{
+        content as Array<{
           type: string
           tool_use_id?: string
           is_error?: boolean

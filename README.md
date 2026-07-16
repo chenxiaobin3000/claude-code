@@ -6,7 +6,7 @@
 
 ## 项目概况
 
-- 根包版本：`2.8.3`
+- 根包版本：`2.1.116`
 - 运行环境：Bun `>=1.3.0`，当前开发配置为 Bun `1.3.13`、Node.js `22.22.2`
 - 语言与框架：TypeScript、React 19、Ink
 - 仓库结构：Bun workspaces monorepo
@@ -54,13 +54,27 @@
 
 - OpenAI 及 OpenAI 兼容接口（默认）
 
-OpenAI 运行配置：
+首次运行时，配置界面会依次询问地址、API Key 和模型 ID，并生成单模型 `~/.claude/models.json`。需要多个模型时再手动编辑该文件；每个模型绑定一个 OpenAI-compatible 地址，地址可以重复，模型 ID 必须全局唯一：
 
-```bash
-OPENAI_API_KEY=your-api-key
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4o
+```json
+{
+  "defaultModel": "Qwen3.5-9B-Q6_K.gguf",
+  "models": [
+    {
+      "model": "Qwen3.5-9B-Q6_K.gguf",
+      "baseUrl": "http://127.0.0.1:8080/v1",
+      "displayName": "Qwen 3.5 9B"
+    },
+    {
+      "model": "deepseek-chat",
+      "baseUrl": "https://api.deepseek.com/v1",
+      "apiKeyEnv": "DEEPSEEK_API_KEY"
+    }
+  ]
+}
 ```
+
+`apiKeyEnv` 可选，默认读取 `OPENAI_API_KEY`。配置修改后重启 CLI 生效；`/model` 使用原有选择界面切换模型，并自动路由到该模型配置的地址。仓库根目录的 `models.example.json` 可作为多模型模板。
 
 Provider 固定使用 OpenAI-compatible 路径，不再通过 `CLAUDE_CODE_USE_*` 环境变量选择厂商。Gemini 与 Grok 的专用 Provider、环境变量和模型映射已经移除；通用 OpenAI-compatible 自定义接口仍然保留。`/login`、`/logout`、`claude auth` 和 `setup-token` 已移除；MCP Server 自己的 OAuth 不受影响。
 
@@ -71,7 +85,7 @@ Provider 固定使用 OpenAI-compatible 路径，不再通过 `CLAUDE_CODE_USE_*
 ```text
 CLI 入口
   -> 参数解析与环境初始化
-  -> 加载本地 Provider 配置、插件、Skill 和 MCP
+  -> 加载本地模型注册表、插件、Skill 和 MCP
   -> 启动 Ink/React REPL
   -> 构造模型请求与会话上下文
   -> 流式接收模型响应
@@ -151,9 +165,11 @@ bun run typecheck
 # Biome 检查
 bun run check
 
-# 完整健康检查
-bun run health
+# 完整最小验证（需要已启动的本地 llama.cpp Server）
+bun run verify
 ```
+
+`bun run verify` 使用 `~/.claude/models.json` 中的默认模型。默认模型地址必须是回环或私有网络地址，以避免验证过程误用外部付费接口。
 
 构建完成后，CLI 入口位于：
 
@@ -197,7 +213,7 @@ bun run check
 - TypeScript 开启严格模式。
 - 工具、MCP、Agent 和工作流已经拆分为独立 workspace 包。
 - 工作流引擎强调确定性、端口隔离和可回放。
-- 提供 Biome、Knip、TypeScript、产物完整性和健康检查工具。
+- 提供 Biome、Knip、TypeScript 和产物完整性检查工具。
 - 同时支持 Bun 与 Node.js CLI 入口。
 
 ### 主要风险

@@ -9,6 +9,8 @@ import {
 import { extractHeredocs, restoreHeredocs } from './heredoc.js'
 import { quote, tryParseShellCommand } from './shellQuote.js'
 
+type ControlOperatorValue = ControlOperator['op']
+
 /**
  * Generates placeholder strings with random salt to prevent injection attacks.
  * The salt prevents malicious commands from containing literal placeholder strings
@@ -252,7 +254,7 @@ export function filterControlOperators(
   commandsAndOperators: string[],
 ): string[] {
   return commandsAndOperators.filter(
-    part => !(ALL_SUPPORTED_CONTROL_OPERATORS as Set<string>).has(part),
+    part => !ALL_SUPPORTED_CONTROL_OPERATORS.has(part),
   )
 }
 
@@ -520,20 +522,28 @@ export function clearCommandPrefixCaches(): void {
   getCommandSubcommandPrefix.cache.clear()
 }
 
-const COMMAND_LIST_SEPARATORS = new Set<ControlOperator>([
+const COMMAND_LIST_SEPARATOR_VALUES = [
   '&&',
   '||',
   ';',
   ';;',
   '|',
-])
+] as const satisfies readonly ControlOperatorValue[]
 
-const ALL_SUPPORTED_CONTROL_OPERATORS = new Set<ControlOperator>([
-  ...COMMAND_LIST_SEPARATORS,
+const COMMAND_LIST_SEPARATORS: ReadonlySet<string> = new Set(
+  COMMAND_LIST_SEPARATOR_VALUES,
+)
+
+const ALL_SUPPORTED_CONTROL_OPERATOR_VALUES = [
+  ...COMMAND_LIST_SEPARATOR_VALUES,
   '>&',
   '>',
   '>>',
-])
+] as const satisfies readonly ControlOperatorValue[]
+
+const ALL_SUPPORTED_CONTROL_OPERATORS: ReadonlySet<string> = new Set(
+  ALL_SUPPORTED_CONTROL_OPERATOR_VALUES,
+)
 
 // Checks if this is just a list of commands
 function isCommandList(command: string): boolean {

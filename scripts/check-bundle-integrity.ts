@@ -13,7 +13,7 @@
  */
 
 import { readdir, readFile } from 'fs/promises'
-import { join, resolve, dirname } from 'path'
+import { dirname, join, normalize, relative, resolve } from 'path'
 import { fileURLToPath } from 'url'
 
 // ─── 从 package.json 读取 dependencies 作为白名单 ────────────────
@@ -75,6 +75,14 @@ const NODE_18_PLUS_BUILTINS = new Set(['undici'])
 // Bun 专用模块（仅在 Bun 运行时可用，Node.js 环境会失败）
 const BUN_MODULES = new Set(['bun', 'bun:ffi', 'bun:test', 'bun:sqlite'])
 
+// Optional or unsupported branches may intentionally retain a guarded runtime
+// import. Missing modules must degrade cleanly and are warnings, not evidence
+// that the supported OpenAI-compatible CLI path is broken.
+const OPTIONAL_RUNTIME_MODULES = new Set([
+  '@napi-rs/keyring',
+  'node-fetch', // Legacy Google/Vertex dependency; provider path is unsupported.
+])
+
 // macOS JXA / native 框架（通过 ObjC.import，非真正的 require）
 const NATIVE_FRAMEWORKS = new Set([
   'AppKit',
@@ -85,7 +93,7 @@ const NATIVE_FRAMEWORKS = new Set([
 
 // ─── 模式 ──────────────────────────────────────────────────────────
 // 匹配 import { ... } from "./chunk-xxxxx.js" 或 import"./chunk-xxxxx.js"
-const STATIC_IMPORT_RE = /(?:from\s+|import\s+)"(\.\/[^"]+\.js)"/g
+const STATIC_IMPORT_RE = /(?:from\s+|import\s+)["']((?:\.\.?\/)[^"']+\.js)["']/g
 // 匹配 __require("xxx")
 const REQUIRE_RE = /__require\("([^"]+)"\)/g
 // 匹配动态 import("xxx")，排除 ./chunk-xxx.js 的内部引用
@@ -100,6 +108,7 @@ interface Finding {
     | 'third-party-import'
     | 'third-party-node-require'
     | 'bun-runtime-only'
+    | 'optional-runtime'
   severity: 'error' | 'warning'
   file: string
   line: number
@@ -115,14 +124,14 @@ async function main() {
   // 1. 列出所有 chunk 文件
   let files: string[]
   try {
-    files = (await readdir(distDir)).filter(f => f.endsWith('.js'))
+    files = await collectJavaScriptFiles(distDir)
   } catch {
     console.error(`❌ 无法读取目录: ${distDir}`)
     console.error('   请先运行 bun run build')
     process.exit(1)
   }
 
-  const fileSet = new Set(files)
+  const fileSet = new Set(files.map(toPortablePath))
   console.log(`📦 找到 ${files.length} 个 JS 文件\n`)
 
   const findings: Finding[] = []
@@ -141,8 +150,7 @@ async function main() {
       const staticImportMatches = line.matchAll(STATIC_IMPORT_RE)
       for (const m of staticImportMatches) {
         const ref = m[1]
-        // 提取文件名部分（去掉 ./）
-        const refFile = ref.replace(/^\.\//, '')
+        const refFile = resolveReferencedFile(file, ref)
         if (!fileSet.has(refFile)) {
           findings.push({
             type: 'broken-chunk-ref',
@@ -179,6 +187,17 @@ async function main() {
           })
           continue
         }
+        if (OPTIONAL_RUNTIME_MODULES.has(mod)) {
+          findings.push({
+            type: 'optional-runtime',
+            severity: 'warning',
+            file,
+            line: lineNum,
+            module: mod,
+            snippet: line.trim().slice(0, 120),
+          })
+          continue
+        }
         // 第三方模块 — 在生产环境（全局 npm install）中找不到
         findings.push({
           type: 'third-party-require',
@@ -194,8 +213,24 @@ async function main() {
       const dynImportMatches = line.matchAll(DYNAMIC_IMPORT_RE)
       for (const m of dynImportMatches) {
         const mod = m[1]
-        // 跳过内部 chunk 引用和相对路径
-        if (mod.startsWith('./') || mod.startsWith('../')) continue
+        // Relative dynamic imports are internal chunk references and must not
+        // point at a missing file.
+        if (mod.startsWith('./') || mod.startsWith('../')) {
+          if (mod.endsWith('.js')) {
+            const refFile = resolveReferencedFile(file, mod)
+            if (!fileSet.has(refFile)) {
+              findings.push({
+                type: 'broken-chunk-ref',
+                severity: 'error',
+                file,
+                line: lineNum,
+                module: mod,
+                snippet: line.trim().slice(0, 120),
+              })
+            }
+          }
+          continue
+        }
         // 跳过 ObjC.import
         if (NATIVE_FRAMEWORKS.has(mod)) continue
         if (
@@ -209,6 +244,17 @@ async function main() {
           // bun:test 等只在 Bun 运行时可用，Node.js 运行时会失败
           findings.push({
             type: 'bun-runtime-only',
+            severity: 'warning',
+            file,
+            line: lineNum,
+            module: mod,
+            snippet: line.trim().slice(0, 120),
+          })
+          continue
+        }
+        if (OPTIONAL_RUNTIME_MODULES.has(mod)) {
+          findings.push({
+            type: 'optional-runtime',
             severity: 'warning',
             file,
             line: lineNum,
@@ -251,6 +297,17 @@ async function main() {
           })
           continue
         }
+        if (OPTIONAL_RUNTIME_MODULES.has(mod)) {
+          findings.push({
+            type: 'optional-runtime',
+            severity: 'warning',
+            file,
+            line: lineNum,
+            module: mod,
+            snippet: line.trim().slice(0, 120),
+          })
+          continue
+        }
         findings.push({
           type: 'third-party-node-require',
           severity: 'error',
@@ -277,6 +334,7 @@ async function main() {
     f => f.type === 'third-party-node-require',
   )
   const bunRuntimeOnly = warnings.filter(f => f.type === 'bun-runtime-only')
+  const optionalRuntime = warnings.filter(f => f.type === 'optional-runtime')
 
   if (brokenRefs.length > 0) {
     console.log('❌ 断裂的 chunk 引用（引用了不存在的文件）:')
@@ -336,6 +394,15 @@ async function main() {
     console.log()
   }
 
+  if (optionalRuntime.length > 0) {
+    console.log('⚠️  可选或非支持分支的运行时模块（缺失时必须安全降级）:')
+    const grouped = groupByModule(optionalRuntime)
+    for (const [mod, items] of grouped) {
+      console.log(`   "${mod}" — 出现 ${items.length} 次`)
+    }
+    console.log()
+  }
+
   // 4. 总结
   console.log('─'.repeat(50))
   if (errors.length === 0 && warnings.length === 0) {
@@ -370,3 +437,28 @@ main().catch(err => {
   console.error('Fatal error:', err)
   process.exit(2)
 })
+
+async function collectJavaScriptFiles(
+  root: string,
+  current = root,
+): Promise<string[]> {
+  const entries = await readdir(current, { withFileTypes: true })
+  const files: string[] = []
+  for (const entry of entries) {
+    const absolute = join(current, entry.name)
+    if (entry.isDirectory()) {
+      files.push(...(await collectJavaScriptFiles(root, absolute)))
+    } else if (entry.isFile() && entry.name.endsWith('.js')) {
+      files.push(toPortablePath(relative(root, absolute)))
+    }
+  }
+  return files
+}
+
+function resolveReferencedFile(file: string, reference: string): string {
+  return toPortablePath(normalize(join(dirname(file), reference)))
+}
+
+function toPortablePath(path: string): string {
+  return path.replaceAll('\\', '/')
+}

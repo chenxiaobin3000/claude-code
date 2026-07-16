@@ -46,7 +46,6 @@ export type APIErrorClassification =
   | 'token_revoked'
   | 'oauth_org_not_allowed'
   | 'auth_error'
-  | 'bedrock_model_access'
   | 'server_error'
   | 'client_error'
   | 'ssl_cert_error'

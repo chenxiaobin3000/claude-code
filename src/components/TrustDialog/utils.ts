@@ -126,33 +126,6 @@ export function getApiKeyHelperSources(): string[] {
 }
 
 /**
- * Check if settings have AWS commands configured
- */
-function hasAwsCommands(settings: SettingsJson | null): boolean {
-  return !!(settings?.awsAuthRefresh || settings?.awsCredentialExport)
-}
-
-/**
- * Get which setting sources have AWS commands configured.
- * Returns an array of file paths that have awsAuthRefresh or awsCredentialExport.
- */
-export function getAwsCommandsSources(): string[] {
-  const sources: string[] = []
-
-  const projectSettings = getSettingsForSource('projectSettings')
-  if (hasAwsCommands(projectSettings)) {
-    sources.push('.claude/settings.json')
-  }
-
-  const localSettings = getSettingsForSource('localSettings')
-  if (hasAwsCommands(localSettings)) {
-    sources.push('.claude/settings.local.json')
-  }
-
-  return sources
-}
-
-/**
  * Check if settings have GCP commands configured
  */
 function hasGcpCommands(settings: SettingsJson | null): boolean {

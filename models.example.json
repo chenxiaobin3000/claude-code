@@ -1,0 +1,17 @@
+{
+  "defaultModel": "Qwen3.5-9B-Q6_K.gguf",
+  "models": [
+    {
+      "model": "Qwen3.5-9B-Q6_K.gguf",
+      "baseUrl": "http://127.0.0.1:8080/v1",
+      "displayName": "Qwen 3.5 9B",
+      "description": "Local llama.cpp model"
+    },
+    {
+      "model": "deepseek-chat",
+      "baseUrl": "https://api.deepseek.com/v1",
+      "apiKeyEnv": "DEEPSEEK_API_KEY",
+      "displayName": "DeepSeek Chat"
+    }
+  ]
+}

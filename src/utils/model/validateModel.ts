@@ -1,5 +1,4 @@
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
-import { MODEL_ALIASES } from './aliases.js'
 import { isModelAllowed } from './modelAllowlist.js'
 import { getAPIProvider } from './providers.js'
 import { sideQuery } from '../sideQuery.js'
@@ -10,6 +9,7 @@ import {
   AuthenticationError,
 } from '@anthropic-ai/sdk'
 import { getModelStrings } from './modelStrings.js'
+import { findConfiguredModel, getModelsConfigPath } from './modelRegistry.js'
 
 // Cache valid models to avoid repeated API calls
 const validModelCache = new Map<string, boolean>()
@@ -35,15 +35,11 @@ export async function validateModel(
     }
   }
 
-  // Check if it's a known alias (these are always valid)
-  const lowerModel = normalizedModel.toLowerCase()
-  if ((MODEL_ALIASES as readonly string[]).includes(lowerModel)) {
-    return { valid: true }
-  }
-
-  // Check if it matches ANTHROPIC_CUSTOM_MODEL_OPTION (pre-validated by the user)
-  if (normalizedModel === process.env.ANTHROPIC_CUSTOM_MODEL_OPTION) {
-    return { valid: true }
+  if (!findConfiguredModel(normalizedModel)) {
+    return {
+      valid: false,
+      error: `Model '${normalizedModel}' is not configured in ${getModelsConfigPath()}`,
+    }
   }
 
   // Check cache first

@@ -16,7 +16,6 @@ import { startMdmRawRead } from './utils/settings/mdm/rawRead.js';
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 startMdmRawRead();
 
-
 import { feature } from 'bun:bundle';
 import { Command as CommanderCommand, InvalidArgumentError, Option } from '@commander-js/extra-typings';
 import chalk from 'chalk';
@@ -31,10 +30,7 @@ import { init, initializeTelemetryAfterTrust } from './entrypoints/init.js';
 import { addToHistory } from './history.js';
 import type { Root } from '@anthropic/ink';
 import { launchRepl } from './replLauncher.js';
-import {
-  hasGrowthBookEnvOverride,
-  initializeGrowthBook,
-} from './services/analytics/growthbook.js';
+import { hasGrowthBookEnvOverride, initializeGrowthBook } from './services/analytics/growthbook.js';
 import { fetchBootstrapData } from './services/api/bootstrap.js';
 import {
   type DownloadResult,
@@ -44,11 +40,7 @@ import {
 } from './services/api/filesApi.js';
 import { prefetchPassesEligibility } from './services/api/referral.js';
 import type { McpSdkServerConfig, McpServerConfig, ScopedMcpServerConfig } from './services/mcp/types.js';
-import {
-  isPolicyAllowed,
-  loadPolicyLimits,
-  waitForPolicyLimitsToLoad,
-} from './services/policyLimits/index.js';
+import { isPolicyAllowed, loadPolicyLimits, waitForPolicyLimitsToLoad } from './services/policyLimits/index.js';
 import { loadRemoteManagedSettings } from './services/remoteManagedSettings/index.js';
 import type { ToolInputJSONSchema } from './Tool.js';
 import {
@@ -66,10 +58,7 @@ import {
 import { isAgentSwarmsEnabled } from './utils/agentSwarmsEnabled.js';
 import { count, uniq } from './utils/array.js';
 import { installAsciicastRecorder } from './utils/asciicast.js';
-import {
-  getSubscriptionType,
-  isClaudeAISubscriber,
-} from './utils/auth.js';
+import { getSubscriptionType, isClaudeAISubscriber } from './utils/auth.js';
 import {
   checkHasTrustDialogAccepted,
   getGlobalConfig,
@@ -196,6 +185,7 @@ import {
   normalizeModelStringForAPI,
   parseUserSpecifiedModel,
 } from './utils/model/model.js';
+import { getModelRegistryError, isModelRegistryMissing } from './utils/model/modelRegistry.js';
 import { ensureModelStringsInitialized } from './utils/model/modelStrings.js';
 import { PERMISSION_MODES } from './utils/permissions/PermissionMode.js';
 import {
@@ -1351,10 +1341,9 @@ async function run(): Promise<CommanderCommand> {
         'Restore files to state at the specified user message and exit (requires --resume)',
       ).hideHelp(),
     )
-    // @[MODEL LAUNCH]: Update the example model ID in the --model help text.
     .option(
       '--model <model>',
-      `Model for the current session. Provide an alias for the latest model (e.g. 'sonnet' or 'opus') or a model's full name (e.g. 'claude-sonnet-4-6').`,
+      'Model for the current session. Must match a model ID configured in ~/.claude/models.json.',
     )
     .addOption(
       new Option('--effort <level>', `Effort level for the current session (low, medium, high, max)`).argParser(
@@ -2447,11 +2436,7 @@ async function run(): Promise<CommanderCommand> {
         // Promise.all join in print.ts. The void getUserContext() in
         // startDeferredPrefetches becomes a memoize cache-hit.
         void getUserContext();
-        // Kick ensureModelStringsInitialized now — for Bedrock this triggers
-        // a 100-200ms profile fetch that was awaited serially at
-        // print.ts:739. updateBedrockModelStrings is sequential()-wrapped so
-        // the await joins the in-flight fetch. Non-Bedrock is a sync
-        // early-return (zero-cost).
+        // Initialize provider-specific model strings before startup joins.
         void ensureModelStringsInitialized();
       }
 
@@ -2602,10 +2587,19 @@ async function run(): Promise<CommanderCommand> {
       // Compute resolved model for hooks (use user-specified model at launch)
       setInitialMainLoopModel(getUserSpecifiedModelSetting() || null);
       const initialMainLoopModel = getInitialMainLoopModel();
-      const resolvedInitialModel = parseUserSpecifiedModel(initialMainLoopModel ?? getDefaultMainLoopModel());
+      const modelRegistryError = getModelRegistryError();
+      const shouldConfigureModel = !isNonInteractiveSession && isModelRegistryMissing();
+      if (modelRegistryError !== null && !shouldConfigureModel) {
+        process.stderr.write(chalk.red(`Model configuration error: ${modelRegistryError}\n`));
+        gracefulShutdownSync(1);
+        return;
+      }
+      let resolvedInitialModel: string | null = shouldConfigureModel
+        ? null
+        : parseUserSpecifiedModel(initialMainLoopModel ?? getDefaultMainLoopModel());
 
       let advisorModel: string | undefined;
-      if (isAdvisorEnabled()) {
+      if (isAdvisorEnabled() && resolvedInitialModel !== null) {
         const advisorOption = canUserConfigureAdvisor() ? (options as { advisor?: string }).advisor : undefined;
         if (advisorOption) {
           logForDebugging(`[AdvisorTool] --advisor ${advisorOption}`);
@@ -2796,7 +2790,6 @@ async function run(): Promise<CommanderCommand> {
           }
           agentDef.pendingSnapshotUpdate = undefined;
         }
-
       }
 
       // If gracefulShutdown was initiated (e.g., user rejected trust dialog),
@@ -2806,6 +2799,14 @@ async function run(): Promise<CommanderCommand> {
       if (process.exitCode !== undefined) {
         logForDebugging('Graceful shutdown initiated, skipping further initialization');
         return;
+      }
+
+      // The first-run OpenAI setup screen creates models.json. Resolve the
+      // default only after that dialog completes, otherwise a missing registry
+      // prevents the setup UI from ever rendering.
+      if (resolvedInitialModel === null) {
+        resolvedInitialModel = parseUserSpecifiedModel(getDefaultMainLoopModel());
+        logForDebugging(`[STARTUP] Default model resolved after setup: ${resolvedInitialModel}`);
       }
 
       // Initialize LSP manager AFTER trust is established (or in non-interactive mode
