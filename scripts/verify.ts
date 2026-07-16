@@ -18,8 +18,12 @@ const validationScripts = [
   'scripts/validation/anthropic-boundary.ts',
   'scripts/validation/vertex-boundary.ts',
   'scripts/validation/foundry-boundary.ts',
+  'scripts/validation/sdk-compat-boundary.ts',
+  'scripts/validation/provider-boundary.ts',
   'scripts/validation/message-conversion.ts',
   'scripts/validation/openai-stream.ts',
+  'scripts/validation/model-stream.ts',
+  'scripts/validation/model-usage.ts',
   'scripts/validation/tool-permissions.ts',
   'scripts/validation/shell-parsers.ts',
   'scripts/validation/model-diagnostics.ts',
@@ -303,7 +307,7 @@ async function main(): Promise<void> {
     ])
     const exeArtifact: CliArtifact = {
       label: 'Windows x64 standalone EXE',
-      command: [resolve(projectRoot, 'dist', 'ccb.exe')],
+      command: [resolve(projectRoot, 'dist', 'claude-code.exe')],
     }
     await verifyCliArtifact(exeArtifact, config)
   } else {

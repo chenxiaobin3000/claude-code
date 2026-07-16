@@ -155,5 +155,15 @@ const lengthEvents = await collectAsync(
 const lengthDelta = lengthEvents.find(event => event.type === 'message_delta')
 assert(lengthDelta?.type === 'message_delta', 'missing length message_delta')
 assertEqual(lengthDelta.delta.stop_reason, 'max_tokens', 'length stop reason')
+assertDeepEqual(
+  lengthDelta.usage,
+  {
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_read_input_tokens: 0,
+    cache_creation_input_tokens: 0,
+  },
+  'missing usage defaults',
+)
 
 console.log('[validation] OpenAI stream adaptation passed')

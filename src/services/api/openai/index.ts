@@ -1,36 +1,11 @@
+import type { BetaUsage } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import type {
-  BetaToolUnion,
-  BetaMessage,
-  BetaUsage,
-} from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
-import type { SystemPrompt } from '../../../utils/systemPromptType.js'
-import type {
-  Message,
   StreamEvent,
   SystemAPIErrorMessage,
   AssistantMessage,
-  UserMessage,
 } from '../../../types/message.js'
-import type { AgentId } from '../../../types/ids.js'
-import type { Tools } from '../../../Tool.js'
-import { getOpenAIClient } from './client.js'
-import { updateOpenAIUsage } from './openaiShared.js'
-import {
-  anthropicMessagesToOpenAI,
-  adaptOpenAIStreamToAnthropic,
-  anthropicToolsToOpenAI,
-  anthropicToolChoiceToOpenAI,
-} from '@ant/model-provider'
-import { resolveModelTarget } from '../../../utils/model/modelRegistry.js'
-import { normalizeMessagesForAPI } from '../../../utils/messages.js'
-import { toolToAPISchema } from '../../../utils/api.js'
-import {
-  getEmptyToolPermissionContext,
-  toolMatchesName,
-} from '../../../Tool.js'
 import { logForDebugging } from '../../../utils/debug.js'
 import {
-  collectSensitiveStrings,
   createSafeError,
   sanitizeErrorDetails,
   summarizeModelPayload,
@@ -53,139 +28,18 @@ export {
   resolveOpenAIMaxTokens,
   buildOpenAIRequestBody,
 }
-import { getModelMaxOutputTokens } from '../../../utils/context.js'
-import type { Options } from '../claude.js'
 import { randomUUID } from 'crypto'
-import {
-  createAssistantAPIErrorMessage,
-  createUserMessage,
-  normalizeContentFromAPI,
-} from '../../../utils/messages.js'
+import { createAssistantAPIErrorMessage } from '../../../utils/messages.js'
 import type { SDKAssistantMessageError } from '../../../entrypoints/agentSdkTypes.js'
-import {
-  isSearchExtraToolsEnabled,
-  isDeferredToolsDeltaEnabled,
-} from '../../../utils/searchExtraTools.js'
-import {
-  formatDeferredToolLine,
-  isDeferredTool,
-  SEARCH_EXTRA_TOOLS_TOOL_NAME,
-} from '@claude-code-best/builtin-tools/tools/SearchExtraToolsTool/prompt.js'
 import {
   logModelRequestError,
   logModelRequestFirstToken,
   logModelRequestStart,
   logModelRequestSuccess,
 } from '../modelDiagnostics.js'
-
-/**
- * Mirrors the Anthropic request path's deferred-tool announcement for OpenAI.
- *
- * OpenAI-compatible endpoints cannot consume Anthropic's `defer_loading` or
- * `tool_reference` beta payloads directly, so the model needs the same textual
- * list of deferred MCP tool names that Anthropic receives before it can ask
- * SearchExtraToolsTool to load their full schemas.
- */
-function prependDeferredToolListIfNeeded(
-  messages: (AssistantMessage | UserMessage)[],
-  tools: Tools,
-  deferredToolNames: Set<string>,
-  useSearchExtraTools: boolean,
-): (AssistantMessage | UserMessage)[] {
-  if (!useSearchExtraTools || isDeferredToolsDeltaEnabled()) return messages
-
-  const deferredToolList = tools
-    .filter(tool => deferredToolNames.has(tool.name))
-    .map(formatDeferredToolLine)
-    .sort()
-    .join('\n')
-
-  if (!deferredToolList) return messages
-
-  return [
-    createUserMessage({
-      content: `<available-deferred-tools>\n${deferredToolList}\n</available-deferred-tools>`,
-      isMeta: true,
-    }),
-    ...messages,
-  ]
-}
-
-function isOpenAIConvertibleMessage(
-  msg: Message,
-): msg is AssistantMessage | UserMessage {
-  return msg.type === 'assistant' || msg.type === 'user'
-}
-
-/**
- * Assemble the final AssistantMessage (and optional max_tokens error) from
- * accumulated stream state. Extracted to avoid duplication between the
- * `message_stop` handler and the post-loop safety fallback.
- */
-function assembleFinalAssistantOutputs(params: {
-  partialMessage: BetaMessage | null
-  contentBlocks: Record<number, Record<string, unknown>>
-  tools: Tools
-  agentId: string | undefined
-  usage: {
-    input_tokens: number
-    output_tokens: number
-    cache_creation_input_tokens: number
-    cache_read_input_tokens: number
-  }
-  stopReason: string | null
-  maxTokens: number
-}): (AssistantMessage | SystemAPIErrorMessage)[] {
-  const {
-    partialMessage,
-    contentBlocks,
-    tools,
-    agentId,
-    usage,
-    stopReason,
-    maxTokens,
-  } = params
-  const outputs: (AssistantMessage | SystemAPIErrorMessage)[] = []
-
-  const allBlocks = Object.keys(contentBlocks)
-    .sort((a, b) => Number(a) - Number(b))
-    .map(k => contentBlocks[Number(k)])
-    .filter(Boolean)
-
-  if (allBlocks.length > 0 && partialMessage) {
-    outputs.push({
-      message: {
-        ...partialMessage,
-        content: normalizeContentFromAPI(
-          allBlocks as unknown as BetaMessage['content'],
-          tools,
-          agentId as AgentId | undefined,
-        ),
-        usage,
-        stop_reason: stopReason,
-        stop_sequence: null,
-      } as AssistantMessage['message'],
-      requestId: undefined,
-      type: 'assistant',
-      uuid: randomUUID(),
-      timestamp: new Date().toISOString(),
-    } as AssistantMessage)
-  }
-
-  if (stopReason === 'max_tokens') {
-    outputs.push(
-      createAssistantAPIErrorMessage({
-        content:
-          `Output truncated: response exceeded the ${maxTokens} token limit. ` +
-          `Set OPENAI_MAX_TOKENS or CLAUDE_CODE_MAX_OUTPUT_TOKENS to override.`,
-        apiError: 'max_output_tokens',
-        error: 'max_output_tokens',
-      }),
-    )
-  }
-
-  return outputs
-}
+import type { PreparedModelRequest } from '../../model/types.js'
+import { openAIProvider } from '../../model/providers/openaiProvider.js'
+import { processModelStream } from '../../model/streamProcessor.js'
 
 /**
  * OpenAI-compatible query path. Converts Anthropic-format messages/tools to
@@ -194,110 +48,41 @@ function assembleFinalAssistantOutputs(params: {
  * by the existing query pipeline.
  */
 export async function* queryModelOpenAI(
-  messages: Message[],
-  systemPrompt: SystemPrompt,
-  tools: Tools,
+  prepared: PreparedModelRequest,
   signal: AbortSignal,
-  options: Options,
 ): AsyncGenerator<
   StreamEvent | AssistantMessage | SystemAPIErrorMessage,
   void
 > {
+  const {
+    allTools: tools,
+    filteredTools,
+    toolSchemas,
+    deferredToolNames,
+    useSearchExtraTools,
+    options,
+  } = prepared
   const requestId = randomUUID()
   const requestStartedAt = Date.now()
   let diagnosticModel = options.model
   let sensitiveRequestValues: string[] = []
 
   try {
-    // 1. Resolve model name
-    const target = resolveModelTarget(options.model)
-    const openaiModel = target.model
+    const providerStream = await openAIProvider.createStream(prepared, signal, {
+      requestId,
+    })
+    const openaiModel = providerStream.model
+    const adaptedStream = providerStream.events
+    const {
+      endpoint,
+      requestMessages: openaiMessages,
+      requestTools: openaiTools,
+      maxOutputTokens: maxTokens,
+      thinking: enableThinking,
+    } = providerStream.metadata
     diagnosticModel = openaiModel
+    sensitiveRequestValues = providerStream.metadata.sensitiveValues
 
-    // 2. Normalize messages using shared preprocessing
-    const messagesForAPI = normalizeMessagesForAPI(messages, tools)
-
-    // 3. Check if tool search is enabled (similar to Anthropic path)
-    const useSearchExtraTools = await isSearchExtraToolsEnabled(
-      options.model,
-      tools,
-      options.getToolPermissionContext ||
-        (async () => getEmptyToolPermissionContext()),
-      options.agents || [],
-      options.querySource,
-    )
-
-    // 4. Build deferred tools set (similar to Anthropic path)
-    const deferredToolNames = new Set<string>()
-    if (useSearchExtraTools) {
-      for (const t of tools) {
-        if (isDeferredTool(t)) deferredToolNames.add(t.name)
-      }
-    }
-
-    // 5. Filter tools (similar to Anthropic path)
-    // Never include deferred tools in the API tools array — they are invoked
-    // via ExecuteExtraTool which looks them up from the global tool registry
-    // at runtime. Keeping the tools array stable preserves the prompt cache.
-    let filteredTools = tools
-    if (useSearchExtraTools && deferredToolNames.size > 0) {
-      filteredTools = tools.filter(tool => {
-        // Always include non-deferred tools
-        if (!deferredToolNames.has(tool.name)) return true
-        // Always include SearchExtraToolsTool (so it can discover more tools)
-        if (toolMatchesName(tool, SEARCH_EXTRA_TOOLS_TOOL_NAME)) return true
-        // All other deferred tools are excluded — use ExecuteExtraTool instead
-        return false
-      })
-    }
-
-    // 6. Build tool schemas with deferLoading flag
-    const toolSchemas = await Promise.all(
-      filteredTools.map(tool =>
-        toolToAPISchema(tool, {
-          getToolPermissionContext: options.getToolPermissionContext,
-          tools,
-          agents: options.agents,
-          allowedAgentTypes: options.allowedAgentTypes,
-          model: options.model,
-          deferLoading: useSearchExtraTools && deferredToolNames.has(tool.name),
-        }),
-      ),
-    )
-
-    // 7. Filter out non-standard tools (server tools like advisor)
-    const standardTools = toolSchemas.filter(
-      (t): t is BetaToolUnion & { type: string } => {
-        const anyT = t as unknown as Record<string, unknown>
-        return (
-          anyT.type !== 'advisor_20260301' && anyT.type !== 'computer_20250124'
-        )
-      },
-    )
-
-    // 8. Convert messages and tools to OpenAI format
-    const enableThinking = isOpenAIThinkingEnabled(openaiModel)
-    const openAIConvertibleMessages = messagesForAPI.filter(
-      isOpenAIConvertibleMessage,
-    )
-    const messagesWithDeferredToolList = prependDeferredToolListIfNeeded(
-      openAIConvertibleMessages,
-      tools,
-      deferredToolNames,
-      useSearchExtraTools,
-    )
-    const openaiMessages = anthropicMessagesToOpenAI(
-      messagesWithDeferredToolList,
-      systemPrompt,
-      { enableThinking },
-    )
-    const openaiTools = anthropicToolsToOpenAI(standardTools)
-    const openaiToolChoice = anthropicToolChoiceToOpenAI(options.toolChoice)
-    sensitiveRequestValues = [
-      target.apiKey,
-      ...collectSensitiveStrings(openaiMessages),
-    ]
-    // 9. Log tool filtering details
     if (useSearchExtraTools) {
       const includedDeferredTools = filteredTools.filter(t =>
         deferredToolNames.has(t.name),
@@ -311,35 +96,12 @@ export async function* queryModelOpenAI(
       )
     }
 
-    // 10. Compute max_tokens — required by most OpenAI-compatible endpoints.
-    //     Without this the server uses a tiny default, and when
-    //     thinking is enabled the thinking phase consumes the entire budget
-    //     leaving no tokens for the final response.
-    //
-    //     Use upperLimit (not the slot-cap default) because the Anthropic path's
-    //     slot-reservation cap (CAPPED_DEFAULT_MAX_TOKENS=8k) is paired with an
-    //     auto-retry at 64k in query.ts. The OpenAI path has no such retry, so
-    //     using the capped 8k default would silently truncate responses in
-    //     multi-turn conversations where thinking consumes most of the budget.
-    //
-    //     Override priority:
-    //     1. options.maxOutputTokensOverride (programmatic)
-    //     2. OPENAI_MAX_TOKENS env var (OpenAI-specific, useful for local models
-    //        with small context windows, e.g. RTX 3060 12GB running 65536-token models)
-    //     3. CLAUDE_CODE_MAX_OUTPUT_TOKENS env var (generic override)
-    //     4. upperLimit default (64000)
-    const { upperLimit } = getModelMaxOutputTokens(openaiModel)
-    const maxTokens = resolveOpenAIMaxTokens(
-      upperLimit,
-      options.maxOutputTokensOverride,
-    )
-
     const inputSummary = summarizeModelPayload(openaiMessages)
     logModelRequestStart({
       requestId,
       provider: 'openai',
       model: openaiModel,
-      endpoint: target.baseUrl,
+      endpoint,
       messageCount: openaiMessages.length,
       inputChars: inputSummary.serializedChars,
       toolCount: openaiTools.length,
@@ -352,162 +114,38 @@ export async function* queryModelOpenAI(
       `[OpenAI] Calling model=${openaiModel}, messages=${openaiMessages.length}, tools=${openaiTools.length}, thinking=${enableThinking}`,
     )
 
-    // 11. Call the configured OpenAI-compatible endpoint with streaming.
-    const adaptedStream = adaptOpenAIStreamToAnthropic(
-      await getOpenAIClient({
-        target,
-        maxRetries: 0,
-        fetchOverride: options.fetchOverride as unknown as typeof fetch,
-        source: options.querySource,
-      }).chat.completions.create(
-        buildOpenAIRequestBody({
+    const summary = yield* processModelStream({
+      events: adaptedStream,
+      tools,
+      agentId: options.agentId,
+      maxOutputTokens: maxTokens,
+      startedAt: requestStartedAt,
+      onFirstToken: ttftMs =>
+        logModelRequestFirstToken({
+          requestId,
+          provider: 'openai',
           model: openaiModel,
-          messages: openaiMessages,
-          tools: openaiTools,
-          toolChoice: openaiToolChoice,
-          enableThinking,
-          maxTokens,
-          temperatureOverride: options.temperatureOverride,
+          ttftMs,
         }),
-        { signal },
-      ),
-      openaiModel,
-    )
+    })
+    const {
+      messages: collectedMessages,
+      usage,
+      stopReason,
+      ttftMs,
+      firstTokenReceived,
+    } = summary
 
-    // 12. Convert OpenAI stream to Anthropic events, then process into
-    //     AssistantMessage + StreamEvent (matching the Anthropic path behavior)
-
-    // Accumulate content blocks and usage, same as the Anthropic path in claude.ts
-    const contentBlocks: Record<number, Record<string, unknown>> = {}
-    const collectedMessages: AssistantMessage[] = []
-    let partialMessage: BetaMessage | null = null
-    let stopReason: string | null = null
-    let usage = {
-      input_tokens: 0,
-      output_tokens: 0,
-      cache_creation_input_tokens: 0,
-      cache_read_input_tokens: 0,
-    }
-    let ttftMs = 0
-    let firstTokenLogged = false
-    const start = requestStartedAt
-
-    for await (const event of adaptedStream) {
-      switch (event.type) {
-        case 'message_start': {
-          partialMessage = event.message
-          ttftMs = Date.now() - start
-          if (!firstTokenLogged) {
-            firstTokenLogged = true
-            logModelRequestFirstToken({
-              requestId,
-              provider: 'openai',
-              model: openaiModel,
-              ttftMs,
-            })
-          }
-          if (event.message.usage) {
-            usage = {
-              ...usage,
-              ...(event.message.usage as unknown as typeof usage),
-            }
-          }
-          break
-        }
-        case 'content_block_start': {
-          const idx = event.index
-          const cb = event.content_block
-          if (cb.type === 'tool_use') {
-            contentBlocks[idx] = { ...cb, input: '' }
-          } else if (cb.type === 'text') {
-            contentBlocks[idx] = { ...cb, text: '' }
-          } else if (cb.type === 'thinking') {
-            contentBlocks[idx] = { ...cb, thinking: '', signature: '' }
-          } else {
-            contentBlocks[idx] = { ...cb }
-          }
-          break
-        }
-        case 'content_block_delta': {
-          const idx = event.index
-          const delta = event.delta
-          const block = contentBlocks[idx]
-          if (!block) break
-          if (delta.type === 'text_delta') {
-            block.text = ((block.text as string | undefined) || '') + delta.text
-          } else if (delta.type === 'input_json_delta') {
-            block.input =
-              ((block.input as string | undefined) || '') + delta.partial_json
-          } else if (delta.type === 'thinking_delta') {
-            block.thinking =
-              ((block.thinking as string | undefined) || '') + delta.thinking
-          } else if (delta.type === 'signature_delta') {
-            block.signature = delta.signature
-          }
-          break
-        }
-        case 'content_block_stop': {
-          // Block accumulation is complete; assembly happens at message_stop.
-          break
-        }
-        case 'message_delta': {
-          const deltaUsage = event.usage
-          if (deltaUsage) {
-            usage = updateOpenAIUsage(
-              usage,
-              deltaUsage as unknown as Parameters<typeof updateOpenAIUsage>[1],
-            )
-          }
-          if (event.delta.stop_reason != null) {
-            stopReason = event.delta.stop_reason
-          }
-          break
-        }
-        case 'message_stop': {
-          // Assemble ONE AssistantMessage with ALL content blocks, matching the
-          // Anthropic SDK path. Real usage (input + output tokens) is available
-          // here and injected so tokenCountWithEstimation() can read it.
-          if (partialMessage) {
-            for (const output of assembleFinalAssistantOutputs({
-              partialMessage,
-              contentBlocks,
-              tools,
-              agentId: options.agentId,
-              usage,
-              stopReason,
-              maxTokens,
-            })) {
-              if (output.type === 'assistant') {
-                collectedMessages.push(output)
-              }
-              yield output
-            }
-            // Reset partialMessage so the post-loop safety fallback does not
-            // yield a second identical AssistantMessage.
-            partialMessage = null
-          }
-          // Track cost and token usage
-          if (usage.input_tokens + usage.output_tokens > 0) {
-            const costUSD = calculateUSDCost(
-              openaiModel,
-              usage as unknown as BetaUsage,
-            )
-            addToTotalSessionCost(
-              costUSD,
-              usage as unknown as BetaUsage,
-              options.model,
-            )
-          }
-          break
-        }
-      }
-
-      // Also yield as StreamEvent for real-time display (matching Anthropic path)
-      yield {
-        type: 'stream_event',
-        event,
-        ...(event.type === 'message_start' ? { ttftMs } : undefined),
-      } as StreamEvent
+    if (usage.input_tokens + usage.output_tokens > 0) {
+      const costUSD = calculateUSDCost(
+        openaiModel,
+        usage as unknown as BetaUsage,
+      )
+      addToTotalSessionCost(
+        costUSD,
+        usage as unknown as BetaUsage,
+        options.model,
+      )
     }
 
     const toolCallCount = collectedMessages.reduce((count, message) => {
@@ -523,8 +161,8 @@ export async function* queryModelOpenAI(
       requestId,
       provider: 'openai',
       model: openaiModel,
-      durationMs: Date.now() - start,
-      ttftMs: firstTokenLogged ? ttftMs : null,
+      durationMs: Date.now() - requestStartedAt,
+      ttftMs: firstTokenReceived ? ttftMs : null,
       inputTokens: usage.input_tokens,
       outputTokens: usage.output_tokens,
       stopReason,
@@ -535,7 +173,9 @@ export async function* queryModelOpenAI(
     recordLLMObservation(options.langfuseTrace ?? null, {
       model: openaiModel,
       provider: 'openai',
-      input: convertMessagesToLangfuse(openaiMessages),
+      input: convertMessagesToLangfuse(
+        openaiMessages as Parameters<typeof convertMessagesToLangfuse>[0],
+      ),
       output: convertOutputToLangfuse(collectedMessages),
       usage: {
         input_tokens: usage.input_tokens,
@@ -543,27 +183,13 @@ export async function* queryModelOpenAI(
         cache_creation_input_tokens: usage.cache_creation_input_tokens,
         cache_read_input_tokens: usage.cache_read_input_tokens,
       },
-      startTime: new Date(start),
+      startTime: new Date(requestStartedAt),
       endTime: new Date(),
-      completionStartTime: ttftMs > 0 ? new Date(start + ttftMs) : undefined,
+      completionStartTime:
+        ttftMs > 0 ? new Date(requestStartedAt + ttftMs) : undefined,
       tools: convertToolsToLangfuse(toolSchemas as unknown[]),
       ...(enableThinking && { thinking: { type: 'enabled' } }),
     })
-
-    // Safety: if stream ended without message_stop, assemble and yield whatever we have
-    if (partialMessage) {
-      for (const output of assembleFinalAssistantOutputs({
-        partialMessage,
-        contentBlocks,
-        tools,
-        agentId: options.agentId,
-        usage,
-        stopReason,
-        maxTokens,
-      })) {
-        yield output
-      }
-    }
   } catch (error) {
     const sanitizedError = sanitizeErrorDetails(error, {
       secrets: sensitiveRequestValues,

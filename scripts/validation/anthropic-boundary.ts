@@ -70,16 +70,15 @@ if (!client.includes('Anthropic first-party model access has been removed')) {
 const claudePath = 'src/services/api/claude.ts'
 const claude = await source(claudePath)
 forbid(claudePath, claude, [/export async function verifyApiKey\s*\(/])
-const routeStart = claude.indexOf("if (getAPIProvider() === 'openai')")
-const routeDelegate = claude.indexOf('yield* queryModelOpenAI(', routeStart)
+const routeDelegate = claude.indexOf('yield* queryPreparedModel(')
 const routeTail =
-  routeDelegate < 0 ? '' : claude.slice(routeDelegate, routeDelegate + 500)
-if (
-  routeStart < 0 ||
-  routeDelegate < 0 ||
-  !/\r?\n {4}return\r?\n/.test(routeTail)
-) {
+  routeDelegate < 0 ? '' : claude.slice(routeDelegate, routeDelegate + 600)
+if (routeDelegate < 0 || !/if \(handledByProvider\) return/.test(routeTail)) {
   fail('main model query must delegate to OpenAI and return before legacy code')
+}
+const modelQuery = await source('src/services/model/query.ts')
+if (!/yield\* queryModelOpenAI\(request, signal\)/.test(modelQuery)) {
+  fail('model query dispatcher must delegate to the OpenAI implementation')
 }
 
 const commandsPath = 'src/commands.ts'

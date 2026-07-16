@@ -18,7 +18,10 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../services/analytics/index.js'
-import { accumulateUsage, updateUsage } from '../services/api/claude.js'
+import {
+  accumulateUsage,
+  mergeUsage as updateUsage,
+} from '../services/model/usage.js'
 import { EMPTY_USAGE, type NonNullableUsage } from '@ant/model-provider'
 import type {
   BetaRawMessageDeltaEvent,

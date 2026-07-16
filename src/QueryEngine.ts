@@ -15,7 +15,10 @@ import type {
   SDKUserMessageReplay,
 } from 'src/entrypoints/agentSdkTypes.js'
 import type { BetaMessageDeltaUsage } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
-import { accumulateUsage, updateUsage } from 'src/services/api/claude.js'
+import {
+  accumulateUsage,
+  mergeUsage as updateUsage,
+} from 'src/services/model/usage.js'
 import type { NonNullableUsage } from '@ant/model-provider'
 import { EMPTY_USAGE } from '@ant/model-provider'
 import stripAnsi from 'strip-ansi'

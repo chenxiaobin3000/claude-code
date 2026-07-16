@@ -165,8 +165,9 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 目标：降低核心模块修改风险，明确 OpenAI 模型主路径与 Anthropic SDK 内部兼容层的边界。
 
-- [ ] 建立明确的 Provider 接口边界，将共享消息预处理、OpenAI 请求、流事件适配和 Usage 统计分层，避免继续在 `src/services/api/claude.ts` 中扩展条件分支。
-- [ ] 保留 Anthropic SDK 作为内部消息、工具和流事件兼容层，梳理并记录其实际调用范围；不得仅因模型 Provider 固定为 OpenAI 就删除 SDK 类型或共享处理逻辑。
+- [x] 建立明确的 Provider 接口边界，将共享消息预处理、OpenAI 请求、流事件适配和 Usage 统计分层，避免继续在 `src/services/api/claude.ts` 中扩展条件分支（2026-07-16 已新增 `services/model` 分层、唯一 OpenAI Provider 调度、统一 Usage 与流事件处理，并接入 `provider-boundary` 防回归检查）。
+- [ ] 对 `src/services/api/claude.ts` 中 Provider 调度后的不可达第一方实现进行引用和职责审计；将仍被外部调用的共享 Helper 迁移到 `services/model` 对应分层，在确认不承担 Anthropic SDK 内部兼容职责后，删除旧请求、鉴权、缓存 Beta、重试和流处理代码，并增加防回归检查。验收要求：`claude.ts` 最终仅保留兼容导出或被完全删除，不恢复 Anthropic Provider 或账号鉴权，且 `bun run verify --ci` 全部通过。
+- [x] 保留 Anthropic SDK 作为内部消息、工具和流事件兼容层，梳理并记录其实际调用范围；不得仅因模型 Provider 固定为 OpenAI 就删除 SDK 类型或共享处理逻辑（2026-07-16 已完成历史删除复核，新增 `ANTHROPIC_SDK_COMPATIBILITY.md`、`sdk-compat-boundary` 防回归检查，并补齐消息、工具和流事件行为验证）。
 - [x] 明确移除范围仅包括 Anthropic 账号登录、账号鉴权和官方模型直连入口，并增加检查防止这些入口被意外恢复（2026-07-16 已移除账号鉴权实现、官方直连回退和账号专属命令，并接入 `anthropic-boundary` 验证）。
 - [x] 完成 Bedrock 非主路径审计并删除专用 Provider 实现、AWS 鉴权配置和依赖，同时保留共享 Anthropic SDK 消息兼容逻辑（2026-07-15 已验证 Bun/Vite 构建及 Bun/Node CLI 启动）。
 - [x] 对 Vertex 非主路径分支完成引用和运行时审计；确认其不承担共享 SDK 兼容职责且运行不可达后，已删除客户端、GCP 鉴权、区域配置、专用请求行为和依赖，并增加源码及构建产物防回归检查（2026-07-16）。

@@ -2,6 +2,8 @@
 
 import {
   anthropicMessagesToOpenAI,
+  anthropicToolChoiceToOpenAI,
+  anthropicToolsToOpenAI,
   asSystemPrompt,
   type AssistantMessage,
   type UserMessage,
@@ -118,6 +120,93 @@ assertDeepEqual(
     },
   ],
   'image conversion',
+)
+
+const unknownBlockMessage = {
+  type: 'user',
+  uuid: '00000000-0000-4000-8000-000000000004',
+  message: {
+    role: 'user',
+    content: [
+      { type: 'server_tool_use', id: 'server-1', name: 'search' },
+      { type: 'text', text: 'Keep this text.' },
+    ],
+  },
+} as unknown as UserMessage
+const unknownBlockOutput = anthropicMessagesToOpenAI(
+  [unknownBlockMessage],
+  asSystemPrompt([]),
+)
+assertEqual(
+  unknownBlockOutput[0]?.content,
+  'Keep this text.',
+  'unsupported content block handling',
+)
+
+const convertedTools = anthropicToolsToOpenAI([
+  {
+    name: 'FixtureTool',
+    description: 'Fixture tool description',
+    input_schema: {
+      type: 'object',
+      properties: {
+        mode: { const: 'safe' },
+        options: {
+          type: 'object',
+          properties: { enabled: { const: true } },
+        },
+      },
+      required: ['mode'],
+    },
+  },
+  {
+    type: 'server',
+    name: 'ServerOnlyTool',
+    input_schema: { type: 'object', properties: {} },
+  },
+] as unknown as Parameters<typeof anthropicToolsToOpenAI>[0])
+assertEqual(convertedTools.length, 1, 'server tool filtering')
+assertEqual(convertedTools[0]?.function.name, 'FixtureTool', 'tool schema name')
+assertEqual(
+  convertedTools[0]?.function.description,
+  'Fixture tool description',
+  'tool schema description',
+)
+assertDeepEqual(
+  convertedTools[0]?.function.parameters,
+  {
+    type: 'object',
+    properties: {
+      mode: { enum: ['safe'] },
+      options: {
+        type: 'object',
+        properties: { enabled: { enum: [true] } },
+      },
+    },
+    required: ['mode'],
+  },
+  'tool schema sanitization',
+)
+
+assertEqual(
+  anthropicToolChoiceToOpenAI({ type: 'auto' }),
+  'auto',
+  'automatic tool choice',
+)
+assertEqual(
+  anthropicToolChoiceToOpenAI({ type: 'any' }),
+  'required',
+  'required tool choice',
+)
+assertDeepEqual(
+  anthropicToolChoiceToOpenAI({ type: 'tool', name: 'FixtureTool' }),
+  { type: 'function', function: { name: 'FixtureTool' } },
+  'named tool choice',
+)
+assertEqual(
+  anthropicToolChoiceToOpenAI(undefined),
+  undefined,
+  'default tool choice',
 )
 
 console.log('[validation] message conversion passed')

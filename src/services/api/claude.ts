@@ -22,10 +22,6 @@ import type { Stream } from '@anthropic-ai/sdk/streaming.mjs'
 import { randomUUID } from 'crypto'
 import { existsSync, unlinkSync } from 'node:fs'
 import {
-  getAPIProvider,
-  isFirstPartyAnthropicBaseUrl,
-} from 'src/utils/model/providers.js'
-import {
   getAttributionHeader,
   getCLISyspromptPrefix,
 } from '../../constants/system.js'
@@ -224,6 +220,14 @@ import { getInitializationStatus } from '../lsp/manager.js'
 import { isToolFromMcpServer } from '../mcp/utils.js'
 import { recordLLMObservation } from '../langfuse/index.js'
 import type { LangfuseSpan } from '../langfuse/index.js'
+import type { ModelQueryOptions } from '../model/types.js'
+import { mergeUsage } from '../model/usage.js'
+import { prepareMessages, prepareTools } from '../model/prepareRequest.js'
+import { queryPreparedModel } from '../model/query.js'
+export {
+  accumulateUsage,
+  mergeUsage as updateUsage,
+} from '../model/usage.js'
 import {
   convertMessagesToLangfuse,
   convertOutputToLangfuse,
@@ -601,40 +605,8 @@ export function assistantMessageToMessageParam(
   }
 }
 
-export type Options = {
-  getToolPermissionContext: () => Promise<ToolPermissionContext>
-  model: string
-  toolChoice?: BetaToolChoiceTool | BetaToolChoiceAuto | undefined
-  isNonInteractiveSession: boolean
-  extraToolSchemas?: BetaToolUnion[]
-  maxOutputTokensOverride?: number
-  fallbackModel?: string
-  onStreamingFallback?: () => void
-  querySource: QuerySource
-  agents: AgentDefinition[]
-  allowedAgentTypes?: string[]
-  hasAppendSystemPrompt: boolean
-  fetchOverride?: ClientOptions['fetch']
-  enablePromptCaching?: boolean
-  skipCacheWrite?: boolean
-  temperatureOverride?: number
-  effortValue?: EffortValue
-  mcpTools: Tools
-  hasPendingMcpServers?: boolean
-  queryTracking?: QueryChainTracking
-  agentId?: AgentId // Only set for subagents
-  outputFormat?: BetaJSONOutputFormat
-  fastMode?: boolean
-  advisorModel?: string
-  addNotification?: (notif: Notification) => void
-  // API-side task budget (output_config.task_budget). Distinct from the
-  // tokenBudget.ts +500k auto-continue feature — this one is sent to the API
-  // so the model can pace itself. `remaining` is computed by the caller
-  // (query.ts decrements across the agentic loop).
-  taskBudget?: { total: number; remaining?: number }
-  /** Langfuse root trace span for observability. No-op if null/undefined. */
-  langfuseTrace?: LangfuseSpan | null
-}
+/** @deprecated Import ModelQueryOptions from services/model/types instead. */
+export type Options = ModelQueryOptions
 
 export async function queryModelWithoutStreaming({
   messages,
@@ -1049,66 +1021,8 @@ async function* queryModel(
     }
   }
 
-  // Check if tool search is enabled (checks mode, model support, and threshold for auto mode)
-  // This is async because it may need to calculate MCP tool description sizes for TstAuto mode
-  let useSearchExtraTools = await isSearchExtraToolsEnabled(
-    options.model,
-    tools,
-    options.getToolPermissionContext,
-    options.agents,
-    'query',
-  )
-
-  // Precompute once — isDeferredTool does 2 GrowthBook lookups per call
-  const deferredToolNames = new Set<string>()
-  if (useSearchExtraTools) {
-    for (const t of tools) {
-      if (isDeferredTool(t)) deferredToolNames.add(t.name)
-    }
-  }
-
-  // Even if tool search mode is enabled, skip if there are no deferred tools
-  // AND no MCP servers are still connecting. When servers are pending, keep
-  // SearchExtraTools available so the model can discover tools after they connect.
-  if (
-    useSearchExtraTools &&
-    deferredToolNames.size === 0 &&
-    !options.hasPendingMcpServers
-  ) {
-    logForDebugging(
-      'Tool search disabled: no deferred tools available to search',
-    )
-    useSearchExtraTools = false
-  }
-
-  // Dynamic tool loading: filter deferred tools that haven't been discovered yet
-  let filteredTools: Tools
-
-  // Deferred tools that haven't been discovered are filtered out from the API
-  // request — their schemas are only included after SearchExtraTools discovers them.
-
-  if (useSearchExtraTools) {
-    // Never include deferred tools in the API tools array — they are invoked
-    // via ExecuteExtraTool which looks them up from the global tool registry
-    // at runtime. Keeping the tools array stable preserves the prompt cache
-    // across turns (discovered tools no longer bloat the tools JSON).
-    filteredTools = tools.filter(tool => {
-      // Always include non-deferred tools (core tools)
-      if (!deferredToolNames.has(tool.name)) return true
-      // Always include SearchExtraToolsTool (so it can discover more tools)
-      if (toolMatchesName(tool, SEARCH_EXTRA_TOOLS_TOOL_NAME)) return true
-      // All other deferred tools are excluded — use ExecuteExtraTool instead
-      return false
-    })
-  } else {
-    filteredTools = tools.filter(
-      t => !toolMatchesName(t, SEARCH_EXTRA_TOOLS_TOOL_NAME),
-    )
-  }
-
-  // Tool search beta header and defer_loading removed — unified self-built
-  // tool search via SearchExtraToolsTool + ExecuteExtraTool for all providers.
-  // No longer relies on API-side tool_reference or defer_loading features.
+  const { filteredTools, toolSchemas, deferredToolNames, useSearchExtraTools } =
+    await prepareTools(tools, options)
 
   // Determine if cached microcompact is enabled for this model.
   // Computed once here (in async context) and captured by paramsFromContext.
@@ -1158,28 +1072,6 @@ async function* queryModel(
       : 'system_prompt'
     : 'none'
 
-  // Build tool schemas — no defer_loading since we use self-built tool search
-  // Note: We pass the full `tools` list (not filteredTools) to toolToAPISchema so that
-  // SearchExtraToolsTool's prompt can list ALL available MCP tools. The filtering only affects
-  // which tools are actually sent to the API, not what the model sees in tool descriptions.
-  const toolSchemas = await Promise.all(
-    filteredTools.map(tool =>
-      toolToAPISchema(tool, {
-        getToolPermissionContext: options.getToolPermissionContext,
-        tools,
-        agents: options.agents,
-        allowedAgentTypes: options.allowedAgentTypes,
-        model: options.model,
-      }),
-    ),
-  )
-
-  if (useSearchExtraTools) {
-    logForDebugging(
-      `Dynamic tool loading: 0/${deferredToolNames.size} deferred tools in API tools array (all via ExecuteExtraTool)`,
-    )
-  }
-
   queryCheckpoint('query_tool_schema_build_end')
 
   // Normalize messages before building system prompt (needed for fingerprinting)
@@ -1189,47 +1081,11 @@ async function* queryModel(
   })
 
   queryCheckpoint('query_message_normalization_start')
-  let messagesForAPI = normalizeMessagesForAPI(messages, filteredTools)
+  let messagesForAPI = prepareMessages(messages, filteredTools, {
+    useSearchExtraTools,
+    allowAdvisorBlocks: betas.includes(ADVISOR_BETA_HEADER),
+  })
   queryCheckpoint('query_message_normalization_end')
-
-  // Model-specific post-processing: strip tool-search-specific fields if the
-  // selected model doesn't support tool search.
-  //
-  // Why is this needed in addition to normalizeMessagesForAPI?
-  // - normalizeMessagesForAPI uses isSearchExtraToolsEnabledNoModelCheck() because it's
-  //   called from ~20 places (analytics, feedback, sharing, etc.), many of which
-  //   don't have model context. Adding model to its signature would be a large refactor.
-  // - This post-processing uses the model-aware isSearchExtraToolsEnabled() check
-  // - This handles mid-conversation model switching (e.g., Sonnet → Haiku) where
-  //   stale tool-search fields from the previous model would cause 400 errors
-  //
-  // Note: For assistant messages, normalizeMessagesForAPI already normalized the
-  // tool inputs, so stripCallerFieldFromAssistantMessage only needs to remove the
-  // 'caller' field (not re-normalize inputs).
-  if (!useSearchExtraTools) {
-    messagesForAPI = messagesForAPI.map(msg => {
-      switch (msg.type) {
-        case 'user':
-          // Strip tool_reference blocks from tool_result content
-          return stripToolReferenceBlocksFromUserMessage(msg)
-        case 'assistant':
-          // Strip 'caller' field from tool_use blocks
-          return stripCallerFieldFromAssistantMessage(msg)
-        default:
-          return msg
-      }
-    })
-  }
-
-  // Repair tool_use/tool_result pairing mismatches that can occur when resuming
-  // remote/teleport sessions. Inserts synthetic error tool_results for orphaned
-  // tool_uses and strips orphaned tool_results referencing non-existent tool_uses.
-  messagesForAPI = ensureToolResultPairing(messagesForAPI)
-
-  // Strip advisor blocks — the API rejects them without the beta header.
-  if (!betas.includes(ADVISOR_BETA_HEADER)) {
-    messagesForAPI = stripAdvisorBlocks(messagesForAPI)
-  }
 
   // Strip excess media items before making the API call.
   // The API rejects requests with >100 media items but returns a confusing error.
@@ -1240,23 +1096,22 @@ async function* queryModel(
     API_MAX_MEDIA_PER_REQUEST,
   )
 
-  // OpenAI-compatible provider: delegate to the OpenAI adapter layer
-  // after shared preprocessing (message normalization, tool filtering,
-  // media stripping) but before Anthropic-specific logic (betas, thinking, caching).
-  if (getAPIProvider() === 'openai') {
-    const { queryModelOpenAI } = await import('./openai/index.js')
-    // OpenAI emulates Anthropic's dynamic tool loading client-side. It needs
-    // the full tool pool so SearchExtraToolsTool can search deferred MCP tools that
-    // were intentionally filtered out of the initial API tool list above.
-    yield* queryModelOpenAI(
-      messagesForAPI,
+  // The runtime has one protocol provider. Shared preprocessing finishes before
+  // this handoff; the provider performs only OpenAI conversion and transport.
+  const handledByProvider = yield* queryPreparedModel(
+    {
+      messages: messagesForAPI,
       systemPrompt,
-      tools,
-      signal,
+      allTools: tools,
+      filteredTools,
+      toolSchemas,
+      deferredToolNames,
+      useSearchExtraTools,
       options,
-    )
-    return
-  }
+    },
+    signal,
+  )
+  if (handledByProvider) return
 
   // Instrumentation: Track message count after normalization
   logEvent('tengu_api_after_normalize', {
@@ -1411,7 +1266,7 @@ async function* queryModel(
     if (
       !cacheEditingHeaderLatched &&
       cachedMCEnabled &&
-      getAPIProvider() === 'firstParty' &&
+      false &&
       options.querySource === 'repl_main_thread'
     ) {
       cacheEditingHeaderLatched = true
@@ -1629,13 +1484,11 @@ async function* queryModel(
     // (controls cache_edits body behavior) stays live so edits stop when
     // the feature disables but the header doesn't flip.
     const useCachedMC =
-      cachedMCEnabled &&
-      getAPIProvider() === 'firstParty' &&
-      options.querySource === 'repl_main_thread'
+      cachedMCEnabled && false && options.querySource === 'repl_main_thread'
     if (
       cacheEditingHeaderLatched &&
       cacheEditingBetaHeader &&
-      getAPIProvider() === 'firstParty' &&
+      false &&
       options.querySource === 'repl_main_thread' &&
       !betasParams.includes(cacheEditingBetaHeader)
     ) {
@@ -1779,10 +1632,7 @@ async function* queryModel(
         // Generate and track client request ID so timeouts (which return no
         // server request ID) can still be correlated with server logs.
         // First-party only — 3P providers don't log it (inc-4029 class).
-        clientRequestId =
-          getAPIProvider() === 'firstParty' && isFirstPartyAnthropicBaseUrl()
-            ? randomUUID()
-            : undefined
+        clientRequestId = false ? randomUUID() : undefined
 
         // Use raw stream instead of BetaMessageStream to avoid O(n²) partial JSON parsing
         // BetaMessageStream calls partialParse() on every input_json_delta, which we don't need
@@ -1949,7 +1799,7 @@ async function* queryModel(
           case 'message_start': {
             partialMessage = part.message
             ttftMs = Date.now() - start
-            usage = updateUsage(usage, part.message?.usage)
+            usage = mergeUsage(usage, part.message?.usage)
             // Capture research from message_start if available (internal only).
             // Always overwrite with the latest value.
             if (
@@ -2190,7 +2040,7 @@ async function* queryModel(
             break
           }
           case 'message_delta': {
-            usage = updateUsage(usage, part.usage)
+            usage = mergeUsage(usage, part.usage)
             // Capture research from message_delta if available (internal only).
             // Always overwrite with the latest value. Also write back to
             // already-yielded messages since message_delta arrives after
@@ -2811,7 +2661,7 @@ async function* queryModel(
     if (fallbackMessage) {
       const fallbackUsage = fallbackMessage.message
         .usage as BetaMessageDeltaUsage
-      usage = updateUsage(EMPTY_USAGE, fallbackUsage)
+      usage = mergeUsage(EMPTY_USAGE, fallbackUsage)
       stopReason = fallbackMessage.message.stop_reason as BetaStopReason
       const fallbackCost = calculateUSDCost(
         resolvedModel,
@@ -2853,7 +2703,7 @@ async function* queryModel(
   // Record LLM observation in Langfuse (no-op if not configured)
   recordLLMObservation(options.langfuseTrace ?? null, {
     model: resolvedModel,
-    provider: getAPIProvider(),
+    provider: 'openai',
     input: convertMessagesToLangfuse(messagesForAPI, systemPrompt),
     output: convertOutputToLangfuse(newMessages),
     usage: {
@@ -2925,132 +2775,6 @@ export function cleanupStream(
     }
   } catch {
     // Ignore - stream may already be closed
-  }
-}
-
-/**
- * Updates usage statistics with new values from streaming API events.
- * Note: Anthropic's streaming API provides cumulative usage totals, not incremental deltas.
- * Each event contains the complete usage up to that point in the stream.
- *
- * Input-related tokens (input_tokens, cache_creation_input_tokens, cache_read_input_tokens)
- * are typically set in message_start and remain constant. message_delta events may send
- * explicit 0 values for these fields, which should not overwrite the values from message_start.
- * We only update these fields if they have a non-null, non-zero value.
- */
-export function updateUsage(
-  usage: Readonly<NonNullableUsage>,
-  partUsage: BetaMessageDeltaUsage | undefined,
-): NonNullableUsage {
-  if (!partUsage) {
-    return { ...usage }
-  }
-  return {
-    input_tokens:
-      partUsage.input_tokens !== null && partUsage.input_tokens > 0
-        ? partUsage.input_tokens
-        : usage.input_tokens,
-    cache_creation_input_tokens:
-      partUsage.cache_creation_input_tokens !== null &&
-      partUsage.cache_creation_input_tokens > 0
-        ? partUsage.cache_creation_input_tokens
-        : usage.cache_creation_input_tokens,
-    cache_read_input_tokens:
-      partUsage.cache_read_input_tokens !== null &&
-      partUsage.cache_read_input_tokens > 0
-        ? partUsage.cache_read_input_tokens
-        : usage.cache_read_input_tokens,
-    output_tokens: partUsage.output_tokens ?? usage.output_tokens,
-    server_tool_use: {
-      web_search_requests:
-        partUsage.server_tool_use?.web_search_requests ??
-        usage.server_tool_use.web_search_requests,
-      web_fetch_requests:
-        partUsage.server_tool_use?.web_fetch_requests ??
-        usage.server_tool_use.web_fetch_requests,
-    },
-    service_tier: usage.service_tier,
-    cache_creation: {
-      // SDK type BetaMessageDeltaUsage is missing cache_creation, but it's real!
-      ephemeral_1h_input_tokens:
-        (partUsage as BetaUsage).cache_creation?.ephemeral_1h_input_tokens ??
-        usage.cache_creation.ephemeral_1h_input_tokens,
-      ephemeral_5m_input_tokens:
-        (partUsage as BetaUsage).cache_creation?.ephemeral_5m_input_tokens ??
-        usage.cache_creation.ephemeral_5m_input_tokens,
-    },
-    // cache_deleted_input_tokens: returned by the API when cache editing
-    // deletes KV cache content, but not in SDK types. Kept off NonNullableUsage
-    // so the string is eliminated from external builds by dead code elimination.
-    // Uses the same > 0 guard as other token fields to prevent message_delta
-    // from overwriting the real value with 0.
-    ...(feature('CACHED_MICROCOMPACT')
-      ? {
-          cache_deleted_input_tokens:
-            (partUsage as unknown as { cache_deleted_input_tokens?: number })
-              .cache_deleted_input_tokens != null &&
-            (partUsage as unknown as { cache_deleted_input_tokens: number })
-              .cache_deleted_input_tokens > 0
-              ? (partUsage as unknown as { cache_deleted_input_tokens: number })
-                  .cache_deleted_input_tokens
-              : ((usage as unknown as { cache_deleted_input_tokens?: number })
-                  .cache_deleted_input_tokens ?? 0),
-        }
-      : {}),
-    inference_geo: usage.inference_geo,
-    iterations: partUsage.iterations ?? usage.iterations,
-    speed: (partUsage as BetaUsage).speed ?? usage.speed,
-  }
-}
-
-/**
- * Accumulates usage from one message into a total usage object.
- * Used to track cumulative usage across multiple assistant turns.
- */
-export function accumulateUsage(
-  totalUsage: Readonly<NonNullableUsage>,
-  messageUsage: Readonly<NonNullableUsage>,
-): NonNullableUsage {
-  return {
-    input_tokens: totalUsage.input_tokens + messageUsage.input_tokens,
-    cache_creation_input_tokens:
-      totalUsage.cache_creation_input_tokens +
-      messageUsage.cache_creation_input_tokens,
-    cache_read_input_tokens:
-      totalUsage.cache_read_input_tokens + messageUsage.cache_read_input_tokens,
-    output_tokens: totalUsage.output_tokens + messageUsage.output_tokens,
-    server_tool_use: {
-      web_search_requests:
-        totalUsage.server_tool_use.web_search_requests +
-        messageUsage.server_tool_use.web_search_requests,
-      web_fetch_requests:
-        totalUsage.server_tool_use.web_fetch_requests +
-        messageUsage.server_tool_use.web_fetch_requests,
-    },
-    service_tier: messageUsage.service_tier, // Use the most recent service tier
-    cache_creation: {
-      ephemeral_1h_input_tokens:
-        totalUsage.cache_creation.ephemeral_1h_input_tokens +
-        messageUsage.cache_creation.ephemeral_1h_input_tokens,
-      ephemeral_5m_input_tokens:
-        totalUsage.cache_creation.ephemeral_5m_input_tokens +
-        messageUsage.cache_creation.ephemeral_5m_input_tokens,
-    },
-    // See comment in updateUsage — field is not on NonNullableUsage to keep
-    // the string out of external builds.
-    ...(feature('CACHED_MICROCOMPACT')
-      ? {
-          cache_deleted_input_tokens:
-            ((totalUsage as unknown as { cache_deleted_input_tokens?: number })
-              .cache_deleted_input_tokens ?? 0) +
-            ((
-              messageUsage as unknown as { cache_deleted_input_tokens?: number }
-            ).cache_deleted_input_tokens ?? 0),
-        }
-      : {}),
-    inference_geo: messageUsage.inference_geo, // Use the most recent
-    iterations: messageUsage.iterations, // Use the most recent
-    speed: messageUsage.speed, // Use the most recent
   }
 }
 
