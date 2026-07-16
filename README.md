@@ -231,7 +231,7 @@ bun run check
 
 部分模块已经承担过多职责：
 
-- `src/screens/repl/ReplController.tsx`：约 270 KB（入口已分层，跨域编排仍是后续收缩重点）
+- `src/screens/repl/ReplController.tsx`：约 192 KB（查询、运行时、提交和 transcript 已分层，主 Prompt 与 Dialog 渲染仍是后续收缩重点）
 - `src/cli/print.ts`：约 223 KB
 - `src/utils/messages.ts`：约 214 KB
 - `src/utils/sessionStorage.ts`：约 187 KB

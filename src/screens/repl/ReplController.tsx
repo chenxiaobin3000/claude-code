@@ -2,10 +2,16 @@
 import { feature } from 'bun:bundle';
 import { buildDisplayedAgentMessages } from './agents/agentMessages.js';
 import { useReplAgentState } from './agents/useReplAgentState.js';
+import { useAgentActions } from './agents/useAgentActions.js';
 import { useMessageTimeline } from './session/useMessageTimeline.js';
+import { useConversationResume } from './session/useConversationResume.js';
+import { useConversationActions } from './session/useConversationActions.js';
 import { useReplInputState } from './input/useReplInputState.js';
+import { usePromptSubmission } from './input/usePromptSubmission.js';
 import { useTranscriptControls } from './input/useTranscriptControls.js';
 import { AnimatedTerminalTitle, median, TranscriptModeFooter, TranscriptSearchBar } from './view/TranscriptChrome.js';
+import { TranscriptScreen } from './view/TranscriptScreen.js';
+import { selectFocusedInputDialog, type FocusedInputDialog } from './view/dialogFocus.js';
 import { spawnSync } from 'child_process';
 import {
   snapshotOutputTokensForTurn,
@@ -108,10 +114,7 @@ import { PromptDialog } from '../../components/hooks/PromptDialog.js';
 import type { PromptRequest, PromptResponse } from '../../types/hooks.js';
 import PromptInput from '../../components/PromptInput/PromptInput.js';
 import { PromptInputQueuedCommands } from '../../components/PromptInput/PromptInputQueuedCommands.js';
-import { useRemoteSession } from '../../hooks/useRemoteSession.js';
-import { useDirectConnect } from '../../hooks/useDirectConnect.js';
 import type { DirectConnectConfig } from '../../server/directConnectManager.js';
-import { useSSHSession } from '../../hooks/useSSHSession.js';
 import type { SSHSession } from '../../ssh/createSSHSession.js';
 import { SkillImprovementSurvey } from '../../components/SkillImprovementSurvey.js';
 import { useSkillImprovementSurvey } from '../../hooks/useSkillImprovementSurvey.js';
@@ -215,7 +218,6 @@ import type { ThinkingConfig } from '../../utils/thinking.js';
 import { gracefulShutdownSync } from '../../utils/gracefulShutdown.js';
 import { handlePromptSubmit, type PromptInputHelpers } from '../../utils/handlePromptSubmit.js';
 import { useQueueProcessor } from '../../hooks/useQueueProcessor.js';
-import { useMailboxBridge } from '../../hooks/useMailboxBridge.js';
 import { queryCheckpoint, logQueryProfileReport } from '../../utils/queryProfiler.js';
 import type {
   Message as MessageType,
@@ -235,7 +237,6 @@ import { useManagePlugins } from '../../hooks/useManagePlugins.js';
 import { Messages } from '../../components/Messages.js';
 import { TaskListV2 } from '../../components/TaskListV2.js';
 import { TeammateViewHeader } from '../../components/TeammateViewHeader.js';
-import { getPipeIpc } from '../../utils/pipeTransport.js';
 import { useTasksV2WithCollapseEffect } from '../../hooks/useTasksV2.js';
 import { maybeMarkProjectOnboardingComplete } from '../../projectOnboardingState.js';
 import type { MCPServerConnection } from '../../services/mcp/types.js';
@@ -301,7 +302,12 @@ import { isBgSession, updateSessionName, updateSessionActivity } from '../../uti
 import { type InProcessTeammateTaskState } from '../../tasks/InProcessTeammateTask/types.js';
 import { restoreRemoteAgentTasks } from '../../tasks/RemoteAgentTask/RemoteAgentTask.js';
 import { BackgroundAgentSelector } from '../../components/tasks/BackgroundAgentSelector.js';
-import { useInboxPoller } from '../../hooks/useInboxPoller.js';
+import { usePipeLifecycle, usePipeRouting } from './runtime/usePipeRuntime.js';
+import { useRemoteRuntime } from './runtime/useRemoteRuntime.js';
+import { useQueryMetrics } from './query/useQueryMetrics.js';
+import { useQueryEvents } from './query/useQueryEvents.js';
+import { useQueryExecution } from './query/useQueryExecution.js';
+import { useQueryRunner } from './query/useQueryRunner.js';
 // Dead code elimination: conditional import for loop mode
 /* eslint-disable @typescript-eslint/no-require-imports */
 const proactiveModule = feature('PROACTIVE') || feature('KAIROS') ? require('../../proactive/index.js') : null;
@@ -319,25 +325,6 @@ const useGoalContinuation: typeof import('../../hooks/useGoalContinuation.js').u
 )
   ? require('../../hooks/useGoalContinuation.js').useGoalContinuation
   : null;
-const useMasterMonitor = feature('UDS_INBOX')
-  ? require('../../hooks/useMasterMonitor.js').useMasterMonitor
-  : () => undefined;
-const useSlaveNotifications = feature('UDS_INBOX')
-  ? require('../../hooks/useSlaveNotifications.js').useSlaveNotifications
-  : () => undefined;
-const usePipeIpc = feature('UDS_INBOX') ? require('../../hooks/usePipeIpc.js').usePipeIpc : () => undefined;
-const usePipeRelay = feature('UDS_INBOX')
-  ? require('../../hooks/usePipeRelay.js').usePipeRelay
-  : () => ({ relayPipeMessage: () => false, pipeReturnHadErrorRef: { current: false } });
-const usePipePermissionForward = feature('UDS_INBOX')
-  ? require('../../hooks/usePipePermissionForward.js').usePipePermissionForward
-  : () => undefined;
-const usePipeMuteSync = feature('UDS_INBOX')
-  ? require('../../hooks/usePipeMuteSync.js').usePipeMuteSync
-  : () => undefined;
-const usePipeRouter = feature('UDS_INBOX')
-  ? require('../../hooks/usePipeRouter.js').usePipeRouter
-  : () => ({ routeToSelectedPipes: () => false });
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { isAgentSwarmsEnabled } from '../../utils/agentSwarmsEnabled.js';
 import { useTaskListWatcher } from '../../hooks/useTaskListWatcher.js';
@@ -450,7 +437,6 @@ import { UltraplanLaunchDialog } from '../../components/ultraplan/UltraplanLaunc
 import { launchUltraplan } from '../../commands/ultraplan.js';
 // Session manager removed - using AppState now
 import type { RemoteSessionConfig } from '../../remote/RemoteSessionManager.js';
-import { REMOTE_SAFE_COMMANDS } from '../../commands.js';
 import type { RemoteMessageContent } from '../../utils/teleport/api.js';
 import { FullscreenLayout } from '../../components/FullscreenLayout.js';
 import { isFullscreenEnvEnabled, maybeGetTmuxMouseHint, isMouseTrackingEnabled } from '../../utils/fullscreen.js';
@@ -661,6 +647,11 @@ export function REPL({
 
   const [screen, setScreen] = useState<Screen>('prompt');
   const { addNotification, removeNotification } = useNotifications();
+  const { relayPipeMessage, pipeReturnHadErrorRef, routeToSelectedPipes } = usePipeRouting({
+    store,
+    setAppState,
+    addNotification,
+  });
 
   // eslint-disable-next-line prefer-const
   let trySuggestBgPRIntercept = SUGGEST_BG_PR_NOOP;
@@ -919,7 +910,7 @@ export function REPL({
 
   // Ref to track current focusedInputDialog for use in callbacks
   // This avoids stale closures when checking dialog state in timer callbacks
-  const focusedInputDialogRef = React.useRef<ReturnType<typeof getFocusedInputDialog>>(undefined);
+  const focusedInputDialogRef = React.useRef<FocusedInputDialog>(undefined);
 
   // How long after the last keystroke before deferred dialogs are shown
   const PROMPT_SUPPRESSION_MS = 1500;
@@ -1179,112 +1170,49 @@ export function REPL({
       setIsPromptInputActive,
       trySuggestBgPRIntercept,
     });
-  // Callback to filter commands based on CCR's available slash commands
-  const handleRemoteInit = useCallback(
-    (remoteSlashCommands: string[]) => {
-      const remoteCommandSet = new Set(remoteSlashCommands);
-      // Keep commands that CCR lists OR that are in the local-safe set
-      setLocalCommands(prev => prev.filter(cmd => remoteCommandSet.has(cmd.name) || REMOTE_SAFE_COMMANDS.has(cmd)));
-    },
-    [setLocalCommands],
-  );
-
-  const [inProgressToolUseIDs, setInProgressToolUseIDs] = useState<Set<string>>(new Set());
-  const hasInterruptibleToolInProgressRef = useRef(false);
-
-  // Remote session hook - manages WebSocket connection and message handling for --remote mode
-  const remoteSession = useRemoteSession({
-    config: remoteSessionConfig,
+  const {
+    activeRemote,
+    remoteSession,
+    inProgressToolUseIDs,
+    setInProgressToolUseIDs,
+    hasInterruptibleToolInProgressRef,
+  } = useRemoteRuntime({
+    remoteSessionConfig,
+    directConnectConfig,
+    sshSession,
     setMessages,
     setIsLoading: setIsExternalLoading,
-    onInit: handleRemoteInit,
+    setLocalCommands,
     setToolUseConfirmQueue,
     tools: combinedInitialTools,
     setStreamingToolUses,
     setStreamMode,
-    setInProgressToolUseIDs,
   });
-
-  // Direct connect hook - manages WebSocket to a claude server for `claude connect` mode
-  const directConnect = useDirectConnect({
-    config: directConnectConfig,
-    setMessages,
-    setIsLoading: setIsExternalLoading,
-    setToolUseConfirmQueue,
-    tools: combinedInitialTools,
-  });
-
-  // SSH session hook - manages ssh child process for `claude ssh` mode.
-  // Same callback shape as useDirectConnect; only the transport under the
-  // hood differs (ChildProcess stdin/stdout vs WebSocket).
-  const sshRemote = useSSHSession({
-    session: sshSession,
-    setMessages,
-    setIsLoading: setIsExternalLoading,
-    setToolUseConfirmQueue,
-    tools: combinedInitialTools,
-  });
-
-  // Use whichever remote mode is active
-  const activeRemote = sshRemote.isRemoteMode ? sshRemote : directConnect.isRemoteMode ? directConnect : remoteSession;
 
   const [pastedContents, setPastedContents] = useState<Record<number, PastedContent>>({});
   const [submitCount, setSubmitCount] = useState(0);
   // Ref instead of state to avoid triggering React re-renders on every
   // streaming text_delta. The spinner reads this via its animation timer.
-  const responseLengthRef = useRef(0);
-  // API performance metrics ref for ant-only spinner display (TTFT/OTPS).
-  // Accumulates metrics from all API requests in a turn for P50 aggregation.
-  const apiMetricsRef = useRef<
-    Array<{
-      ttftMs: number;
-      firstTokenTime: number;
-      lastTokenTime: number;
-      responseLengthBaseline: number;
-      // Tracks responseLengthRef at the time of the last content addition.
-      // Updated by both streaming deltas and subagent message content.
-      // lastTokenTime is also updated at the same time, so the OTPS
-      // denominator correctly includes subagent processing time.
-      endResponseLength: number;
-    }>
-  >([]);
-  const setResponseLength = useCallback((f: (prev: number) => number) => {
-    const prev = responseLengthRef.current;
-    responseLengthRef.current = f(prev);
-    // When content is added (not a compaction reset), update the latest
-    // metrics entry so OTPS reflects all content generation activity.
-    // Updating lastTokenTime here ensures the denominator includes both
-    // streaming time AND subagent execution time, preventing inflation.
-    if (responseLengthRef.current > prev) {
-      const entries = apiMetricsRef.current;
-      if (entries.length > 0) {
-        const lastEntry = entries.at(-1)!;
-        lastEntry.lastTokenTime = Date.now();
-        lastEntry.endResponseLength = responseLengthRef.current;
-      }
-    }
-  }, []);
+  const reducedMotion = useAppState(s => s.settings.prefersReducedMotion) ?? false;
+  const showStreamingText = !reducedMotion && !hasCursorUpViewportYankBug();
+  const {
+    responseLengthRef,
+    apiMetricsRef,
+    setResponseLength,
+    streamingText,
+    setStreamingText,
+    onStreamingText,
+    visibleStreamingText,
+  } = useQueryMetrics(showStreamingText);
 
   // Streaming text display: set state directly per delta (Ink's 16ms render
   // throttle batches rapid updates). Cleared on message arrival (messages.ts)
   // so displayedMessages switches from deferredMessages to messages atomically.
-  const [streamingText, setStreamingText] = useState<string | null>(null);
-  const reducedMotion = useAppState(s => s.settings.prefersReducedMotion) ?? false;
-  const showStreamingText = !reducedMotion && !hasCursorUpViewportYankBug();
-  const onStreamingText = useCallback(
-    (f: (current: string | null) => string | null) => {
-      if (!showStreamingText) return;
-      setStreamingText(f);
-    },
-    [showStreamingText],
-  );
 
   // Hide the in-progress source line so text streams line-by-line, not
   // char-by-char. lastIndexOf returns -1 when no newline, giving '' → null.
   // Guard on showStreamingText so toggling reducedMotion mid-stream
   // immediately hides the streaming preview.
-  const visibleStreamingText =
-    streamingText && showStreamingText ? streamingText.substring(0, streamingText.lastIndexOf('\n') + 1) || null : null;
 
   const [lastQueryCompletionTime, setLastQueryCompletionTime] = useState(0);
   const [spinnerMessage, setSpinnerMessage] = useState<string | null>(null);
@@ -1602,233 +1530,6 @@ export function REPL({
     })),
   );
 
-  const resume = useCallback(
-    async (sessionId: UUID, log: LogOption, entrypoint: ResumeEntrypoint) => {
-      const resumeStart = performance.now();
-      try {
-        // Deserialize messages to properly clean up the conversation
-        // This filters unresolved tool uses and adds a synthetic assistant message if needed
-        const messages = deserializeMessages(log.messages);
-
-        // Match coordinator/normal mode to the resumed session
-        if (feature('COORDINATOR_MODE')) {
-          /* eslint-disable @typescript-eslint/no-require-imports */
-          const coordinatorModule =
-            require('../../coordinator/coordinatorMode.js') as typeof import('../../coordinator/coordinatorMode.js');
-          /* eslint-enable @typescript-eslint/no-require-imports */
-          const warning = coordinatorModule.matchSessionMode(log.mode);
-          if (warning) {
-            // Re-derive agent definitions after mode switch so built-in agents
-            // reflect the new coordinator/normal mode
-            /* eslint-disable @typescript-eslint/no-require-imports */
-            const { getAgentDefinitionsWithOverrides, getActiveAgentsFromList } =
-              require('@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js') as typeof import('@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js');
-            /* eslint-enable @typescript-eslint/no-require-imports */
-            getAgentDefinitionsWithOverrides.cache.clear?.();
-            const freshAgentDefs = await getAgentDefinitionsWithOverrides(getOriginalCwd());
-
-            setAppState(prev => ({
-              ...prev,
-              agentDefinitions: {
-                ...freshAgentDefs,
-                allAgents: freshAgentDefs.allAgents,
-                activeAgents: getActiveAgentsFromList(freshAgentDefs.allAgents),
-              },
-            }));
-            messages.push(createSystemMessage(warning, 'warning'));
-          }
-        }
-
-        // Fire SessionEnd hooks for the current session before starting the
-        // resumed one, mirroring the /clear flow in conversation.ts.
-        const sessionEndTimeoutMs = getSessionEndHookTimeoutMs();
-        await executeSessionEndHooks('resume', {
-          getAppState: () => store.getState(),
-          setAppState,
-          signal: AbortSignal.timeout(sessionEndTimeoutMs),
-          timeoutMs: sessionEndTimeoutMs,
-        });
-
-        // Process session start hooks for resume
-        const hookMessages = await processSessionStartHooks('resume', {
-          sessionId,
-          agentType: mainThreadAgentDefinition?.agentType,
-          model: mainLoopModel,
-        });
-
-        // Append hook messages to the conversation
-        messages.push(...hookMessages);
-        // For forks, generate a new plan slug and copy the plan content so the
-        // original and forked sessions don't clobber each other's plan files.
-        // For regular resumes, reuse the original session's plan slug.
-        if (entrypoint === 'fork') {
-          void copyPlanForFork(log, asSessionId(sessionId));
-        } else {
-          void copyPlanForResume(log, asSessionId(sessionId));
-        }
-
-        // Restore file history and attribution state from the resumed conversation
-        restoreSessionStateFromLog(log, setAppState);
-        if (log.fileHistorySnapshots) {
-          void copyFileHistoryForResume(log);
-        }
-
-        // Restore agent setting from the resumed conversation
-        // Always reset to the new session's values (or clear if none),
-        // matching the standaloneAgentContext pattern below
-        const { agentDefinition: restoredAgent } = restoreAgentFromSession(
-          log.agentSetting,
-          initialMainThreadAgentDefinition,
-          agentDefinitions,
-        );
-        setMainThreadAgentDefinition(restoredAgent);
-        setAppState(prev => ({ ...prev, agent: restoredAgent?.agentType }));
-
-        // Restore standalone agent context from the resumed conversation
-        // Always reset to the new session's values (or clear if none)
-        setAppState(prev => ({
-          ...prev,
-          standaloneAgentContext: computeStandaloneAgentContext(log.agentName, log.agentColor),
-        }));
-        void updateSessionName(log.agentName);
-
-        // Restore read file state from the message history
-        restoreReadFileState(messages, log.projectPath ?? getOriginalCwd());
-
-        // Clear any active loading state (no queryId since we're not in a query)
-        resetLoadingState();
-        setAbortController(null);
-
-        setConversationId(sessionId);
-
-        // Get target session's costs BEFORE saving current session
-        // (saveCurrentSessionCosts overwrites the config, so we need to read first)
-        const targetSessionCosts = getStoredSessionCosts(sessionId);
-
-        // Save current session's costs before switching to avoid losing accumulated costs
-        saveCurrentSessionCosts();
-
-        // Reset cost state for clean slate before restoring target session
-        resetCostState();
-
-        // Switch session (id + project dir atomically). fullPath may point to
-        // a different project (cross-worktree, /branch); null derives from
-        // current originalCwd.
-        switchSession(asSessionId(sessionId), log.fullPath ? dirname(log.fullPath) : null);
-        // Rename asciicast recording to match the resumed session ID
-        const { renameRecordingForSession } = await import('../../utils/asciicast.js');
-        await renameRecordingForSession();
-        await resetSessionFilePointer();
-
-        // Clear then restore session metadata so it's re-appended on exit via
-        // reAppendSessionMetadata. clearSessionMetadata must be called first:
-        // restoreSessionMetadata only sets-if-truthy, so without the clear,
-        // a session without an agent name would inherit the previous session's
-        // cached name and write it to the wrong transcript on first message.
-        clearSessionMetadata();
-        restoreSessionMetadata(log);
-
-        // Hydrate goal state from the resumed session's transcript
-        if (feature('GOAL') && log.goal) {
-          const { hydrateGoalFromTranscript } =
-            require('../../services/goal/goalStorage.js') as typeof import('../../services/goal/goalStorage.js');
-          const goalsMap = new Map<UUID, import('../../types/logs.js').GoalState>();
-          goalsMap.set(sessionId as UUID, log.goal);
-          hydrateGoalFromTranscript(goalsMap, sessionId as UUID);
-        }
-
-        // Resumed sessions shouldn't re-title from mid-conversation context
-        // (same reasoning as the useRef seed), and the previous session's
-        // Haiku title shouldn't carry over.
-        haikuTitleAttemptedRef.current = true;
-        setHaikuTitle(undefined);
-
-        // Exit any worktree a prior /resume entered, then cd into the one
-        // this session was in. Without the exit, resuming from worktree B
-        // to non-worktree C leaves cwd/currentWorktreeSession stale;
-        // resuming B→C where C is also a worktree fails entirely
-        // (getCurrentWorktreeSession guard blocks the switch).
-        //
-        // Skipped for /branch: forkLog doesn't carry worktreeSession, so
-        // this would kick the user out of a worktree they're still working
-        // in. Same fork skip as processResumedConversation for the adopt —
-        // fork materializes its own file via recordTranscript on REPL mount.
-        if (entrypoint !== 'fork') {
-          exitRestoredWorktree();
-          restoreWorktreeForResume(log.worktreeSession);
-          adoptResumedSessionFile();
-          void restoreRemoteAgentTasks({
-            abortController: new AbortController(),
-            getAppState: () => store.getState(),
-            setAppState,
-          });
-        } else {
-          // Fork: same re-persist as /clear (conversation.ts). The clear
-          // above wiped currentSessionWorktree, forkLog doesn't carry it,
-          // and the process is still in the same worktree.
-          const ws = getCurrentWorktreeSession();
-          if (ws) saveWorktreeState(ws);
-        }
-
-        // Persist the current mode so future resumes know what mode this session was in
-        if (feature('COORDINATOR_MODE')) {
-          /* eslint-disable @typescript-eslint/no-require-imports */
-          const { saveMode } = require('../../utils/sessionStorage.js');
-          const { isCoordinatorMode } =
-            require('../../coordinator/coordinatorMode.js') as typeof import('../../coordinator/coordinatorMode.js');
-          /* eslint-enable @typescript-eslint/no-require-imports */
-          saveMode(isCoordinatorMode() ? 'coordinator' : 'normal');
-        }
-
-        // Restore target session's costs from the data we read earlier
-        if (targetSessionCosts) {
-          setCostStateForRestore(targetSessionCosts);
-        }
-
-        // Reconstruct replacement state for the resumed session. Runs after
-        // setSessionId so any NEW replacements post-resume write to the
-        // resumed session's tool-results dir. Gated on ref.current: the
-        // initial mount already read the feature flag, so we don't re-read
-        // it here (mid-session flag flips stay unobservable in both
-        // directions).
-        //
-        // Skipped for in-session /branch: the existing ref is already correct
-        // (branch preserves tool_use_ids), so there's no need to reconstruct.
-        // createFork() does write content-replacement entries to the forked
-        // JSONL with the fork's sessionId, so `claude -r {forkId}` also works.
-        if (contentReplacementStateRef.current && entrypoint !== 'fork') {
-          contentReplacementStateRef.current = reconstructContentReplacementState(
-            messages,
-            log.contentReplacements ?? [],
-          );
-        }
-
-        // Reset messages to the provided initial messages
-        // Use a callback to ensure we're not dependent on stale state
-        setMessages(() => messages);
-
-        // Clear any active tool JSX
-        setToolJSX(null);
-
-        // Clear input to ensure no residual state
-        setInputValue('');
-
-        logEvent('tengu_session_resumed', {
-          entrypoint: entrypoint as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          success: true,
-          resume_duration_ms: Math.round(performance.now() - resumeStart),
-        });
-      } catch (error) {
-        logEvent('tengu_session_resumed', {
-          entrypoint: entrypoint as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          success: false,
-        });
-        throw error;
-      }
-    },
-    [resetLoadingState, setAppState],
-  );
-
   // Lazy init: useRef(createX()) would call createX on every render and
   // discard the result. LRUCache construction inside FileStateCache is
   // expensive (~170ms), so we use useState's lazy initializer to create
@@ -1857,6 +1558,26 @@ export function REPL({
       bashTools.current.add(tool);
     }
   }, []);
+
+  const resume = useConversationResume({
+    store,
+    setAppState,
+    mainThreadAgentDefinition,
+    initialMainThreadAgentDefinition,
+    agentDefinitions,
+    mainLoopModel,
+    setMainThreadAgentDefinition,
+    restoreReadFileState,
+    resetLoadingState,
+    setAbortController,
+    setConversationId,
+    haikuTitleAttemptedRef,
+    setHaikuTitle,
+    contentReplacementStateRef,
+    setMessages,
+    setToolJSX,
+    setInputValue,
+  });
 
   // Extract read file state from initialMessages on mount
   // This handles CLI flag resume (--resume-session) and ResumeConversation screen
@@ -1894,88 +1615,31 @@ export function REPL({
   // Permission and interactive dialogs can show even when toolJSX is set,
   // as long as shouldContinueAnimation is true. This prevents deadlocks when
   // agents set background hints while waiting for user interaction.
-  function getFocusedInputDialog():
-    | 'message-selector'
-    | 'sandbox-permission'
-    | 'tool-permission'
-    | 'prompt'
-    | 'worker-sandbox-permission'
-    | 'elicitation'
-    | 'cost'
-    | 'idle-return'
-    | 'init-onboarding'
-    | 'ide-onboarding'
-    | 'model-switch'
-    | 'undercover-callout'
-    | 'effort-callout'
-    | 'remote-callout'
-    | 'lsp-recommendation'
-    | 'plugin-hint'
-    | 'search-extra-tools-hint'
-    | 'desktop-upsell'
-    | 'ultraplan-choice'
-    | 'ultraplan-launch'
-    | undefined {
-    // Exit states always take precedence
-    if (isExiting || exitFlow) return undefined;
-
-    // High priority dialogs (always show regardless of typing)
-    if (isMessageSelectorVisible) return 'message-selector';
-
-    // Suppress interrupt dialogs while user is actively typing
-    if (isPromptInputActive) return undefined;
-
-    if (sandboxPermissionRequestQueue[0]) return 'sandbox-permission';
-
-    // Permission/interactive dialogs (show unless blocked by toolJSX)
-    const allowDialogsWithAnimation = !toolJSX || toolJSX.shouldContinueAnimation;
-
-    if (allowDialogsWithAnimation && toolUseConfirmQueue[0]) return 'tool-permission';
-    if (allowDialogsWithAnimation && promptQueue[0]) return 'prompt';
-    // Worker sandbox permission prompts (network access) from swarm workers
-    if (allowDialogsWithAnimation && workerSandboxPermissions.queue[0]) return 'worker-sandbox-permission';
-    if (allowDialogsWithAnimation && elicitation.queue[0]) return 'elicitation';
-    if (allowDialogsWithAnimation && showingCostDialog) return 'cost';
-    if (allowDialogsWithAnimation && idleReturnPending) return 'idle-return';
-
-    if (feature('ULTRAPLAN') && allowDialogsWithAnimation && !isLoading && ultraplanPendingChoice)
-      return 'ultraplan-choice';
-
-    if (feature('ULTRAPLAN') && allowDialogsWithAnimation && !isLoading && ultraplanLaunchPending)
-      return 'ultraplan-launch';
-
-    // Onboarding dialogs (special conditions)
-    if (allowDialogsWithAnimation && showIdeOnboarding) return 'ide-onboarding';
-
-    // Model switch callout (ant-only, eliminated from external builds)
-    if (process.env.USER_TYPE === 'ant' && allowDialogsWithAnimation && showModelSwitchCallout) return 'model-switch';
-
-    // Undercover auto-enable explainer (ant-only, eliminated from external builds)
-    if (process.env.USER_TYPE === 'ant' && allowDialogsWithAnimation && showUndercoverCallout)
-      return 'undercover-callout';
-
-    // Effort callout (shown once for Opus 4.6 users when effort is enabled)
-    if (allowDialogsWithAnimation && showEffortCallout) return 'effort-callout';
-
-    // Remote callout (shown once before first bridge enable)
-    if (allowDialogsWithAnimation && showRemoteCallout) return 'remote-callout';
-
-    // LSP plugin recommendation (lowest priority - non-blocking suggestion)
-    if (allowDialogsWithAnimation && lspRecommendation) return 'lsp-recommendation';
-
-    // Plugin hint from CLI/SDK stderr (same priority band as LSP rec)
-    if (allowDialogsWithAnimation && hintRecommendation) return 'plugin-hint';
-
-    // Tool search hint (discovered tools relevant to current query)
-    if (allowDialogsWithAnimation && searchExtraToolsHint.visible) return 'search-extra-tools-hint';
-
-    // Desktop app upsell (max 3 launches, lowest priority)
-    if (allowDialogsWithAnimation && showDesktopUpsellStartup) return 'desktop-upsell';
-
-    return undefined;
-  }
-
-  const focusedInputDialog = getFocusedInputDialog();
+  const focusedInputDialog = selectFocusedInputDialog({
+    exiting: isExiting || !!exitFlow,
+    messageSelector: isMessageSelectorVisible,
+    promptInputActive: isPromptInputActive,
+    sandboxPermission: !!sandboxPermissionRequestQueue[0],
+    toolPermission: !!toolUseConfirmQueue[0],
+    prompt: !!promptQueue[0],
+    workerSandboxPermission: !!workerSandboxPermissions.queue[0],
+    elicitation: !!elicitation.queue[0],
+    cost: showingCostDialog,
+    idleReturn: !!idleReturnPending,
+    allowDialogsWithAnimation: !toolJSX || toolJSX.shouldContinueAnimation === true,
+    isLoading,
+    ultraplanChoice: !!ultraplanPendingChoice,
+    ultraplanLaunch: !!ultraplanLaunchPending,
+    ideOnboarding: showIdeOnboarding,
+    modelSwitch: showModelSwitchCallout,
+    undercoverCallout: showUndercoverCallout,
+    effortCallout: showEffortCallout,
+    remoteCallout: showRemoteCallout,
+    lspRecommendation: !!lspRecommendation,
+    pluginHint: !!hintRecommendation,
+    searchExtraToolsHint: searchExtraToolsHint.visible,
+    desktopUpsell: showDesktopUpsellStartup,
+  });
 
   // True when permission prompts exist but are hidden because the user is typing
   const hasSuppressedDialogs =
@@ -2629,701 +2293,79 @@ export function REPL({
     onBackgroundQuery: handleBackgroundQuery,
   });
 
-  const onQueryEvent = useCallback(
-    (event: Parameters<typeof handleMessageFromStream>[0]) => {
-      handleMessageFromStream(
-        event,
-        newMessage => {
-          if (isCompactBoundaryMessage(newMessage)) {
-            // Fullscreen: keep pre-compact messages for scrollback. query.ts
-            // slices at the boundary for API calls, Messages.tsx skips the
-            // boundary filter in fullscreen, and useLogMessages treats this
-            // as an incremental append (first uuid unchanged). Cap at one
-            // compact-interval of scrollback — normalizeMessages/applyGrouping
-            // are O(n) per render, so drop everything before the previous
-            // boundary to keep n bounded across multi-day sessions.
-            if (isFullscreenEnvEnabled()) {
-              setMessages(old => {
-                const postBoundary = getMessagesAfterCompactBoundary(old, {
-                  includeSnipped: true,
-                });
-                // Hard cap: keep at most 500 messages in fullscreen scrollback
-                // to prevent unbounded memory growth in multi-day sessions.
-                // normalizeMessages/applyGrouping are O(n), and Ink fiber
-                // trees cost ~250KB RSS per message. Without this cap,
-                // scrollback after several compactions can reach thousands
-                // of messages (observed: 13k+, 1GB+ heap).
-                const MAX_FULLSCREEN_SCROLLBACK = 500;
-                const kept =
-                  postBoundary.length > MAX_FULLSCREEN_SCROLLBACK
-                    ? postBoundary.slice(-MAX_FULLSCREEN_SCROLLBACK)
-                    : postBoundary;
-                return [...kept, newMessage];
-              });
-            } else {
-              setMessages(() => [newMessage]);
-            }
-            // Bump conversationId so Messages.tsx row keys change and
-            // stale memoized rows remount with post-compact content.
-            setConversationId(randomUUID());
-            // Compaction succeeded — clear the context-blocked flag so ticks resume
-            if (feature('PROACTIVE') || feature('KAIROS')) {
-              proactiveModule?.setContextBlocked(false);
-            }
-          } else if (
-            newMessage.type === 'progress' &&
-            isEphemeralToolProgress((newMessage as unknown as { data?: { type?: string } }).data?.type)
-          ) {
-            // Replace the previous ephemeral progress tick for the same tool
-            // call instead of appending. Sleep/Bash emit a tick per second and
-            // only the last one is rendered; appending blows up the messages
-            // array (13k+ observed) and the transcript (120MB of sleep_progress
-            // lines). useLogMessages tracks length, so same-length replacement
-            // also skips the transcript write.
-            // agent_progress / hook_progress / skill_progress are NOT ephemeral
-            // — each carries distinct state the UI needs (e.g. subagent tool
-            // history). Replacing those leaves the AgentTool UI stuck at
-            // "Initializing…" because it renders the full progress trail.
-            setMessages(oldMessages => {
-              const newData = newMessage.data as Record<string, unknown>;
-              // Scan backwards to find the last ephemeral progress with matching
-              // parentToolUseID and type. Previously only checked the last message,
-              // so interleaved non-ephemeral messages caused duplicate progress
-              // entries to accumulate (observed 13k+ entries in sleep-heavy sessions).
-              for (let i = oldMessages.length - 1; i >= 0; i--) {
-                const m = oldMessages[i]!;
-                if (m.type !== 'progress') break;
-                const mData = m.data as Record<string, unknown> | undefined;
-                if (m.parentToolUseID === newMessage.parentToolUseID && mData?.type === newData.type) {
-                  const copy = oldMessages.slice();
-                  copy[i] = newMessage;
-                  return copy;
-                }
-              }
-              return [...oldMessages, newMessage];
-            });
-          } else {
-            setMessages(oldMessages => [...oldMessages, newMessage]);
-          }
-          // Block ticks on API errors to prevent tick → error → tick
-          // runaway loops (e.g., auth failure, rate limit, blocking limit).
-          // Cleared on compact boundary (above) or successful response (below).
-          if (feature('PROACTIVE') || feature('KAIROS')) {
-            if (newMessage.type === 'assistant' && 'isApiErrorMessage' in newMessage && newMessage.isApiErrorMessage) {
-              proactiveModule?.setContextBlocked(true);
-            } else if (newMessage.type === 'assistant') {
-              proactiveModule?.setContextBlocked(false);
-            }
-          }
-          // Auto-pause active /goal when the turn failed due to connectivity.
-          // Continuing immediately after network failures usually burns turns
-          // without progress and can rapidly hit max-turn guards.
-          if (
-            feature('GOAL') &&
-            newMessage.type === 'assistant' &&
-            'isApiErrorMessage' in newMessage &&
-            newMessage.isApiErrorMessage
-          ) {
-            const assistantText =
-              getContentText((newMessage.message?.content ?? '') as string | ContentBlockParam[]) ?? '';
-            const lowerText = assistantText.toLowerCase();
-            const isConnectivityFailure =
-              lowerText.includes('connection error') ||
-              lowerText.includes('fetch failed') ||
-              lowerText.includes('network error') ||
-              lowerText.includes('enotfound') ||
-              lowerText.includes('econnreset') ||
-              lowerText.includes('etimedout');
-
-            if (isConnectivityFailure) {
-              const { getGoal, pauseGoal } =
-                require('../../services/goal/goalState.js') as typeof import('../../services/goal/goalState.js');
-              const { persistCurrentGoal } =
-                require('../../services/goal/goalStorage.js') as typeof import('../../services/goal/goalStorage.js');
-              const currentGoal = getGoal();
-              if (currentGoal?.status === 'active') {
-                pauseGoal();
-                persistCurrentGoal();
-                addNotification({
-                  key: 'goal-auto-paused-connectivity-error',
-                  text: 'Detected connection error. Active goal was auto-paused. Run /goal resume after network recovers.',
-                  priority: 'immediate',
-                });
-              }
-            }
-          }
-          // Relay assistant response to master when in slave mode.
-          if (feature('UDS_INBOX') && newMessage.type === 'assistant') {
-            // Extract text from content blocks (API format)
-            const msg = newMessage.message as any;
-            const contentBlocks = msg?.content ?? (newMessage as any).content ?? [];
-            const textParts: string[] = [];
-            if (Array.isArray(contentBlocks)) {
-              for (const block of contentBlocks) {
-                if (typeof block === 'string') {
-                  textParts.push(block);
-                } else if (block?.type === 'text' && block.text) {
-                  textParts.push(block.text);
-                }
-              }
-            } else if (typeof contentBlocks === 'string') {
-              textParts.push(contentBlocks);
-            }
-            const text = textParts.join('\n').trim();
-            if ('isApiErrorMessage' in newMessage && newMessage.isApiErrorMessage) {
-              pipeReturnHadErrorRef.current = true;
-              relayPipeMessage({
-                type: 'error',
-                data: text || 'Slave request failed',
-              });
-            } else if (text) {
-              relayPipeMessage({ type: 'stream', data: text });
-            }
-          }
-        },
-        newContent => {
-          // setResponseLength handles updating both responseLengthRef (for
-          // spinner animation) and apiMetricsRef (endResponseLength/lastTokenTime
-          // for OTPS). No separate metrics update needed here.
-          setResponseLength(length => length + newContent.length);
-        },
-        setStreamMode,
-        setStreamingToolUses,
-        tombstonedMessage => {
-          setMessages(oldMessages => oldMessages.filter(m => m !== tombstonedMessage));
-          void removeTranscriptMessage(tombstonedMessage.uuid);
-        },
-        setStreamingThinking,
-        metrics => {
-          const now = Date.now();
-          const baseline = responseLengthRef.current;
-          apiMetricsRef.current.push({
-            ...metrics,
-            firstTokenTime: now,
-            lastTokenTime: now,
-            responseLengthBaseline: baseline,
-            endResponseLength: baseline,
-          });
-        },
-        onStreamingText,
-      );
-    },
-    [setMessages, setResponseLength, setStreamMode, setStreamingToolUses, setStreamingThinking, onStreamingText],
-  );
-
-  const onQueryImpl = useCallback(
-    async (
-      messagesIncludingNewMessages: MessageType[],
-      newMessages: MessageType[],
-      abortController: AbortController,
-      shouldQuery: boolean,
-      additionalAllowedTools: string[],
-      mainLoopModelParam: string,
-      effort?: EffortValue,
-    ) => {
-      // Prepare IDE integration for new prompt. Read mcpClients fresh from
-      // store — useManageMCPConnections may have populated it since the
-      // render that captured this closure (same pattern as computeTools).
-      if (shouldQuery) {
-        const freshClients = mergeClients(initialMcpClients, store.getState().mcp.clients);
-        void diagnosticTracker.handleQueryStart(freshClients);
-        const ideClient = getConnectedIdeClient(freshClients);
-        if (ideClient) {
-          void closeOpenDiffs(ideClient);
-        }
-      }
-
-      // Mark onboarding as complete when any user message is sent to Claude
-      void maybeMarkProjectOnboardingComplete();
-
-      // Extract a session title from the first real user message. One-shot
-      // via ref (was tengu_birch_mist experiment: first-message-only to save
-      // Haiku calls). The ref replaces the old `messages.length <= 1` check,
-      // which was broken by SessionStart hook messages (prepended via
-      // useDeferredHookMessages) and attachment messages (appended by
-      // processTextPrompt) — both pushed length past 1 on turn one, so the
-      // title silently fell through to the "Claude Code" default.
-      if (!titleDisabled && !sessionTitle && !agentTitle && !haikuTitleAttemptedRef.current) {
-        const firstUserMessage = newMessages.find(m => m.type === 'user' && !m.isMeta);
-        const text =
-          firstUserMessage?.type === 'user'
-            ? getContentText(firstUserMessage.message!.content as string | ContentBlockParam[])
-            : null;
-        // Skip synthetic breadcrumbs — slash-command output, prompt-skill
-        // expansions (/commit → <command-message>), local-command headers
-        // (/help → <command-name>), and bash-mode (!cmd → <bash-input>).
-        // None of these are the user's topic; wait for real prose.
-        if (
-          text &&
-          !text.startsWith(`<${LOCAL_COMMAND_STDOUT_TAG}>`) &&
-          !text.startsWith(`<${COMMAND_MESSAGE_TAG}>`) &&
-          !text.startsWith(`<${COMMAND_NAME_TAG}>`) &&
-          !text.startsWith(`<${BASH_INPUT_TAG}>`)
-        ) {
-          haikuTitleAttemptedRef.current = true;
-          void generateSessionTitle(text, new AbortController().signal).then(
-            title => {
-              if (title) setHaikuTitle(title);
-              else haikuTitleAttemptedRef.current = false;
-            },
-            () => {
-              haikuTitleAttemptedRef.current = false;
-            },
-          );
-        }
-      }
-
-      // Apply slash-command-scoped allowedTools (from skill frontmatter) to the
-      // store once per turn. This also covers the reset: the next non-skill turn
-      // passes [] and clears it. Must run before the !shouldQuery gate: forked
-      // commands (executeForkedSlashCommand) return shouldQuery=false, and
-      // createGetAppStateWithAllowedTools in forkedAgent.ts reads this field, so
-      // stale skill tools would otherwise leak into forked agent permissions.
-      // Previously this write was hidden inside getToolUseContext's getAppState
-      // (~85 calls/turn); hoisting it here makes getAppState a pure read and stops
-      // ephemeral contexts (permission dialog, BackgroundTasksDialog) from
-      // accidentally clearing it mid-turn.
-      store.setState(prev => {
-        const cur = prev.toolPermissionContext.alwaysAllowRules.command;
-        if (
-          cur === additionalAllowedTools ||
-          (cur?.length === additionalAllowedTools.length && cur.every((v, i) => v === additionalAllowedTools[i]))
-        ) {
-          return prev;
-        }
-        return {
-          ...prev,
-          toolPermissionContext: {
-            ...prev.toolPermissionContext,
-            alwaysAllowRules: {
-              ...prev.toolPermissionContext.alwaysAllowRules,
-              command: additionalAllowedTools,
-            },
-          },
-        };
-      });
-
-      // The last message is an assistant message if the user input was a bash command,
-      // or if the user input was an invalid slash command.
-      if (!shouldQuery) {
-        // Manual /compact sets messages directly (shouldQuery=false) bypassing
-        // handleMessageFromStream. Clear context-blocked if a compact boundary
-        // is present so proactive ticks resume after compaction.
-        if (newMessages.some(isCompactBoundaryMessage)) {
-          // Bump conversationId so Messages.tsx row keys change and
-          // stale memoized rows remount with post-compact content.
-          setConversationId(randomUUID());
-          if (feature('PROACTIVE') || feature('KAIROS')) {
-            proactiveModule?.setContextBlocked(false);
-          }
-        }
-        resetLoadingState();
-        setAbortController(null);
-        return;
-      }
-
-      const toolUseContext = getToolUseContext(
-        messagesIncludingNewMessages,
-        newMessages,
-        abortController,
-        mainLoopModelParam,
-      );
-      // getToolUseContext reads tools/mcpClients fresh from store.getState()
-      // (via computeTools/mergeClients). Use those rather than the closure-
-      // captured `tools`/`mcpClients` — useManageMCPConnections may have
-      // flushed new MCP state between the render that captured this closure
-      // and now. Turn 1 via processInitialMessage is the main beneficiary.
-      const { tools: freshTools, mcpClients: freshMcpClients } = toolUseContext.options;
-
-      // Scope the skill's effort override to this turn's context only —
-      // wrapping getAppState keeps the override out of the global store so
-      // background agents and UI subscribers (Spinner, LogoV2) never see it.
-      if (effort !== undefined) {
-        const previousGetAppState = toolUseContext.getAppState;
-        toolUseContext.getAppState = () => ({
-          ...previousGetAppState(),
-          effortValue: effort,
-        });
-      }
-
-      queryCheckpoint('query_context_loading_start');
-      const [, , defaultSystemPrompt, baseUserContext, systemContext] = await Promise.all([
-        // IMPORTANT: do this after setMessages() above, to avoid UI jank
-        undefined,
-        // Fast-mode circuit breaker check
-        feature('TRANSCRIPT_CLASSIFIER')
-          ? checkAndDisableAutoModeIfNeeded(toolPermissionContext, setAppState, store.getState().fastMode)
-          : undefined,
-        getSystemPrompt(
-          freshTools,
-          mainLoopModelParam,
-          Array.from(toolPermissionContext.additionalWorkingDirectories.keys()),
-          freshMcpClients,
-        ),
-        getUserContext(),
-        getSystemContext(),
-      ]);
-      const userContext = {
-        ...baseUserContext,
-        ...getCoordinatorUserContext(freshMcpClients, isScratchpadEnabled() ? getScratchpadDir() : undefined),
-        ...((feature('PROACTIVE') || feature('KAIROS')) &&
-        proactiveModule?.isProactiveActive() &&
-        !terminalFocusRef.current
-          ? {
-              terminalFocus: 'The terminal is unfocused \u2014 the user is not actively watching.',
-            }
-          : {}),
-      };
-      queryCheckpoint('query_context_loading_end');
-
-      const systemPrompt = buildEffectiveSystemPrompt({
-        mainThreadAgentDefinition,
-        toolUseContext,
-        customSystemPrompt,
-        defaultSystemPrompt,
-        appendSystemPrompt,
-      });
-      toolUseContext.renderedSystemPrompt = systemPrompt;
-
-      queryCheckpoint('query_query_start');
-      resetTurnHookDuration();
-      resetTurnToolDuration();
-      resetTurnClassifierDuration();
-
-      for await (const event of query({
-        messages: messagesIncludingNewMessages,
-        systemPrompt,
-        userContext,
-        systemContext,
-        canUseTool,
-        toolUseContext,
-        querySource: getQuerySourceForREPL(),
-      })) {
-        onQueryEvent(event);
-      }
-
-      if (feature('BUDDY') && typeof (globalThis as Record<string, unknown>).fireCompanionObserver === 'function') {
-        const _fireCompanionObserver = (globalThis as Record<string, unknown>).fireCompanionObserver as (
-          msgs: unknown,
-          cb: (r: unknown) => void,
-        ) => void;
-        void _fireCompanionObserver(messagesRef.current, reaction =>
-          setAppState(prev =>
-            prev.companionReaction === (reaction as typeof prev.companionReaction)
-              ? prev
-              : { ...prev, companionReaction: reaction as typeof prev.companionReaction },
-          ),
-        );
-      }
-
-      queryCheckpoint('query_end');
-
-      if (feature('UDS_INBOX')) {
-        if (abortController.signal.aborted) {
-          pipeReturnHadErrorRef.current = true;
-          relayPipeMessage({
-            type: 'error',
-            data: 'Slave request was interrupted before completion.',
-          });
-        }
-      }
-
-      // Capture ant-only API metrics before resetLoadingState clears the ref.
-      // For multi-request turns (tool use loops), compute P50 across all requests.
-      if (process.env.USER_TYPE === 'ant' && apiMetricsRef.current.length > 0) {
-        const entries = apiMetricsRef.current;
-
-        const ttfts = entries.map(e => e.ttftMs);
-        // Compute per-request OTPS using only active streaming time and
-        // streaming-only content. endResponseLength tracks content added by
-        // streaming deltas only, excluding subagent/compaction inflation.
-        const otpsValues = entries.map(e => {
-          const delta = Math.round((e.endResponseLength - e.responseLengthBaseline) / 4);
-          const samplingMs = e.lastTokenTime - e.firstTokenTime;
-          return samplingMs > 0 ? Math.round(delta / (samplingMs / 1000)) : 0;
-        });
-
-        const isMultiRequest = entries.length > 1;
-        const hookMs = getTurnHookDurationMs();
-        const hookCount = getTurnHookCount();
-        const toolMs = getTurnToolDurationMs();
-        const toolCount = getTurnToolCount();
-        const classifierMs = getTurnClassifierDurationMs();
-        const classifierCount = getTurnClassifierCount();
-        const turnMs = Date.now() - loadingStartTimeRef.current;
-        setMessages(prev => [
-          ...prev,
-          createApiMetricsMessage({
-            ttftMs: isMultiRequest ? median(ttfts) : ttfts[0]!,
-            otps: isMultiRequest ? median(otpsValues) : otpsValues[0]!,
-            isP50: isMultiRequest,
-            hookDurationMs: hookMs > 0 ? hookMs : undefined,
-            hookCount: hookCount > 0 ? hookCount : undefined,
-            turnDurationMs: turnMs > 0 ? turnMs : undefined,
-            toolDurationMs: toolMs > 0 ? toolMs : undefined,
-            toolCount: toolCount > 0 ? toolCount : undefined,
-            classifierDurationMs: classifierMs > 0 ? classifierMs : undefined,
-            classifierCount: classifierCount > 0 ? classifierCount : undefined,
-            configWriteCount: getGlobalConfigWriteCount(),
-          }),
-        ]);
-      }
-
-      resetLoadingState();
-
-      // Log query profiling report if enabled
-      logQueryProfileReport();
-
-      // Signal that a query turn has completed successfully
-      await onTurnComplete?.(messagesRef.current);
-    },
-    [
-      initialMcpClients,
-      resetLoadingState,
-      getToolUseContext,
-      toolPermissionContext,
-      setAppState,
-      customSystemPrompt,
-      onTurnComplete,
-      appendSystemPrompt,
-      canUseTool,
-      mainThreadAgentDefinition,
-      onQueryEvent,
-      sessionTitle,
-      titleDisabled,
-    ],
-  );
-
-  const onQuery = useCallback(
-    async (
-      newMessages: MessageType[],
-      abortController: AbortController,
-      shouldQuery: boolean,
-      additionalAllowedTools: string[],
-      mainLoopModelParam: string,
-      onBeforeQueryCallback?: (input: string, newMessages: MessageType[]) => Promise<boolean>,
-      input?: string,
-      effort?: EffortValue,
-    ): Promise<boolean> => {
-      // If this is a teammate, mark them as active when starting a turn
-      if (isAgentSwarmsEnabled()) {
-        const teamName = getTeamName();
-        const agentName = getAgentName();
-        if (teamName && agentName) {
-          // Fire and forget - turn starts immediately, write happens in background
-          void setMemberActive(teamName, agentName, true);
-        }
-      }
-
-      // Concurrent guard via state machine. tryStart() atomically checks
-      // and transitions idle→running, returning the generation number.
-      // Returns null if already running — no separate check-then-set.
-      const thisGeneration = queryGuard.tryStart();
-      if (thisGeneration === null) {
-        logEvent('tengu_concurrent_onquery_detected', {});
-
-        // Extract and enqueue user message text, skipping meta messages
-        // (e.g. expanded skill content, tick prompts) that should not be
-        // replayed as user-visible text.
-        newMessages
-          .filter((m): m is UserMessage => m.type === 'user' && !m.isMeta)
-          .map(_ => getContentText(_.message.content as string | ContentBlockParam[]))
-          .filter(_ => _ !== null)
-          .forEach((msg, i) => {
-            enqueue({ value: msg, mode: 'prompt' });
-            if (i === 0) {
-              logEvent('tengu_concurrent_onquery_enqueued', {});
-            }
-          });
-        return false;
-      }
-
-      try {
-        pipeReturnHadErrorRef.current = false;
-        setWasAborted(false);
-        // isLoading is derived from queryGuard — tryStart() above already
-        // transitioned dispatching→running, so no setter call needed here.
-        resetTimingRefs();
-        setMessages(oldMessages => [...oldMessages, ...newMessages]);
-        responseLengthRef.current = 0;
-        if (feature('TOKEN_BUDGET')) {
-          const parsedBudget = input ? parseTokenBudget(input) : null;
-          snapshotOutputTokensForTurn(parsedBudget ?? getCurrentTurnTokenBudget());
-        }
-        apiMetricsRef.current = [];
-        setStreamingToolUses([]);
-        setStreamingText(null);
-
-        // messagesRef is updated synchronously by the setMessages wrapper
-        // above, so it already includes newMessages from the append at the
-        // top of this try block.  No reconstruction needed, no waiting for
-        // React's scheduler (previously cost 20-56ms per prompt; the 56ms
-        // case was a GC pause caught during the await).
-        const latestMessages = messagesRef.current;
-
-        if (input) {
-          await mrOnBeforeQuery(input, latestMessages, newMessages.length);
-        }
-
-        // Pass full conversation history to callback
-        if (onBeforeQueryCallback && input) {
-          const shouldProceed = await onBeforeQueryCallback(input, latestMessages);
-          if (!shouldProceed) {
-            return true;
-          }
-        }
-
-        try {
-          await onQueryImpl(
-            latestMessages,
-            newMessages,
-            abortController,
-            shouldQuery,
-            additionalAllowedTools,
-            mainLoopModelParam,
-            effort,
-          );
-        } catch (error) {
-          if (feature('UDS_INBOX')) {
-            pipeReturnHadErrorRef.current = true;
-            relayPipeMessage({
-              type: 'error',
-              data: error instanceof Error ? error.message : String(error),
-            });
-          }
-          throw error;
-        }
-      } finally {
-        // queryGuard.end() atomically checks generation and transitions
-        // running→idle. Returns false if a newer query owns the guard
-        // (cancel+resubmit race where the stale finally fires as a microtask).
-        if (queryGuard.end(thisGeneration)) {
-          setWasAborted(abortController.signal.aborted);
-          setLastQueryCompletionTime(Date.now());
-          skipIdleCheckRef.current = false;
-          // Always reset loading state in finally - this ensures cleanup even
-          // if onQueryImpl throws. onTurnComplete is called separately in
-          // onQueryImpl only on successful completion.
-          resetLoadingState();
-
-          await mrOnTurnComplete(messagesRef.current, abortController.signal.aborted);
-
-          if (feature('UDS_INBOX') && !pipeReturnHadErrorRef.current) {
-            relayPipeMessage({
-              type: 'done',
-              data: '',
-            });
-          }
-
-          // Notify bridge clients that the turn is complete so mobile apps
-          // can stop the spark animation and show post-turn UI.
-          sendBridgeResultRef.current();
-
-          // Auto-hide tungsten panel content at turn end (ant-only), but keep
-          // tungstenActiveSession set so the pill stays in the footer and the user
-          // can reopen the panel. Background tmux tasks (e.g. /hunter) run for
-          // minutes — wiping the session made the pill disappear entirely, forcing
-          // the user to re-invoke Tmux just to peek. Skip on abort so the panel
-          // stays open for inspection (matches the turn-duration guard below).
-          if (process.env.USER_TYPE === 'ant' && !abortController.signal.aborted) {
-            setAppState(prev => {
-              if (prev.tungstenActiveSession === undefined) return prev;
-              if (prev.tungstenPanelAutoHidden === true) return prev;
-              return { ...prev, tungstenPanelAutoHidden: true };
-            });
-          }
-
-          // Capture budget info before clearing (ant-only)
-          let budgetInfo: { tokens: number; limit: number; nudges: number } | undefined;
-          if (feature('TOKEN_BUDGET')) {
-            if (
-              getCurrentTurnTokenBudget() !== null &&
-              getCurrentTurnTokenBudget()! > 0 &&
-              !abortController.signal.aborted
-            ) {
-              budgetInfo = {
-                tokens: getTurnOutputTokens(),
-                limit: getCurrentTurnTokenBudget()!,
-                nudges: getBudgetContinuationCount(),
-              };
-            }
-            snapshotOutputTokensForTurn(null);
-          }
-
-          // Add turn duration message for turns longer than 30s or with a budget
-          // Skip if user aborted or if in loop mode (too noisy between ticks)
-          // Defer if swarm teammates are still running (show when they finish)
-          const turnDurationMs = Date.now() - loadingStartTimeRef.current - totalPausedMsRef.current;
-          if (
-            (turnDurationMs > 30000 || budgetInfo !== undefined) &&
-            !abortController.signal.aborted &&
-            !proactiveActive
-          ) {
-            const hasRunningSwarmAgents = getAllInProcessTeammateTasks(store.getState().tasks).some(
-              t => t.status === 'running',
-            );
-            if (hasRunningSwarmAgents) {
-              // Only record start time on the first deferred turn
-              if (swarmStartTimeRef.current === null) {
-                swarmStartTimeRef.current = loadingStartTimeRef.current;
-              }
-              // Always update budget — later turns may carry the actual budget
-              if (budgetInfo) {
-                swarmBudgetInfoRef.current = budgetInfo;
-              }
-            } else {
-              setMessages(prev => [
-                ...prev,
-                createTurnDurationMessage(turnDurationMs, budgetInfo, count(prev, isLoggableMessage)),
-              ]);
-            }
-          }
-          // Clear the controller so CancelRequestHandler's canCancelRunningTask
-          // reads false at the idle prompt. Without this, the stale non-aborted
-          // controller makes ctrl+c fire onCancel() (aborting nothing) instead of
-          // propagating to the double-press exit flow.
-          setAbortController(null);
-        }
-
-        // Auto-restore: if the user interrupted before any meaningful response
-        // arrived, rewind the conversation and restore their prompt — same as
-        // opening the message selector and picking the last message.
-        // This runs OUTSIDE the queryGuard.end() check because onCancel calls
-        // forceEnd(), which bumps the generation so end() returns false above.
-        // Guards: reason === 'user-cancel' (onCancel/Esc; programmatic aborts
-        // use 'background'/'interrupt' and must not rewind — note abort() with
-        // no args sets reason to a DOMException, not undefined), !isActive (no
-        // newer query started — cancel+resubmit race), empty input (don't
-        // clobber text typed during loading), no queued commands (user queued
-        // B while A was loading → they've moved on, don't restore A; also
-        // avoids removeLastFromHistory removing B's entry instead of A's),
-        // not viewing a teammate (messagesRef is the main conversation — the
-        // old Up-arrow quick-restore had this guard, preserve it).
-        if (
-          abortController.signal.reason === 'user-cancel' &&
-          !queryGuard.isActive &&
-          inputValueRef.current === '' &&
-          getCommandQueueLength() === 0 &&
-          !store.getState().viewingAgentTaskId
-        ) {
-          const msgs = messagesRef.current;
-          const lastUserMsg = msgs.findLast(selectableUserMessagesFilter);
-          if (lastUserMsg) {
-            const idx = msgs.lastIndexOf(lastUserMsg);
-            if (messagesAfterAreOnlySynthetic(msgs, idx)) {
-              // The submit is being undone — undo its history entry too,
-              // otherwise Up-arrow shows the restored text twice.
-              removeLastFromHistory();
-              restoreMessageSyncRef.current(lastUserMsg);
-            }
-          }
-        }
-      }
-      return true;
-    },
-    [onQueryImpl, setAppState, resetLoadingState, queryGuard, mrOnBeforeQuery, mrOnTurnComplete],
-  );
-
+  const onQueryEvent = useQueryEvents({
+    setMessages,
+    setConversationId,
+    addNotification,
+    pipeReturnHadErrorRef,
+    relayPipeMessage,
+    setResponseLength,
+    setStreamMode,
+    setStreamingToolUses,
+    setStreamingThinking,
+    responseLengthRef,
+    apiMetricsRef,
+    onStreamingText,
+  });
+  const onQueryImpl = useQueryExecution({
+    initialMcpClients,
+    store,
+    diagnosticTracker,
+    titleDisabled,
+    sessionTitle,
+    agentTitle,
+    haikuTitleAttemptedRef,
+    setHaikuTitle,
+    toolPermissionContext,
+    setAppState,
+    setConversationId,
+    resetLoadingState,
+    setAbortController,
+    getToolUseContext,
+    terminalFocusRef,
+    mainThreadAgentDefinition,
+    customSystemPrompt,
+    appendSystemPrompt,
+    canUseTool,
+    onQueryEvent,
+    pipeReturnHadErrorRef,
+    relayPipeMessage,
+    apiMetricsRef,
+    loadingStartTimeRef,
+    setMessages,
+    onTurnComplete,
+    messagesRef,
+  });
+  const onQuery = useQueryRunner({
+    queryGuard,
+    setWasAborted,
+    resetTimingRefs,
+    setMessages,
+    messagesRef,
+    responseLengthRef,
+    apiMetricsRef,
+    setStreamingToolUses,
+    setStreamingText,
+    mrOnBeforeQuery,
+    mrOnTurnComplete,
+    onQueryImpl,
+    pipeReturnHadErrorRef,
+    relayPipeMessage,
+    setLastQueryCompletionTime,
+    skipIdleCheckRef,
+    resetLoadingState,
+    sendBridgeResultRef,
+    setAppState,
+    loadingStartTimeRef,
+    totalPausedMsRef,
+    proactiveActive,
+    store,
+    swarmStartTimeRef,
+    swarmBudgetInfoRef,
+    setAbortController,
+    inputValueRef,
+    restoreMessageSyncRef,
+  });
   // Handle initial message (from CLI args or plan mode exit with context clear)
   // This effect runs when isLoading becomes false and there's a pending message
   const initialMessageRef = useRef(false);
@@ -3447,517 +2489,58 @@ export function REPL({
     void processInitialMessage(pending);
   }, [initialMessage, isLoading, setMessages, setAppState, onQuery, mainLoopModel, tools]);
 
-  const onSubmit = useCallback(
-    async (
-      input: string,
-      helpers: PromptInputHelpers,
-      speculationAccept?: {
-        state: ActiveSpeculationState;
-        speculationSessionTimeSavedMs: number;
-        setAppState: SetAppState;
-      },
-      options?: { fromKeybinding?: boolean },
-    ) => {
-      // Re-pin scroll to bottom on submit so the user always sees the new
-      // exchange (matches OpenCode's auto-scroll behavior).
-      repinScroll();
-
-      // Resume loop mode if paused
-      if (feature('PROACTIVE') || feature('KAIROS')) {
-        proactiveModule?.resumeProactive();
-      }
-
-      // Route user input to selected pipe targets (extracted to usePipeRouter)
-      if (routeToSelectedPipes(input)) {
-        // Show the user's prompt in the message list so they can see what was sent
-        const userMessage = createUserMessage({ content: input });
-        setMessages(prev => [...prev, userMessage]);
-
-        if (!options?.fromKeybinding) {
-          addToHistory({
-            display: prependModeCharacterToInput(input, inputMode),
-            pastedContents,
-          });
-        }
-        setInputValue('');
-        helpers.setCursorOffset(0);
-        helpers.clearBuffer();
-        setPastedContents({});
-        setInputMode('prompt');
-        setIDESelection(undefined);
-        return;
-      }
-
-      // Handle immediate commands - these bypass the queue and execute right away
-      // even while Claude is processing. Commands opt-in via `immediate: true`.
-      // Commands triggered via keybindings are always treated as immediate.
-      if (!speculationAccept && input.trim().startsWith('/')) {
-        // Expand [Pasted text #N] refs so immediate commands (e.g. /btw) receive
-        // the pasted content, not the placeholder. The non-immediate path gets
-        // this expansion later in handlePromptSubmit.
-        const trimmedInput = expandPastedTextRefs(input, pastedContents).trim();
-        const spaceIndex = trimmedInput.indexOf(' ');
-        const commandName = spaceIndex === -1 ? trimmedInput.slice(1) : trimmedInput.slice(1, spaceIndex);
-        const commandArgs = spaceIndex === -1 ? '' : trimmedInput.slice(spaceIndex + 1).trim();
-
-        // Find matching command - treat as immediate if:
-        // 1. Command has `immediate: true`, OR
-        // 2. Command was triggered via keybinding (fromKeybinding option)
-        const matchingCommand = commands.find(
-          cmd =>
-            isCommandEnabled(cmd) &&
-            (cmd.name === commandName || cmd.aliases?.includes(commandName) || getCommandName(cmd) === commandName),
-        );
-        if (matchingCommand?.name === 'clear' && idleHintShownRef.current) {
-          logEvent('tengu_idle_return_action', {
-            action: 'hint_converted' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-            variant: idleHintShownRef.current as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-            idleMinutes: Math.round((Date.now() - lastQueryCompletionTimeRef.current) / 60_000),
-            messageCount: messagesRef.current.length,
-            totalInputTokens: getTotalInputTokens(),
-          });
-          idleHintShownRef.current = false;
-        }
-
-        const shouldTreatAsImmediate = queryGuard.isActive && (matchingCommand?.immediate || options?.fromKeybinding);
-
-        if (matchingCommand && shouldTreatAsImmediate && matchingCommand.type === 'local-jsx') {
-          // Only clear input if the submitted text matches what's in the prompt.
-          // When a command keybinding fires, input is "/<command>" but the actual
-          // input value is the user's existing text - don't clear it in that case.
-          if (input.trim() === inputValueRef.current.trim()) {
-            setInputValue('');
-            helpers.setCursorOffset(0);
-            helpers.clearBuffer();
-            setPastedContents({});
-          }
-
-          const pastedTextRefs = parseReferences(input).filter(r => pastedContents[r.id]?.type === 'text');
-          const pastedTextCount = pastedTextRefs.length;
-          const pastedTextBytes = pastedTextRefs.reduce(
-            (sum, r) => sum + (pastedContents[r.id]?.content.length ?? 0),
-            0,
-          );
-          logEvent('tengu_paste_text', { pastedTextCount, pastedTextBytes });
-          logEvent('tengu_immediate_command_executed', {
-            commandName: matchingCommand.name as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-            fromKeybinding: options?.fromKeybinding ?? false,
-          });
-
-          // Execute the command directly
-          const executeImmediateCommand = async (): Promise<void> => {
-            let doneWasCalled = false;
-            const onDone = (
-              result?: string,
-              doneOptions?: {
-                display?: CommandResultDisplay;
-                metaMessages?: string[];
-                displayArgs?: string;
-              },
-            ): void => {
-              doneWasCalled = true;
-              setToolJSX({
-                jsx: null,
-                shouldHidePromptInput: false,
-                clearLocalJSX: true,
-              });
-              const newMessages: MessageType[] = [];
-              if (result && doneOptions?.display !== 'skip') {
-                addNotification({
-                  key: `immediate-${matchingCommand.name}`,
-                  text: result,
-                  priority: 'immediate',
-                });
-                // In fullscreen the command just showed as a centered modal
-                // pane — the notification above is enough feedback. Adding
-                // "❯ /config" + "⎿ dismissed" to the transcript is clutter
-                // (those messages are type:system subtype:local_command —
-                // user-visible but NOT sent to the model, so skipping them
-                // doesn't change model context). Outside fullscreen the
-                // transcript entry stays so scrollback shows what ran.
-                if (!isFullscreenEnvEnabled()) {
-                  const breadcrumbArgs = doneOptions?.displayArgs ?? commandArgs;
-                  newMessages.push(
-                    createCommandInputMessage(formatCommandInputTags(getCommandName(matchingCommand), breadcrumbArgs)),
-                    createCommandInputMessage(
-                      `<${LOCAL_COMMAND_STDOUT_TAG}>${escapeXml(result)}</${LOCAL_COMMAND_STDOUT_TAG}>`,
-                    ),
-                  );
-                }
-              }
-              // Inject meta messages (model-visible, user-hidden) into the transcript
-              if (doneOptions?.metaMessages?.length) {
-                newMessages.push(
-                  ...doneOptions.metaMessages.map(content => createUserMessage({ content, isMeta: true })),
-                );
-              }
-              if (newMessages.length) {
-                setMessages(prev => [...prev, ...newMessages]);
-              }
-              // Restore stashed prompt after local-jsx command completes.
-              // The normal stash restoration path (below) is skipped because
-              // local-jsx commands return early from onSubmit.
-              if (stashedPrompt !== undefined) {
-                setInputValue(stashedPrompt.text);
-                helpers.setCursorOffset(stashedPrompt.cursorOffset);
-                setPastedContents(stashedPrompt.pastedContents);
-                setStashedPrompt(undefined);
-              }
-            };
-
-            // Build context for the command (reuses existing getToolUseContext).
-            // Read messages via ref to keep onSubmit stable across message
-            // updates — matches the pattern at L2384/L2400/L2662 and avoids
-            // pinning stale REPL render scopes in downstream closures.
-            const context = getToolUseContext(messagesRef.current, [], createAbortController(), mainLoopModel);
-
-            const mod = await matchingCommand.load();
-            const jsx = await mod.call(onDone, context, commandArgs);
-
-            // Skip if onDone already fired — prevents stuck isLocalJSXCommand
-            // (see processSlashCommand.tsx local-jsx case for full mechanism).
-            if (jsx && !doneWasCalled) {
-              // shouldHidePromptInput: false keeps Notifications mounted
-              // so the onDone result isn't lost
-              setToolJSX({
-                jsx,
-                shouldHidePromptInput: false,
-                isLocalJSXCommand: true,
-              });
-            }
-          };
-          void executeImmediateCommand();
-          return; // Always return early - don't add to history or queue
-        }
-      }
-
-      // Remote mode: skip empty input early before any state mutations
-      if (activeRemote.isRemoteMode && !input.trim()) {
-        return;
-      }
-
-      // Idle-return: prompt returning users to start fresh when the
-      // conversation is large and the cache is cold. tengu_willow_mode
-      // controls treatment: "dialog" (blocking), "hint" (notification), "off".
-      {
-        const willowMode = getFeatureValue_CACHED_MAY_BE_STALE('tengu_willow_mode', 'off');
-        const idleThresholdMin = Number(process.env.CLAUDE_CODE_IDLE_THRESHOLD_MINUTES ?? 75);
-        const tokenThreshold = Number(process.env.CLAUDE_CODE_IDLE_TOKEN_THRESHOLD ?? 100_000);
-        if (
-          willowMode !== 'off' &&
-          !getGlobalConfig().idleReturnDismissed &&
-          !skipIdleCheckRef.current &&
-          !speculationAccept &&
-          !input.trim().startsWith('/') &&
-          lastQueryCompletionTimeRef.current > 0 &&
-          getTotalInputTokens() >= tokenThreshold
-        ) {
-          const idleMs = Date.now() - lastQueryCompletionTimeRef.current;
-          const idleMinutes = idleMs / 60_000;
-          if (idleMinutes >= idleThresholdMin && willowMode === 'dialog') {
-            setIdleReturnPending({ input, idleMinutes });
-            setInputValue('');
-            helpers.setCursorOffset(0);
-            helpers.clearBuffer();
-            return;
-          }
-        }
-      }
-
-      // Add to history for direct user submissions.
-      // Queued command processing (executeQueuedInput) doesn't call onSubmit,
-      // so notifications and already-queued user input won't be added to history here.
-      // Skip history for keybinding-triggered commands (user didn't type the command).
-      if (!options?.fromKeybinding) {
-        addToHistory({
-          display: speculationAccept ? input : prependModeCharacterToInput(input, inputMode),
-          pastedContents: speculationAccept ? {} : pastedContents,
-        });
-        // Add the just-submitted command to the front of the ghost-text
-        // cache so it's suggested immediately (not after the 60s TTL).
-        if (inputMode === 'bash') {
-          prependToShellHistoryCache(input.trim());
-        }
-      }
-
-      // Restore stash if present, but NOT for slash commands or when loading.
-      // - Slash commands (especially interactive ones like /model, /context) hide
-      //   the prompt and show a picker UI. Restoring the stash during a command would
-      //   place the text in a hidden input, and the user would lose it by typing the
-      //   next command. Instead, preserve the stash so it survives across command runs.
-      // - When loading, the submitted input will be queued and handlePromptSubmit
-      //   will clear the input field (onInputChange('')), which would clobber the
-      //   restored stash. Defer restoration to after handlePromptSubmit (below).
-      //   Remote mode is exempt: it sends via WebSocket and returns early without
-      //   calling handlePromptSubmit, so there's no clobbering risk — restore eagerly.
-      // In both deferred cases, the stash is restored after await handlePromptSubmit.
-      const isSlashCommand = !speculationAccept && input.trim().startsWith('/');
-      // Submit runs "now" (not queued) when not already loading, or when
-      // accepting speculation, or in remote mode (which sends via WS and
-      // returns early without calling handlePromptSubmit).
-      const submitsNow = !isLoading || speculationAccept || activeRemote.isRemoteMode;
-      if (stashedPrompt !== undefined && !isSlashCommand && submitsNow) {
-        setInputValue(stashedPrompt.text);
-        helpers.setCursorOffset(stashedPrompt.cursorOffset);
-        setPastedContents(stashedPrompt.pastedContents);
-        setStashedPrompt(undefined);
-      } else if (submitsNow) {
-        if (!options?.fromKeybinding) {
-          // Clear input when not loading or accepting speculation.
-          // Preserve input for keybinding-triggered commands.
-          setInputValue('');
-          helpers.setCursorOffset(0);
-        }
-        setPastedContents({});
-      }
-
-      if (submitsNow) {
-        setInputMode('prompt');
-        setIDESelection(undefined);
-        setSubmitCount(_ => _ + 1);
-        helpers.clearBuffer();
-        tipPickedThisTurnRef.current = false;
-
-        // Show the placeholder in the same React batch as setInputValue('').
-        // Skip for slash/bash (they have their own echo), speculation and remote
-        // mode (both setMessages directly with no gap to bridge).
-        if (!isSlashCommand && inputMode === 'prompt' && !speculationAccept && !activeRemote.isRemoteMode) {
-          setUserInputOnProcessing(input);
-          // showSpinner includes userInputOnProcessing, so the spinner appears
-          // on this render. Reset timing refs now (before queryGuard.reserve()
-          // would) so elapsed time doesn't read as Date.now() - 0. The
-          // isQueryActive transition above does the same reset — idempotent.
-          resetTimingRefs();
-        }
-
-        // Increment prompt count for attribution tracking and save snapshot
-        // The snapshot persists promptCount so it survives compaction
-        if (feature('COMMIT_ATTRIBUTION')) {
-          setAppState(prev => ({
-            ...prev,
-            attribution: incrementPromptCount(prev.attribution, snapshot => {
-              void recordAttributionSnapshot(snapshot).catch(error => {
-                logForDebugging(`Attribution: Failed to save snapshot: ${error}`);
-              });
-            }),
-          }));
-        }
-      }
-
-      // Handle speculation acceptance
-      if (speculationAccept) {
-        const { queryRequired } = await handleSpeculationAccept(
-          speculationAccept.state,
-          speculationAccept.speculationSessionTimeSavedMs,
-          speculationAccept.setAppState,
-          input,
-          {
-            setMessages,
-            readFileState,
-            cwd: getOriginalCwd(),
-          },
-        );
-        if (queryRequired) {
-          const newAbortController = createAbortController();
-          setAbortController(newAbortController);
-          void onQuery([], newAbortController, true, [], mainLoopModel);
-        }
-        return;
-      }
-
-      // Remote mode: send input via stream-json instead of local query.
-      // Permission requests from the remote are bridged into toolUseConfirmQueue
-      // and rendered using the standard PermissionRequest component.
-      //
-      // local-jsx slash commands (e.g. /agents, /config) render UI in THIS
-      // process — they have no remote equivalent. Let those fall through to
-      // handlePromptSubmit so they execute locally. Prompt commands and
-      // plain text go to the remote.
-      if (
-        activeRemote.isRemoteMode &&
-        !(
-          isSlashCommand &&
-          commands.find(c => {
-            const name = input.trim().slice(1).split(/\s/)[0];
-            return isCommandEnabled(c) && (c.name === name || c.aliases?.includes(name!) || getCommandName(c) === name);
-          })?.type === 'local-jsx'
-        )
-      ) {
-        // Build content blocks when there are pasted attachments (images)
-        const pastedValues = Object.values(pastedContents);
-        const imageContents = pastedValues.filter(c => c.type === 'image');
-        const imagePasteIds = imageContents.length > 0 ? imageContents.map(c => c.id) : undefined;
-
-        let messageContent: string | ContentBlockParam[] = input.trim();
-        let remoteContent: RemoteMessageContent = input.trim();
-        if (pastedValues.length > 0) {
-          const contentBlocks: ContentBlockParam[] = [];
-          const remoteBlocks: Array<{ type: string; [key: string]: unknown }> = [];
-
-          const trimmedInput = input.trim();
-          if (trimmedInput) {
-            contentBlocks.push({ type: 'text', text: trimmedInput });
-            remoteBlocks.push({ type: 'text', text: trimmedInput });
-          }
-
-          for (const pasted of pastedValues) {
-            if (pasted.type === 'image') {
-              const source = {
-                type: 'base64' as const,
-                media_type: (pasted.mediaType ?? 'image/png') as
-                  | 'image/jpeg'
-                  | 'image/png'
-                  | 'image/gif'
-                  | 'image/webp',
-                data: pasted.content,
-              };
-              contentBlocks.push({ type: 'image', source });
-              remoteBlocks.push({ type: 'image', source });
-            } else {
-              contentBlocks.push({ type: 'text', text: pasted.content });
-              remoteBlocks.push({ type: 'text', text: pasted.content });
-            }
-          }
-
-          messageContent = contentBlocks;
-          remoteContent = remoteBlocks;
-        }
-
-        // Create and add user message to UI
-        // Note: empty input already handled by early return above
-        const userMessage = createUserMessage({
-          content: messageContent,
-          imagePasteIds,
-        });
-        setMessages(prev => [...prev, userMessage]);
-
-        // Send to remote session
-        await activeRemote.sendMessage(remoteContent, {
-          uuid: userMessage.uuid,
-        });
-        return;
-      }
-
-      // Ensure SessionStart hook context is available before the first API call.
-      await awaitPendingHooks();
-
-      await handlePromptSubmit({
-        input,
-        helpers,
-        queryGuard,
-        isExternalLoading,
-        mode: inputMode,
-        commands,
-        onInputChange: setInputValue,
-        setPastedContents,
-        setToolJSX,
-        getToolUseContext,
-        messages: messagesRef.current,
-        mainLoopModel,
-        pastedContents,
-        ideSelection,
-        setUserInputOnProcessing,
-        setAbortController,
-        abortController,
-        onQuery,
-        setAppState,
-        querySource: getQuerySourceForREPL(),
-        onBeforeQuery,
-        canUseTool,
-        addNotification,
-        setMessages,
-        // Read via ref so streamMode can be dropped from onSubmit deps —
-        // handlePromptSubmit only uses it for debug log + telemetry event.
-        streamMode: streamModeRef.current,
-        hasInterruptibleToolInProgress: hasInterruptibleToolInProgressRef.current,
-      });
-
-      // Restore stash that was deferred above. Two cases:
-      // - Slash command: handlePromptSubmit awaited the full command execution
-      //   (including interactive pickers). Restoring now places the stash back in
-      //   the visible input.
-      // - Loading (queued): handlePromptSubmit enqueued + cleared input, then
-      //   returned quickly. Restoring now places the stash back after the clear.
-      if ((isSlashCommand || isLoading) && stashedPrompt !== undefined) {
-        setInputValue(stashedPrompt.text);
-        helpers.setCursorOffset(stashedPrompt.cursorOffset);
-        setPastedContents(stashedPrompt.pastedContents);
-        setStashedPrompt(undefined);
-      }
-    },
-    [
-      queryGuard,
-      // isLoading is read at the !isLoading checks above for input-clearing
-      // and submitCount gating. It's derived from isQueryActive || isExternalLoading,
-      // so including it here ensures the closure captures the fresh value.
-      isLoading,
-      isExternalLoading,
-      inputMode,
-      commands,
-      setInputValue,
-      setInputMode,
-      setPastedContents,
-      setSubmitCount,
-      setIDESelection,
-      setToolJSX,
-      getToolUseContext,
-      // messages is read via messagesRef.current inside the callback to
-      // keep onSubmit stable across message updates (see L2384/L2400/L2662).
-      // Without this, each setMessages call (~30× per turn) recreates
-      // onSubmit, pinning the REPL render scope (1776B) + that render's
-      // messages array in downstream closures (PromptInput, handleAutoRunIssue).
-      // Heap analysis showed ~9 REPL scopes and ~15 messages array versions
-      // accumulating after #20174/#20175, all traced to this dep.
-      mainLoopModel,
-      pastedContents,
-      ideSelection,
-      setUserInputOnProcessing,
-      setAbortController,
-      addNotification,
-      onQuery,
-      stashedPrompt,
-      setStashedPrompt,
-      setAppState,
-      onBeforeQuery,
-      canUseTool,
-      remoteSession,
-      setMessages,
-      awaitPendingHooks,
-      repinScroll,
-    ],
-  );
-
-  // Callback for when user submits input while viewing a teammate's transcript
-  const onAgentSubmit = useCallback(
-    async (input: string, task: InProcessTeammateTaskState | LocalAgentTaskState, helpers: PromptInputHelpers) => {
-      if (isLocalAgentTask(task)) {
-        appendMessageToLocalAgent(task.id, createUserMessage({ content: input }), setAppState);
-        if (task.status === 'running') {
-          queuePendingMessage(task.id, input, setAppState);
-        } else {
-          void resumeAgentBackground({
-            agentId: task.id,
-            prompt: input,
-            toolUseContext: getToolUseContext(messagesRef.current, [], new AbortController(), mainLoopModel),
-            canUseTool,
-          }).catch(err => {
-            logForDebugging(`resumeAgentBackground failed: ${errorMessage(err)}`);
-            addNotification({
-              key: `resume-agent-failed-${task.id}`,
-              jsx: <Text color="error">Failed to resume agent: {errorMessage(err)}</Text>,
-              priority: 'low',
-            });
-          });
-        }
-      } else {
-        injectUserMessageToTeammate(task.id, input, undefined, setAppState);
-      }
-      setInputValue('');
-      helpers.setCursorOffset(0);
-      helpers.clearBuffer();
-    },
-    [setAppState, setInputValue, getToolUseContext, canUseTool, mainLoopModel, addNotification],
-  );
+  const { onSubmit } = usePromptSubmission({
+    repinScroll,
+    routeToSelectedPipes,
+    setMessages,
+    inputMode,
+    pastedContents,
+    setInputValue,
+    setPastedContents,
+    setInputMode,
+    setIDESelection,
+    commands,
+    idleHintShownRef,
+    lastQueryCompletionTimeRef,
+    messagesRef,
+    queryGuard,
+    inputValueRef,
+    setToolJSX,
+    addNotification,
+    stashedPrompt,
+    setStashedPrompt,
+    getToolUseContext,
+    mainLoopModel,
+    activeRemote,
+    isLoading,
+    skipIdleCheckRef,
+    setIdleReturnPending,
+    setSubmitCount,
+    tipPickedThisTurnRef,
+    setUserInputOnProcessing,
+    resetTimingRefs,
+    setAppState,
+    readFileState,
+    setAbortController,
+    onQuery,
+    awaitPendingHooks,
+    isExternalLoading,
+    ideSelection,
+    abortController,
+    onBeforeQuery,
+    canUseTool,
+    streamModeRef,
+    hasInterruptibleToolInProgressRef,
+  });
+  const { onAgentSubmit } = useAgentActions({
+    setAppState,
+    setInputValue,
+    getToolUseContext,
+    messagesRef,
+    canUseTool,
+    mainLoopModel,
+    addNotification,
+  });
 
   // Handlers for auto-run /issue or /good-claude (defined after onSubmit)
   const handleAutoRunIssue = useCallback(() => {
@@ -4042,115 +2625,16 @@ export function REPL({
     setIsMessageSelectorVisible(prev => !prev);
   }, []);
 
-  // Rewind conversation state to just before `message`: slice messages,
-  // reset conversation ID, microcompact state, permission mode, prompt suggestion.
-  // Does NOT touch the prompt input. Index is computed from messagesRef (always
-  // fresh via the setMessages wrapper) so callers don't need to worry about
-  // stale closures.
-  const rewindConversationTo = useCallback(
-    (message: UserMessage) => {
-      const prev = messagesRef.current;
-      const messageIndex = prev.lastIndexOf(message);
-      if (messageIndex === -1) return;
-
-      logEvent('tengu_conversation_rewind', {
-        preRewindMessageCount: prev.length,
-        postRewindMessageCount: messageIndex,
-        messagesRemoved: prev.length - messageIndex,
-        rewindToMessageIndex: messageIndex,
-      });
-      setMessages(prev.slice(0, messageIndex));
-      // Careful, this has to happen after setMessages
-      setConversationId(randomUUID());
-      // Reset cached microcompact state so stale pinned cache edits
-      // don't reference tool_use_ids from truncated messages
-      resetMicrocompactState();
-      if (feature('CONTEXT_COLLAPSE')) {
-        // Rewind truncates the REPL array. Commits whose archived span
-        // was past the rewind point can't be projected anymore
-        // (projectView silently skips them) but the staged queue and ID
-        // maps reference stale uuids. Simplest safe reset: drop
-        // everything. The ctx-agent will re-stage on the next
-        // threshold crossing.
-        /* eslint-disable @typescript-eslint/no-require-imports */
-        (
-          require('../../services/contextCollapse/index.js') as typeof import('../../services/contextCollapse/index.js')
-        ).resetContextCollapse();
-        /* eslint-enable @typescript-eslint/no-require-imports */
-      }
-
-      // Restore state from the message we're rewinding to
-      const permMode = message.permissionMode as InternalPermissionMode | undefined;
-      setAppState(prev => ({
-        ...prev,
-        // Restore permission mode from the message
-        toolPermissionContext:
-          permMode && prev.toolPermissionContext.mode !== permMode
-            ? {
-                ...prev.toolPermissionContext,
-                mode: permMode,
-              }
-            : prev.toolPermissionContext,
-        // Clear stale prompt suggestion from previous conversation state
-        promptSuggestion: {
-          text: null,
-          promptId: null,
-          shownAt: 0,
-          acceptedAt: 0,
-          generationRequestId: null,
-        },
-      }));
-    },
-    [setMessages, setAppState],
-  );
-
-  // Synchronous rewind + input population. Used directly by auto-restore on
-  // interrupt (so React batches with the abort's setMessages → single render,
-  // no flicker). MessageSelector wraps this in setImmediate via handleRestoreMessage.
-  const restoreMessageSync = useCallback(
-    (message: UserMessage) => {
-      rewindConversationTo(message);
-
-      const r = textForResubmit(message);
-      if (r) {
-        setInputValue(r.text);
-        setInputMode(r.mode);
-      }
-
-      // Restore pasted images
-      if (Array.isArray(message.message.content) && message.message.content.some(block => block.type === 'image')) {
-        const imageBlocks: Array<ImageBlockParam> = message.message.content.filter(block => block.type === 'image');
-        if (imageBlocks.length > 0) {
-          const newPastedContents: Record<number, PastedContent> = {};
-          imageBlocks.forEach((block, index) => {
-            if (block.source.type === 'base64') {
-              const id = (message.imagePasteIds as number[] | undefined)?.[index] ?? index + 1;
-              newPastedContents[id] = {
-                id,
-                type: 'image',
-                content: block.source.data,
-                mediaType: block.source.media_type,
-              };
-            }
-          });
-          setPastedContents(newPastedContents);
-        }
-      }
-    },
-    [rewindConversationTo, setInputValue],
-  );
-  restoreMessageSyncRef.current = restoreMessageSync;
-
-  // MessageSelector path: defer via setImmediate so the "Interrupted" message
-  // renders to static output before rewind — otherwise it remains vestigial
-  // at the top of the screen.
-  const handleRestoreMessage = useCallback(
-    async (message: UserMessage) => {
-      setImmediate((restore, message) => restore(message), restoreMessageSync, message);
-    },
-    [restoreMessageSync],
-  );
-
+  const { rewindConversationTo, handleRestoreMessage } = useConversationActions({
+    messagesRef,
+    setMessages,
+    setConversationId,
+    setAppState,
+    setInputValue,
+    setInputMode,
+    setPastedContents,
+    restoreMessageSyncRef,
+  });
   // Not memoized — hook stores caps via ref, reads latest closure at dispatch.
   // 24-char prefix: deriveUUID preserves first 24, renderable uuid prefix-matches raw source.
   const findRawIndex = (uuid: string) => {
@@ -4537,26 +3021,17 @@ export function REPL({
     [onQuery, mainLoopModel, store],
   );
 
-  const { relayPipeMessage, pipeReturnHadErrorRef } = usePipeRelay();
-
-  useInboxPoller({
-    enabled: isAgentSwarmsEnabled(),
+  usePipeLifecycle({
+    store,
+    tools,
+    setMessages,
+    setToolUseConfirmQueue,
+    getToolUseContext,
+    mainLoopModel,
     isLoading,
     focusedInputDialog,
-    onSubmitMessage: handleIncomingPrompt,
+    handleIncomingPrompt,
   });
-
-  useMailboxBridge({ isLoading, onSubmitMessage: handleIncomingPrompt });
-  useMasterMonitor();
-  useSlaveNotifications();
-  const _pipeIpcState = useAppState(s => getPipeIpc(s));
-
-  usePipePermissionForward({ store, tools, setMessages, setToolUseConfirmQueue, getToolUseContext, mainLoopModel });
-  usePipeMuteSync({ setToolUseConfirmQueue });
-
-  // Pipe IPC lifecycle — extracted to usePipeIpc hook
-  usePipeIpc({ store, handleIncomingPrompt });
-  const { routeToSelectedPipes } = usePipeRouter({ store, setAppState, addNotification });
 
   // Scheduled tasks from .claude/scheduled_tasks.json (CronCreate/Delete/List)
   if (feature('AGENT_TRIGGERS')) {
@@ -4894,129 +3369,36 @@ export function REPL({
         {toolJSX.jsx}
       </Box>
     );
-    const transcriptReturn = (
-      <KeybindingSetup>
-        <AnimatedTerminalTitle
-          isAnimating={titleIsAnimating}
-          title={terminalTitle}
-          disabled={titleDisabled}
-          noPrefix={showStatusInTerminalTab}
-        />
-        <GlobalKeybindingHandlers {...globalKeybindingProps} />
-        <CommandKeybindingHandlers onSubmit={onSubmit} isActive={!toolJSX?.isLocalJSXCommand} />
-        {transcriptScrollRef ? (
-          // ScrollKeybindingHandler must mount before CancelRequestHandler so
-          // ctrl+c-with-selection copies instead of cancelling the active task.
-          // Its raw useInput handler only stops propagation when a selection
-          // exists — without one, ctrl+c falls through to CancelRequestHandler.
-          <ScrollKeybindingHandler
-            scrollRef={scrollRef}
-            // Yield wheel/ctrl+u/d to UltraplanChoiceDialog's own scroll
-            // handler while the modal is showing.
-            isActive={focusedInputDialog !== 'ultraplan-choice'}
-            // g/G/j/k/ctrl+u/ctrl+d would eat keystrokes the search bar
-            // wants. Off while searching.
-            isModal={!searchOpen}
-            // Manual scroll exits the search context — clear the yellow
-            // current-match marker. Positions are (msg, rowOffset)-keyed;
-            // j/k changes scrollTop so rowOffset is stale → wrong row
-            // gets yellow. Next n/N re-establishes via step()→jump().
-            onScroll={() => jumpRef.current?.disarmSearch()}
-          />
-        ) : null}
-        <CancelRequestHandler {...cancelRequestProps} />
-        {transcriptScrollRef ? (
-          <FullscreenLayout
-            scrollRef={scrollRef}
-            scrollable={
-              <>
-                {transcriptMessagesElement}
-                {transcriptToolJSX}
-                <SandboxViolationExpandedView />
-              </>
-            }
-            bottom={
-              searchOpen ? (
-                <TranscriptSearchBar
-                  jumpRef={jumpRef}
-                  // Seed was tried (c01578c8) — broke /hello muscle
-                  // memory (cursor lands after 'foo', /hello → foohello).
-                  // Cancel-restore handles the 'don't lose prior search'
-                  // concern differently (onCancel re-applies searchQuery).
-                  initialQuery=""
-                  count={searchCount}
-                  current={searchCurrent}
-                  onClose={q => {
-                    // Enter — commit. 0-match guard: junk query shouldn't
-                    // persist (badge hidden, n/N dead anyway).
-                    setSearchQuery(searchCount > 0 ? q : '');
-                    setSearchOpen(false);
-                    // onCancel path: bar unmounts before its useEffect([query])
-                    // can fire with ''. Without this, searchCount stays stale
-                    // (n guard at :4956 passes) and VML's matches[] too
-                    // (nextMatch walks the old array). Phantom nav, no
-                    // highlight. onExit (Enter, q non-empty) still commits.
-                    if (!q) {
-                      setSearchCount(0);
-                      setSearchCurrent(0);
-                      jumpRef.current?.setSearchQuery('');
-                    }
-                  }}
-                  onCancel={() => {
-                    // Esc/ctrl+c/ctrl+g — undo. Bar's effect last fired
-                    // with whatever was typed. searchQuery (REPL state)
-                    // is unchanged since / (onClose = commit, didn't run).
-                    // Two VML calls: '' restores anchor (0-match else-
-                    // branch), then searchQuery re-scans from anchor's
-                    // nearest. Both synchronous — one React batch.
-                    // setHighlight explicit: REPL's sync-effect dep is
-                    // searchQuery (unchanged), wouldn't re-fire.
-                    setSearchOpen(false);
-                    jumpRef.current?.setSearchQuery('');
-                    jumpRef.current?.setSearchQuery(searchQuery);
-                    setHighlight(searchQuery);
-                  }}
-                  setHighlight={setHighlight}
-                />
-              ) : (
-                <TranscriptModeFooter
-                  showAllInTranscript={showAllInTranscript}
-                  virtualScroll={true}
-                  status={editorStatus || undefined}
-                  searchBadge={
-                    searchQuery && searchCount > 0 ? { current: searchCurrent, count: searchCount } : undefined
-                  }
-                />
-              )
-            }
-          />
-        ) : (
-          <>
-            {transcriptMessagesElement}
-            {transcriptToolJSX}
-            <SandboxViolationExpandedView />
-            <TranscriptModeFooter
-              showAllInTranscript={showAllInTranscript}
-              virtualScroll={false}
-              suppressShowAll={dumpMode}
-              status={editorStatus || undefined}
-            />
-          </>
-        )}
-      </KeybindingSetup>
+    return (
+      <TranscriptScreen
+        titleIsAnimating={titleIsAnimating}
+        terminalTitle={terminalTitle}
+        titleDisabled={titleDisabled}
+        showStatusInTerminalTab={showStatusInTerminalTab}
+        globalKeybindingProps={globalKeybindingProps}
+        onSubmit={onSubmit}
+        localJsxCommandActive={toolJSX?.isLocalJSXCommand === true}
+        transcriptScrollRef={transcriptScrollRef}
+        scrollRef={scrollRef}
+        focusedInputDialog={focusedInputDialog}
+        searchOpen={searchOpen}
+        jumpRef={jumpRef}
+        cancelRequestProps={cancelRequestProps}
+        transcriptMessagesElement={transcriptMessagesElement}
+        transcriptToolJSX={transcriptToolJSX}
+        searchCount={searchCount}
+        searchCurrent={searchCurrent}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        setSearchOpen={setSearchOpen}
+        setSearchCount={setSearchCount}
+        setSearchCurrent={setSearchCurrent}
+        setHighlight={setHighlight}
+        showAllInTranscript={showAllInTranscript}
+        editorStatus={editorStatus}
+        dumpMode={dumpMode}
+      />
     );
-    // The virtual-scroll branch (FullscreenLayout above) needs
-    // <AlternateScreen>'s <Box height={rows}> constraint — without it,
-    // ScrollBox's flexGrow has no ceiling, viewport = content height,
-    // scrollTop pins at 0, and Ink's screen buffer sizes to the full
-    // spacer (200×5k+ rows on long sessions). Same root type + props as
-    // normal mode's wrap below so React reconciles and the alt buffer
-    // stays entered across toggle. The 30-cap dump branch stays
-    // unwrapped — it wants native terminal scrollback.
-    if (transcriptScrollRef) {
-      return <AlternateScreen mouseTracking={isMouseTrackingEnabled()}>{transcriptReturn}</AlternateScreen>;
-    }
-    return transcriptReturn;
   }
 
   // Show the placeholder until the real user message appears in

@@ -174,6 +174,8 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - [x] 对 Foundry 非主路径分支完成引用和运行时审计；确认其仅为独立传输与 Azure Identity 鉴权实现、不承担共享 SDK 兼容职责且运行不可达后，已删除客户端、Provider 行为、模型与环境配置以及依赖，并增加源码及构建产物防回归检查；历史 API Key 名称仅保留在子进程密钥过滤中（2026-07-16）。
 - [x] 拆分 `src/main.tsx`，按启动阶段、参数注册、运行模式和服务初始化划分模块（2026-07-16 已完成：新增 `src/cli/startup`、`src/cli/arguments`、`src/cli/modes` 和 `src/cli/initialization` 分层；设置预加载、入口识别、早期 argv 改写、命令级初始化、迁移、首屏后延迟服务、Commander 根参数/功能参数/子命令注册、print 快速路径及默认运行体均已迁出，`main.tsx` 由 5528 行缩减至 150 行以内，并新增 `main-boundary` 防回归检查。`bun run verify --ci` 于 Windows 全部通过，用时 72.0 秒，覆盖 TypeScript、Biome、轻量验证、Bun/Vite 构建、Node CLI、Windows standalone EXE 及各产物 `--version`/`--help` 启动冒烟）。
 - [x] 拆分 `src/screens/REPL.tsx`，将会话状态、输入控制、任务/Agent 状态和渲染职责分离（2026-07-16 已完成：`REPL.tsx` 收口为 2 行稳定导出入口；新增 `screens/repl/session`、`input`、`agents` 和 `view` 分层，分别承接消息时间线、输入与 transcript 控制、任务/Agent 状态及 transcript 纯渲染组件；剩余跨域编排集中到 `ReplController.tsx`，并新增 `repl-boundary` 防回归检查。`bun run verify --ci` 于 Windows 全部通过，用时 62.1 秒）。
+- [x] 继续收缩 `ReplController.tsx` 的查询生命周期和运行时编排（2026-07-16 已完成：新增 `query`、`runtime` 分层，并将查询统计、流事件适配、单次查询执行、整轮并发/取消收尾、Remote/Direct Connect/SSH、Pipe/Inbox/Mailbox、Prompt 提交、会话恢复/回退及 Agent 提交动作迁出；transcript 分支迁入独立 `TranscriptScreen`，控制器由 5903 行降至 4300 行以内，并将 `repl-boundary` 上限同步收紧。`bun run verify --ci` 于 Windows 全部通过，用时 64.2 秒）。
+- [ ] 继续拆分 `ReplController.tsx` 中的主 Prompt 屏幕、Dialog 层和取消/退出交互，将控制器进一步压缩到 1800 行以内；视图层不得直接发起查询、切换会话或初始化远程运行时。
 - [ ] 拆分 `src/utils/messages.ts`、`src/utils/sessionStorage.ts` 和 `src/utils/hooks.ts`，优先抽出纯函数与协议转换层，并在 `scripts/validation` 中补充轻量验证脚本。
 - [ ] 为所有 workspace 统一最小脚本约定：`typecheck`、`build`、`test` 或明确的 `test:smoke`；不适用的子包需写明原因。
 - [ ] 审计根包 `devDependencies` 中实际进入生产 Bundle 的依赖，明确运行时依赖与构建期依赖，减少发布和供应链审计范围。
