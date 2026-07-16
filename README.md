@@ -168,7 +168,7 @@ dist/cli-node.js
 
 1. `build.ts` 使用 `Bun.build`，面向 Bun 运行时。
 2. `vite.config.ts` 使用 Vite/Rollup 生成 Node.js 兼容产物。
-3. `scripts/build-exe.ts` 使用 Bun compile 生成 `dist/ccb.exe`，其中包含 Bun Runtime，运行时不依赖本机 Node.js 或 Bun。
+3. `scripts/build-exe.ts` 使用 Bun compile 生成 `dist/claude-code.exe`，其中包含 Bun Runtime，运行时不依赖本机 Node.js 或 Bun。
 
 Bun 构建会对生成代码进行兼容性处理，包括替换 `import.meta.require`，以及保护对 `globalThis.Bun` 的直接访问。修改构建流程时，应同时验证 Bun 和 Node 两种产物。
 
