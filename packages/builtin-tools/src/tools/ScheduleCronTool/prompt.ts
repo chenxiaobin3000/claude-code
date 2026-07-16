@@ -25,7 +25,7 @@ export const DEFAULT_MAX_AGE_DAYS =
  * chance to populate.
  *
  * The default is `true` — /loop is GA (announced in changelog). GrowthBook
- * is disabled for Bedrock/Vertex/Foundry and when DISABLE_TELEMETRY /
+ * is disabled for third-party providers and when DISABLE_TELEMETRY /
  * CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC are set; a `false` default would
  * break /loop for those users (GH #31759). The GB gate now serves purely as
  * a fleet-wide kill switch — flipping it to `false` stops already-running
@@ -42,7 +42,7 @@ export function isKairosCronEnabled(): boolean {
  * {@link isKairosCronEnabled} — flipping this off forces `durable: false` at
  * the call() site, leaving session-only cron (in-memory, GA) untouched.
  *
- * Defaults to `true` so Bedrock/Vertex/Foundry and DISABLE_TELEMETRY users get
+ * Defaults to `true` so third-party and DISABLE_TELEMETRY users get
  * durable cron. Does NOT consult CLAUDE_CODE_DISABLE_CRON (that kills the whole
  * scheduler via isKairosCronEnabled).
  */

@@ -521,7 +521,8 @@ export function parseUserSpecifiedModel(
     // can tell the user to restart/wait for flag cache refresh to get the latest values.
   }
 
-  // Preserve original case for custom model names (e.g., Azure Foundry deployment IDs)
+  // Preserve original case for custom model names; compatible gateways may use
+  // case-sensitive deployment IDs.
   // Only strip [1m] suffix if present, maintaining case of the base model
   if (has1mTag) {
     return modelInputTrimmed.replace(/\[1m\]$/i, '').trim() + '[1m]'
@@ -592,11 +593,6 @@ export function modelDisplayString(model: ModelSetting): string {
 
 // @[MODEL LAUNCH]: Add a marketing name mapping for the new model below.
 export function getMarketingNameForModel(modelId: string): string | undefined {
-  if (getAPIProvider() === 'foundry') {
-    // deployment ID is user-defined in Foundry, so it may have no relation to the actual model
-    return undefined
-  }
-
   const has1m = modelId.toLowerCase().includes('[1m]')
   const canonical = getCanonicalName(modelId)
 

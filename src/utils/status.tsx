@@ -6,7 +6,6 @@ import type { MCPServerConnection } from '../services/mcp/types.js';
 import { getAccountInformation, isClaudeAISubscriber } from './auth.js';
 import { getLargeMemoryFiles, getMemoryFiles, MAX_MEMORY_CHARACTER_COUNT } from './claudemd.js';
 import { getDoctorDiagnostic } from './doctorDiagnostic.js';
-import { isEnvTruthy } from './envUtils.js';
 import { getDisplayPath } from './file.js';
 import { formatNumber } from './format.js';
 import { getIdeClientName, type IDEExtensionInstallationStatus, isJetBrainsIde, toIDEDisplayName } from './ide.js';
@@ -295,10 +294,7 @@ export function buildAPIProviderProperties(): Property[] {
   const properties: Property[] = [];
 
   if (apiProvider !== 'firstParty') {
-    const providerLabel = {
-      foundry: 'Microsoft Foundry',
-      openai: 'OpenAI API',
-    }[apiProvider];
+    const providerLabel = 'OpenAI API';
     properties.push({
       label: 'API provider',
       value: providerLabel,
@@ -311,28 +307,6 @@ export function buildAPIProviderProperties(): Property[] {
       properties.push({
         label: 'Anthropic base URL',
         value: anthropicBaseUrl,
-      });
-    }
-  } else if (apiProvider === 'foundry') {
-    const foundryBaseUrl = process.env.ANTHROPIC_FOUNDRY_BASE_URL;
-    if (foundryBaseUrl) {
-      properties.push({
-        label: 'Microsoft Foundry base URL',
-        value: foundryBaseUrl,
-      });
-    }
-
-    const foundryResource = process.env.ANTHROPIC_FOUNDRY_RESOURCE;
-    if (foundryResource) {
-      properties.push({
-        label: 'Microsoft Foundry resource',
-        value: foundryResource,
-      });
-    }
-
-    if (isEnvTruthy(process.env.CLAUDE_CODE_SKIP_FOUNDRY_AUTH)) {
-      properties.push({
-        value: 'Microsoft Foundry auth skipped',
       });
     }
   } else if (apiProvider === 'openai') {

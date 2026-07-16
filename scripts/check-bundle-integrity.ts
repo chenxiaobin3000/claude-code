@@ -150,6 +150,15 @@ async function main() {
       'ANTHROPIC_VERTEX_PROJECT_ID',
       'CLAUDE_CODE_SKIP_VERTEX_AUTH',
       'VERTEX_REGION_CLAUDE_',
+      '@anthropic-ai/foundry-sdk',
+      '@azure/identity',
+      'AnthropicFoundry',
+      'DefaultAzureCredential',
+      'getBearerTokenProvider',
+      'cognitiveservices.azure.com/.default',
+      'ANTHROPIC_FOUNDRY_BASE_URL',
+      'ANTHROPIC_FOUNDRY_RESOURCE',
+      'CLAUDE_CODE_SKIP_FOUNDRY_AUTH',
     ]) {
       if (content.includes(marker)) {
         findings.push({

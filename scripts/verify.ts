@@ -17,6 +17,7 @@ const ciMode = process.argv.includes('--ci')
 const validationScripts = [
   'scripts/validation/anthropic-boundary.ts',
   'scripts/validation/vertex-boundary.ts',
+  'scripts/validation/foundry-boundary.ts',
   'scripts/validation/message-conversion.ts',
   'scripts/validation/openai-stream.ts',
   'scripts/validation/tool-permissions.ts',

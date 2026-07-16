@@ -4566,7 +4566,7 @@ async function handleInitializeRequest(
       // getAccountInformation() returns undefined under 3P providers, so the
       // other fields are all absent. apiProvider disambiguates "not logged
       // in" (firstParty + tokenSource:none) from "3P, login not applicable".
-      apiProvider: getAPIProvider() as 'firstParty' | 'foundry',
+      apiProvider: getAPIProvider() as 'firstParty' | 'openai',
     },
     pid: process.pid,
   }

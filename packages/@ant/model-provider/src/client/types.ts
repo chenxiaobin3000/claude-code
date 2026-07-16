@@ -3,7 +3,7 @@
  * Authentication is handled externally — main project provides factory implementations.
  */
 export interface ClientFactories {
-  /** Get a legacy Anthropic-compatible client (Foundry only). */
+  /** Get the fail-closed legacy Anthropic-compatible client boundary. */
   getAnthropicClient: (params: {
     model?: string
     maxRetries: number

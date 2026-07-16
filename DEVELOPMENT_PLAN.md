@@ -50,7 +50,7 @@
 
 - Bun workspace 当前包含 18 个子包。
 - Git 管理的 TypeScript 源码约 2,746 个文件、56 万行。
-- 当前模型主路径由 `getAPIProvider()` 固定路由至 `openai`。Anthropic 账号登录、鉴权和官方模型直连已移除；Anthropic SDK 因大量内部消息、工具和流事件调用而继续作为兼容层保留。Bedrock Provider 已于 2026-07-15 移除；Vertex 客户端、GCP 鉴权、区域配置、专用请求行为和依赖已于 2026-07-16 移除；Foundry 仍需独立审计。
+- 当前模型主路径由 `getAPIProvider()` 固定路由至 `openai`。Anthropic 账号登录、鉴权和官方模型直连已移除；Anthropic SDK 因大量内部消息、工具和流事件调用而继续作为兼容层保留。Bedrock Provider 已于 2026-07-15 移除；Vertex 客户端、GCP 鉴权、区域配置、专用请求行为和依赖已于 2026-07-16 移除；Foundry 客户端、Azure Identity 鉴权、专用配置和依赖也已于 2026-07-16 移除。
 - 已新增统一最小验证命令 `bun run verify`，顺序覆盖锁定安装、类型检查、Lint，以及 Bun bundle、Vite/Rollup Node bundle、Windows x64 standalone EXE 三条构建链的完整性、版本、启动、单轮模型请求和 `Read` 工具调用。验证直接使用 `~/.claude/models.json` 的默认模型，并限制为回环或私有网络地址。2026-07-16 使用本地 llama.cpp（Qwen3.5-9B-Q6_K，65,536 上下文）完成三构建链全矩阵复验，所有检查通过，总耗时 69.1 秒。
 - 多模型注册表已于 2026-07-15 完成：重复模型 ID 和无效默认模型会在加载时失败；同地址模型复用 OpenAI Client，不同地址使用独立 Client；旧 `OPENAI_MODEL`、`OPENAI_BASE_URL`、角色模型环境变量、模型映射和 `providers.json` 注册表已从运行链移除。类型检查、Lint、Bun 构建、Vite 构建及 Bun/Node CLI 启动验证通过。
 - 第二模型验收已于 2026-07-16 完成：通过 `https://api.deepseek.com` 调用注册模型 `deepseek-v4-flash`，单轮流式响应和受权限约束的 `Read` 工具调用均通过；凭据只从配置指定的环境变量读取，未写入模型注册表、命令输出或诊断日志。结合本地 llama.cpp 的 Qwen3.5-9B-Q6_K 验证，至少两个 OpenAI-compatible 模型完成了流式响应和工具调用验收。
@@ -120,7 +120,7 @@
 | `Read` 工具调用 | 必须 | 必须 | 必须 |
 | 无需安装 Node.js/Bun | 不适用 | 不适用 | 构建产物属性，必须通过直接执行 EXE 验证 |
 
-矩阵必须按“构建一条、立即验证一条”的顺序运行，因为 Bun 与 Vite 构建都会重建 `dist`。`scripts/check-bundle-integrity.ts` 对未知外部运行时模块保持错误；`bun:ffi` 仅在 Bun 产物中作为运行时专用警告，`@napi-rs/keyring` 作为可选运行时警告，缺失时必须安全降级。Vertex/Google 鉴权模块若重新进入产物将直接判定为错误。2026-07-16 实测 Bun 与 Node 产物完整性均为零错误，Windows x64 EXE 为 120.1 MiB，三种产物的版本、帮助、模型请求和工具调用全部通过。
+矩阵必须按“构建一条、立即验证一条”的顺序运行，因为 Bun 与 Vite 构建都会重建 `dist`。`scripts/check-bundle-integrity.ts` 对未知外部运行时模块保持错误；`bun:ffi` 仅在 Bun 产物中作为运行时专用警告，`@napi-rs/keyring` 作为可选运行时警告，缺失时必须安全降级。Vertex/Google 鉴权模块或 Foundry/Azure Identity 鉴权模块若重新进入产物将直接判定为错误。2026-07-16 实测 Bun 与 Node 产物完整性均为零错误，Windows x64 EXE 为 120.1 MiB，三种产物的版本、帮助、模型请求和工具调用全部通过。
 
 ### 5.3 CI 验证矩阵
 
@@ -170,7 +170,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - [x] 明确移除范围仅包括 Anthropic 账号登录、账号鉴权和官方模型直连入口，并增加检查防止这些入口被意外恢复（2026-07-16 已移除账号鉴权实现、官方直连回退和账号专属命令，并接入 `anthropic-boundary` 验证）。
 - [x] 完成 Bedrock 非主路径审计并删除专用 Provider 实现、AWS 鉴权配置和依赖，同时保留共享 Anthropic SDK 消息兼容逻辑（2026-07-15 已验证 Bun/Vite 构建及 Bun/Node CLI 启动）。
 - [x] 对 Vertex 非主路径分支完成引用和运行时审计；确认其不承担共享 SDK 兼容职责且运行不可达后，已删除客户端、GCP 鉴权、区域配置、专用请求行为和依赖，并增加源码及构建产物防回归检查（2026-07-16）。
-- [ ] 对 Foundry 非主路径分支做引用和运行时审计；只有确认不承担共享 SDK 兼容职责且不可达后，才删除对应实现、配置或依赖。
+- [x] 对 Foundry 非主路径分支完成引用和运行时审计；确认其仅为独立传输与 Azure Identity 鉴权实现、不承担共享 SDK 兼容职责且运行不可达后，已删除客户端、Provider 行为、模型与环境配置以及依赖，并增加源码及构建产物防回归检查；历史 API Key 名称仅保留在子进程密钥过滤中（2026-07-16）。
 - [ ] 拆分 `src/main.tsx`，按启动阶段、参数注册、运行模式和服务初始化划分模块。
 - [ ] 拆分 `src/screens/REPL.tsx`，将会话状态、输入控制、任务/Agent 状态和渲染职责分离。
 - [ ] 拆分 `src/utils/messages.ts`、`src/utils/sessionStorage.ts` 和 `src/utils/hooks.ts`，优先抽出纯函数与协议转换层，并在 `scripts/validation` 中补充轻量验证脚本。

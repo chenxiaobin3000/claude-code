@@ -75,7 +75,6 @@ export function createTrace(params: {
 
 const PROVIDER_GENERATION_NAMES: Record<string, string> = {
   firstParty: 'ChatAnthropic',
-  foundry: 'ChatFoundry',
   openai: 'ChatOpenAI',
 }
 

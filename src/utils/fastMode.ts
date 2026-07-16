@@ -109,9 +109,9 @@ export function getFastModeUnavailableReason(): string | null {
     }
   }
 
-  // Only available for 1P (not Vertex/Foundry)
+  // Only available for the removed first-party service.
   if (getAPIProvider() !== 'firstParty') {
-    const reason = 'Fast mode is not available on Vertex or Foundry'
+    const reason = 'Fast mode is not available with OpenAI-compatible providers'
     logForDebugging(`Fast mode unavailable: ${reason}`)
     return reason
   }

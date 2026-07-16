@@ -16,7 +16,6 @@ import {
   STRUCTURED_OUTPUTS_BETA_HEADER,
   TOKEN_EFFICIENT_TOOLS_BETA_HEADER,
   SEARCH_EXTRA_TOOLS_BETA_HEADER_1P,
-  WEB_SEARCH_BETA_HEADER,
 } from '../constants/betas.js'
 import { OAUTH_BETA_HEADER } from '../constants/oauth.js'
 import { isClaudeAISubscriber } from './auth.js'
@@ -84,9 +83,6 @@ export function filterAllowedSdkBetas(
   return allowed.length > 0 ? allowed : undefined
 }
 
-// Generally, foundry supports all 1P features;
-// however out of an abundance of caution, we do not enable any which are behind an experiment
-
 export function modelSupportsISP(model: string): boolean {
   const supported3P = get3PModelCapabilityOverride(
     model,
@@ -97,10 +93,6 @@ export function modelSupportsISP(model: string): boolean {
   }
   const canonical = getCanonicalName(model)
   const provider = getAPIProvider()
-  // Foundry supports interleaved thinking for all models
-  if (provider === 'foundry') {
-    return true
-  }
   if (provider === 'firstParty') {
     return !canonical.includes('claude-3-')
   }
@@ -113,9 +105,6 @@ export function modelSupportsISP(model: string): boolean {
 export function modelSupportsContextManagement(model: string): boolean {
   const canonical = getCanonicalName(model)
   const provider = getAPIProvider()
-  if (provider === 'foundry') {
-    return true
-  }
   if (provider === 'firstParty') {
     return !canonical.includes('claude-3-')
   }
@@ -130,8 +119,7 @@ export function modelSupportsContextManagement(model: string): boolean {
 export function modelSupportsStructuredOutputs(model: string): boolean {
   const canonical = getCanonicalName(model)
   const provider = getAPIProvider()
-  // Structured outputs only supported on firstParty and Foundry (not Bedrock/Vertex yet)
-  if (provider !== 'firstParty' && provider !== 'foundry') {
+  if (provider !== 'firstParty') {
     return false
   }
   return (
@@ -164,16 +152,14 @@ export function getSearchExtraToolsBetaHeader(): string {
  */
 export function shouldIncludeFirstPartyOnlyBetas(): boolean {
   return (
-    (getAPIProvider() === 'firstParty' || getAPIProvider() === 'foundry') &&
+    getAPIProvider() === 'firstParty' &&
     !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS) &&
     isFirstPartyAnthropicBaseUrl()
   )
 }
 
 /**
- * Global-scope prompt caching is firstParty only. Foundry is excluded because
- * GrowthBook never bucketed Foundry users into the rollout experiment — the
- * treatment data is firstParty-only.
+ * Global-scope prompt caching is firstParty only.
  */
 export function shouldUseGlobalCacheScope(): boolean {
   return (
@@ -185,7 +171,6 @@ export function shouldUseGlobalCacheScope(): boolean {
 export const getAllModelBetas = memoize((model: string): string[] => {
   const betaHeaders = []
   const isHaiku = getCanonicalName(model).includes('haiku')
-  const provider = getAPIProvider()
   const includeFirstPartyOnlyBetas = shouldIncludeFirstPartyOnlyBetas()
 
   if (!isHaiku) {
@@ -272,11 +257,6 @@ export const getAllModelBetas = memoize((model: string): string[] => {
     tokenEfficientToolsEnabled
   ) {
     betaHeaders.push(TOKEN_EFFICIENT_TOOLS_BETA_HEADER)
-  }
-
-  // Foundry only ships models that already support Web Search
-  if (provider === 'foundry') {
-    betaHeaders.push(WEB_SEARCH_BETA_HEADER)
   }
 
   // Always send the beta header for 1P. The header is a no-op without a scope field.

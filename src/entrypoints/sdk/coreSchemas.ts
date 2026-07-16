@@ -1094,7 +1094,7 @@ export const AccountInfoSchema = lazySchema(() =>
       tokenSource: z.string().optional(),
       apiKeySource: z.string().optional(),
       apiProvider: z
-        .enum(['firstParty', 'foundry'])
+        .enum(['firstParty', 'openai'])
         .optional()
         .describe(
           'Legacy Anthropic API backend identifier. Runtime model inference uses the OpenAI-compatible provider path.',

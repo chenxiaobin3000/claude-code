@@ -182,7 +182,7 @@ export function useMemorySurvey(
       return;
     }
 
-    // 3P default: survey off (no GrowthBook on Bedrock/Vertex/Foundry).
+    // Third-party default: survey off when GrowthBook is unavailable.
     if (!getFeatureValue_CACHED_MAY_BE_STALE(MEMORY_SURVEY_GATE, false)) {
       return;
     }

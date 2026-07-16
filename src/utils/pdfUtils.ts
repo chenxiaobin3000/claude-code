@@ -51,7 +51,7 @@ export function parsePDFPageRange(
 
 /**
  * Check if PDF reading is supported with the current model.
- * PDF document blocks work on all providers (1P, Vertex, Bedrock, Foundry).
+ * PDF document blocks are provider-neutral.
  * Haiku 3 is the only remaining model that predates PDF support; users on
  * it fall back to the page-extraction path (poppler-utils). Substring match
  * covers all provider ID formats (Bedrock prefixes, Vertex @-dates).

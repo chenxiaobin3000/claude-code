@@ -277,7 +277,7 @@ export async function suggestPathUnderCwd(
  */
 export function isCompactLinePrefixEnabled(): boolean {
   // 3P default: killswitch off = compact format enabled. Client-side only —
-  // no server support needed, safe for Bedrock/Vertex/Foundry.
+  // no server support needed, safe for compatible gateways.
   return !getFeatureValue_CACHED_MAY_BE_STALE(
     'tengu_compact_line_prefix_killswitch',
     false,
