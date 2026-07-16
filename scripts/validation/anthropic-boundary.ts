@@ -118,7 +118,12 @@ for (const path of [
 const mainPath = 'src/main.tsx'
 const main = await source(mainPath)
 forbid(mainPath, main, [/feature\(['"]SSH_REMOTE['"]\)/])
-if (!/isSshRemoteEnabled\(\): boolean \{\s*return false;?\s*\}/s.test(main)) {
+const startupPath = 'src/cli/startup/prepareStartup.ts'
+const startup = await source(startupPath)
+forbid(startupPath, startup, [/feature\(['"]SSH_REMOTE['"]\)/])
+if (
+  !/isSshRemoteEnabled\(\): boolean \{\s*return false;?\s*\}/s.test(startup)
+) {
   fail('SSH authentication proxy entry point must remain disabled')
 }
 

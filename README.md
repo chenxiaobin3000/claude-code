@@ -97,7 +97,11 @@ CLI 入口
 关键文件：
 
 - `src/entrypoints/cli.tsx`：最早的 CLI 入口
-- `src/main.tsx`：主初始化流程、参数注册和运行模式分发
+- `src/main.tsx`：精简的 CLI 启动编排入口
+- `src/cli/startup/`：早期参数改写、设置预加载、入口识别与启动遥测
+- `src/cli/arguments/`：Commander 根参数、功能参数和子命令注册
+- `src/cli/modes/`：交互、print、resume、SSH、remote 等运行模式编排
+- `src/cli/initialization/`：命令级、迁移和首屏后延迟服务初始化
 - `src/screens/REPL.tsx`：交互式终端主界面
 - `src/query.ts`：模型查询、流式响应和工具调用循环
 - `src/tools.ts`：工具集合与默认工具预设
@@ -223,7 +227,6 @@ bun run check
 部分模块已经承担过多职责：
 
 - `src/screens/REPL.tsx`：约 299 KB
-- `src/main.tsx`：约 247 KB
 - `src/cli/print.ts`：约 223 KB
 - `src/utils/messages.ts`：约 214 KB
 - `src/utils/sessionStorage.ts`：约 187 KB
@@ -254,7 +257,7 @@ Bun 与 Vite/Rollup 的依赖处理和代码转换逻辑不同，需要避免两
 
 1. 完善根级许可证和 CI。
 2. 在干净环境中恢复可复现安装，并跑通静态检查。
-3. 优先拆分 `main.tsx`、`REPL.tsx`、`messages.ts` 和 `sessionStorage.ts`。
+3. 继续拆分 `REPL.tsx`、`messages.ts` 和 `sessionStorage.ts`；`main.tsx` 已完成分层。
 4. 统一 Bun/Node 两种构建产物的兼容策略。
 5. 对 Feature Flag 进行分层和组合约束。
 6. 对远程控制、插件加载、Shell 权限和制品服务进行专项安全审计。
