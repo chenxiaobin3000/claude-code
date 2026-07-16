@@ -98,7 +98,11 @@ for (const path of [
 }
 
 const mainPath = 'src/main.tsx'
-forbid(mainPath, await source(mainPath), [/feature\(['"]SSH_REMOTE['"]\)/])
+const main = await source(mainPath)
+forbid(mainPath, main, [/feature\(['"]SSH_REMOTE['"]\)/])
+if (!/isSshRemoteEnabled\(\): boolean \{\s*return false;?\s*\}/s.test(main)) {
+  fail('SSH authentication proxy entry point must remain disabled')
+}
 
 for (const command of ['login', 'logout', 'oauth-refresh']) {
   const dir = join(root, 'src', 'commands', command)

@@ -1,124 +1,8 @@
 import type { Anthropic } from '@anthropic-ai/sdk'
-import type { BetaMessageParam as MessageParam } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
-import { getAPIProvider } from 'src/utils/model/providers.js'
-import { VERTEX_COUNT_TOKENS_ALLOWED_BETAS } from '../constants/betas.js'
 import type { Attachment } from '../utils/attachments.js'
-import { getModelBetas } from '../utils/betas.js'
-import { getVertexRegionForModel } from '../utils/envUtils.js'
-import { logError } from '../utils/log.js'
 import { normalizeAttachmentForAPI } from '../utils/messages.js'
-import {
-  getDefaultSonnetModel,
-  getMainLoopModel,
-  getSmallFastModel,
-  normalizeModelStringForAPI,
-} from '../utils/model/model.js'
 import { jsonStringify } from '../utils/slowOperations.js'
-import { isToolReferenceBlock } from '../utils/searchExtraTools.js'
-import { getAPIMetadata, getExtraBodyParams } from './api/claude.js'
-import { getAnthropicClient } from './api/client.js'
-import {
-  createTrace,
-  endTrace,
-  isLangfuseEnabled,
-  recordLLMObservation,
-} from './langfuse/index.js'
-import { getSessionId } from '../bootstrap/state.js'
 import { withTokenCountVCR } from './vcr.js'
-
-// Minimal values for token counting with thinking enabled
-// API constraint: max_tokens must be greater than thinking.budget_tokens
-const TOKEN_COUNT_THINKING_BUDGET = 1024
-const TOKEN_COUNT_MAX_TOKENS = 2048
-
-/**
- * Check if messages contain thinking blocks
- */
-function hasThinkingBlocks(
-  messages: Anthropic.Beta.Messages.BetaMessageParam[],
-): boolean {
-  for (const message of messages) {
-    if (message.role === 'assistant' && Array.isArray(message.content)) {
-      for (const block of message.content) {
-        if (
-          typeof block === 'object' &&
-          block !== null &&
-          'type' in block &&
-          (block.type === 'thinking' || block.type === 'redacted_thinking')
-        ) {
-          return true
-        }
-      }
-    }
-  }
-  return false
-}
-
-/**
- * Strip tool search-specific fields from messages before sending for token counting.
- * This removes 'caller' from tool_use blocks and 'tool_reference' from tool_result content.
- * These fields are only valid with the tool search beta and will cause errors otherwise.
- *
- * Note: We use 'as unknown as' casts because the SDK types don't include tool search beta fields,
- * but at runtime these fields may exist from API responses when tool search was enabled.
- */
-function stripSearchExtraToolsFieldsFromMessages(
-  messages: Anthropic.Beta.Messages.BetaMessageParam[],
-): Anthropic.Beta.Messages.BetaMessageParam[] {
-  return messages.map(message => {
-    if (!Array.isArray(message.content)) {
-      return message
-    }
-
-    const normalizedContent = message.content.map(block => {
-      // Strip 'caller' from tool_use blocks (assistant messages)
-      if (block.type === 'tool_use') {
-        // Destructure to exclude any extra fields like 'caller'
-        const toolUse =
-          block as Anthropic.Beta.Messages.BetaToolUseBlockParam & {
-            caller?: unknown
-          }
-        return {
-          type: 'tool_use' as const,
-          id: toolUse.id,
-          name: toolUse.name,
-          input: toolUse.input,
-        }
-      }
-
-      // Strip tool_reference blocks from tool_result content (user messages)
-      if (block.type === 'tool_result') {
-        const toolResult =
-          block as Anthropic.Beta.Messages.BetaToolResultBlockParam
-        if (Array.isArray(toolResult.content)) {
-          const filteredContent = (toolResult.content as unknown[]).filter(
-            c => !isToolReferenceBlock(c),
-          ) as typeof toolResult.content
-
-          if (filteredContent.length === 0) {
-            return {
-              ...toolResult,
-              content: [{ type: 'text' as const, text: '[tool references]' }],
-            }
-          }
-          if (filteredContent.length !== toolResult.content.length) {
-            return {
-              ...toolResult,
-              content: filteredContent,
-            }
-          }
-        }
-      }
-
-      return block
-    })
-
-    return {
-      ...message,
-      content: normalizedContent,
-    }
-  })
-}
 
 export async function countTokensWithAPI(
   content: string,
@@ -140,55 +24,9 @@ export async function countMessagesTokensWithAPI(
   messages: Anthropic.Beta.Messages.BetaMessageParam[],
   tools: Anthropic.Beta.Messages.BetaToolUnion[],
 ): Promise<number | null> {
-  return withTokenCountVCR(messages, tools, async () => {
-    try {
-      const provider = getAPIProvider()
-      if (provider === 'openai') {
-        return roughTokenCountEstimationForAPIRequest(messages, tools)
-      }
-
-      const model = getMainLoopModel()
-      const betas = getModelBetas(model)
-      const containsThinking = hasThinkingBlocks(messages)
-
-      const anthropic = await getAnthropicClient({
-        maxRetries: 1,
-        model,
-        source: 'count_tokens',
-      })
-
-      const filteredBetas =
-        getAPIProvider() === 'vertex'
-          ? betas.filter(b => VERTEX_COUNT_TOKENS_ALLOWED_BETAS.has(b))
-          : betas
-
-      const response = await anthropic.beta.messages.countTokens({
-        model: normalizeModelStringForAPI(model),
-        messages:
-          // When we pass tools and no messages, we need to pass a dummy message
-          // to get an accurate tool token count.
-          messages.length > 0 ? messages : [{ role: 'user', content: 'foo' }],
-        tools,
-        ...(filteredBetas.length > 0 && { betas: filteredBetas }),
-        // Enable thinking if messages contain thinking blocks
-        ...(containsThinking && {
-          thinking: {
-            type: 'enabled',
-            budget_tokens: TOKEN_COUNT_THINKING_BUDGET,
-          },
-        }),
-      })
-
-      if (typeof response.input_tokens !== 'number') {
-        return null
-      }
-
-      return response.input_tokens
-    } catch (error) {
-      logError(error)
-      return null
-    }
-  })
+  return withTokenCountVCR(messages, tools, async () =>
+    roughTokenCountEstimationForAPIRequest(messages, tools),
+  )
 }
 
 export function roughTokenCountEstimation(
@@ -235,109 +73,14 @@ export function roughTokenCountEstimationForFileType(
 /**
  * Estimates token count for a Message object by extracting and analyzing its text content.
  * This provides a more reliable estimate than getTokenUsage for messages that may have been compacted.
- * Uses Haiku for token counting (Haiku 4.5 supports thinking blocks), except:
- * - Vertex global region: uses Sonnet (Haiku not available)
+ * The OpenAI-compatible distribution uses deterministic local estimation and
+ * never sends a secondary provider request merely to count tokens.
  */
 export async function countTokensViaHaikuFallback(
   messages: Anthropic.Beta.Messages.BetaMessageParam[],
   tools: Anthropic.Beta.Messages.BetaToolUnion[],
 ): Promise<number | null> {
-  const provider = getAPIProvider()
-  if (provider === 'openai') {
-    return roughTokenCountEstimationForAPIRequest(messages, tools)
-  }
-
-  // Check if messages contain thinking blocks
-  const containsThinking = hasThinkingBlocks(messages)
-
-  // If we're on Vertex and using global region, always use Sonnet since Haiku is not available there.
-  const isVertexGlobalEndpoint =
-    provider === 'vertex' &&
-    getVertexRegionForModel(getSmallFastModel()) === 'global'
-  // If we're on Vertex with thinking blocks, use Sonnet since Haiku 3.5 doesn't support thinking
-  const isVertexWithThinking = provider === 'vertex' && containsThinking
-  // Otherwise always use Haiku - Haiku 4.5 supports thinking blocks.
-  // WARNING: if you change this to use a non-Haiku model, this request will fail in 1P unless it uses getCLISyspromptPrefix.
-  // Note: We don't need Sonnet for tool_reference blocks because we strip them via
-  // stripSearchExtraToolsFieldsFromMessages() before sending.
-  const model =
-    isVertexGlobalEndpoint || isVertexWithThinking
-      ? getDefaultSonnetModel()
-      : getSmallFastModel()
-  const anthropic = await getAnthropicClient({
-    maxRetries: 1,
-    model,
-    source: 'count_tokens',
-  })
-
-  // Strip tool search-specific fields (caller, tool_reference) before sending
-  // These fields are only valid with the tool search beta header
-  const normalizedMessages = stripSearchExtraToolsFieldsFromMessages(messages)
-
-  const messagesToSend: MessageParam[] =
-    normalizedMessages.length > 0
-      ? (normalizedMessages as MessageParam[])
-      : [{ role: 'user', content: 'count' }]
-
-  const betas = getModelBetas(model)
-  // Filter betas for Vertex - some betas (like web-search) cause 400 errors
-  // on certain Vertex endpoints. See issue #10789.
-  const filteredBetas =
-    getAPIProvider() === 'vertex'
-      ? betas.filter(b => VERTEX_COUNT_TOKENS_ALLOWED_BETAS.has(b))
-      : betas
-
-  const apiStart = Date.now()
-  const langfuseTrace = isLangfuseEnabled()
-    ? createTrace({
-        sessionId: getSessionId(),
-        model: normalizeModelStringForAPI(model),
-        provider: getAPIProvider(),
-        name: 'token-estimation',
-      })
-    : null
-  const response = await anthropic.beta.messages.create({
-    model: normalizeModelStringForAPI(model),
-    max_tokens: containsThinking ? TOKEN_COUNT_MAX_TOKENS : 1,
-    messages: messagesToSend,
-    tools: tools.length > 0 ? tools : undefined,
-    ...(filteredBetas.length > 0 && { betas: filteredBetas }),
-    metadata: getAPIMetadata(),
-    ...getExtraBodyParams(),
-    // Enable thinking if messages contain thinking blocks
-    ...(containsThinking && {
-      thinking: {
-        type: 'enabled',
-        budget_tokens: TOKEN_COUNT_THINKING_BUDGET,
-      },
-    }),
-  })
-
-  const usage = response.usage
-  const inputTokens = usage.input_tokens
-  const cacheCreationTokens = usage.cache_creation_input_tokens || 0
-  const cacheReadTokens = usage.cache_read_input_tokens || 0
-
-  recordLLMObservation(langfuseTrace, {
-    model: normalizeModelStringForAPI(model),
-    provider: getAPIProvider(),
-    input: messagesToSend,
-    output: response.content,
-    usage: {
-      input_tokens: inputTokens,
-      output_tokens: usage.output_tokens,
-      cache_creation_input_tokens: cacheCreationTokens || undefined,
-      cache_read_input_tokens: cacheReadTokens || undefined,
-    },
-    startTime: new Date(apiStart),
-    endTime: new Date(),
-    ...(containsThinking && {
-      thinking: { type: 'enabled', budgetTokens: TOKEN_COUNT_THINKING_BUDGET },
-    }),
-  })
-  endTrace(langfuseTrace)
-
-  return inputTokens + cacheCreationTokens + cacheReadTokens
+  return roughTokenCountEstimationForAPIRequest(messages, tools)
 }
 
 export function roughTokenCountEstimationForMessages(

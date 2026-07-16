@@ -16,7 +16,6 @@ import {
 } from 'src/utils/model/providers.js'
 import {
   clearApiKeyHelperCache,
-  clearGcpCredentialsCache,
   getClaudeAIOAuthTokens,
   handleOAuth401Error,
   isClaudeAISubscriber,
@@ -213,7 +212,6 @@ export async function* withRetry<T>(
       // Get a fresh client instance on first attempt or after authentication errors
       // - 401 for first-party API authentication failures
       // - 403 "OAuth token has been revoked" (another process refreshed the token)
-      // - Vertex-specific auth errors (credential refresh failures, 401)
       // - ECONNRESET/EPIPE: stale keep-alive socket; disable pooling and reconnect
       const isStaleConnection = isStaleConnectionError(lastError)
       if (
@@ -233,7 +231,6 @@ export async function* withRetry<T>(
         client === null ||
         (lastError instanceof APIError && lastError.status === 401) ||
         isOAuthTokenRevokedError(lastError) ||
-        isVertexAuthError(lastError) ||
         isStaleConnection
       ) {
         // On 401 "token expired" or 403 "token revoked", force a token refresh
@@ -370,12 +367,7 @@ export async function* withRetry<T>(
         throw new CannotRetryError(error, retryContext)
       }
 
-      // GCP errors aren't always APIError, but can be retried
-      const handledCloudAuthError = handleGcpCredentialError(error)
-      if (
-        !handledCloudAuthError &&
-        (!(error instanceof APIError) || !shouldRetry(error))
-      ) {
+      if (!(error instanceof APIError) || !shouldRetry(error)) {
         throw new CannotRetryError(error, retryContext)
       }
 
@@ -621,44 +613,6 @@ function isOAuthTokenRevokedError(error: unknown): boolean {
     error.status === 403 &&
     (error.message?.includes('OAuth token has been revoked') ?? false)
   )
-}
-
-// google-auth-library throws plain Error (no typed name like AWS's
-// CredentialsProviderError). Match common SDK-level credential-failure messages.
-function isGoogleAuthLibraryCredentialError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false
-  const msg = error.message
-  return (
-    msg.includes('Could not load the default credentials') ||
-    msg.includes('Could not refresh access token') ||
-    msg.includes('invalid_grant')
-  )
-}
-
-function isVertexAuthError(error: unknown): boolean {
-  if (getAPIProvider() === 'vertex') {
-    // SDK-level: google-auth-library fails in prepareOptions() before the HTTP call
-    if (isGoogleAuthLibraryCredentialError(error)) {
-      return true
-    }
-    // Server-side: Vertex returns 401 for expired/invalid tokens
-    if (error instanceof APIError && error.status === 401) {
-      return true
-    }
-  }
-  return false
-}
-
-/**
- * Clear GCP auth caches if appropriate.
- * @returns true if action was taken.
- */
-function handleGcpCredentialError(error: unknown): boolean {
-  if (isVertexAuthError(error)) {
-    clearGcpCredentialsCache()
-    return true
-  }
-  return false
 }
 
 function shouldRetry(error: APIError): boolean {

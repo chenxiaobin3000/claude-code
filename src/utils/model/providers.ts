@@ -4,7 +4,7 @@ import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from 
  * The wider union remains temporarily for dormant Vertex/Foundry data shapes.
  * Runtime inference in this distribution is always OpenAI-compatible.
  */
-export type APIProvider = 'firstParty' | 'vertex' | 'foundry' | 'openai'
+export type APIProvider = 'firstParty' | 'foundry' | 'openai'
 
 export function getAPIProvider(): APIProvider {
   return 'openai'

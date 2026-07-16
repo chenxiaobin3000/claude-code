@@ -6,7 +6,7 @@ import type { MCPServerConnection } from '../services/mcp/types.js';
 import { getAccountInformation, isClaudeAISubscriber } from './auth.js';
 import { getLargeMemoryFiles, getMemoryFiles, MAX_MEMORY_CHARACTER_COUNT } from './claudemd.js';
 import { getDoctorDiagnostic } from './doctorDiagnostic.js';
-import { getDefaultVertexRegion, isEnvTruthy } from './envUtils.js';
+import { isEnvTruthy } from './envUtils.js';
 import { getDisplayPath } from './file.js';
 import { formatNumber } from './format.js';
 import { getIdeClientName, type IDEExtensionInstallationStatus, isJetBrainsIde, toIDEDisplayName } from './ide.js';
@@ -296,7 +296,6 @@ export function buildAPIProviderProperties(): Property[] {
 
   if (apiProvider !== 'firstParty') {
     const providerLabel = {
-      vertex: 'Google Vertex AI',
       foundry: 'Microsoft Foundry',
       openai: 'OpenAI API',
     }[apiProvider];
@@ -312,33 +311,6 @@ export function buildAPIProviderProperties(): Property[] {
       properties.push({
         label: 'Anthropic base URL',
         value: anthropicBaseUrl,
-      });
-    }
-  } else if (apiProvider === 'vertex') {
-    const vertexBaseUrl = process.env.VERTEX_BASE_URL;
-    if (vertexBaseUrl) {
-      properties.push({
-        label: 'Vertex base URL',
-        value: vertexBaseUrl,
-      });
-    }
-
-    const gcpProject = process.env.ANTHROPIC_VERTEX_PROJECT_ID;
-    if (gcpProject) {
-      properties.push({
-        label: 'GCP project',
-        value: gcpProject,
-      });
-    }
-
-    properties.push({
-      label: 'Default region',
-      value: getDefaultVertexRegion(),
-    });
-
-    if (isEnvTruthy(process.env.CLAUDE_CODE_SKIP_VERTEX_AUTH)) {
-      properties.push({
-        value: 'GCP auth skipped',
       });
     }
   } else if (apiProvider === 'foundry') {

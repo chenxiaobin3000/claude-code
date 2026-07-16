@@ -176,14 +176,6 @@ export function getAccountInformation(): UserAccountInfo | undefined {
   return undefined
 }
 
-// Vertex support is audited in a separate P0 item. Keep its hook fail-closed
-// here so removing Anthropic account auth cannot execute another auth command.
-export function refreshGcpCredentialsIfNeeded(): Promise<boolean> {
-  return Promise.resolve(false)
-}
-
-export function clearGcpCredentialsCache(): void {}
-
 function getConfiguredOtelHeadersHelper(): string | undefined {
   return getSettings_DEPRECATED()?.otelHeadersHelper
 }

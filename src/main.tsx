@@ -703,17 +703,18 @@ type PendingSSH = {
   extraCliArgs: string[];
   remoteBin: string | undefined;
 };
-const _pendingSSH: PendingSSH | undefined = false
-  ? {
-      host: undefined,
-      cwd: undefined,
-      permissionMode: undefined,
-      dangerouslySkipPermissions: false,
-      local: false,
-      extraCliArgs: [],
-      remoteBin: undefined,
-    }
-  : undefined;
+function isSshRemoteEnabled(): boolean {
+  return false;
+}
+const _pendingSSH: PendingSSH = {
+  host: undefined,
+  cwd: undefined,
+  permissionMode: undefined,
+  dangerouslySkipPermissions: false,
+  local: false,
+  extraCliArgs: [],
+  remoteBin: undefined,
+};
 
 export async function main() {
   profileCheckpoint('main_function_start');
@@ -837,7 +838,7 @@ export async function main() {
   // runs (full interactive TUI), stash the host/dir for the REPL branch at
   // ~line 3720 to pick up. Headless (-p) mode not supported in v1: SSH
   // sessions need the local REPL to drive them (interrupt, permissions).
-  if (false && _pendingSSH) {
+  if (isSshRemoteEnabled() && _pendingSSH) {
     const rawCliArgs = process.argv.slice(2);
     // SSH-specific flags can appear before the host positional (e.g.
     // `ssh --permission-mode auto host /tmp` — standard POSIX flags-before-
@@ -3725,7 +3726,7 @@ async function run(): Promise<CommanderCommand> {
           renderAndRun,
         );
         return;
-      } else if (false && _pendingSSH?.host) {
+      } else if (isSshRemoteEnabled() && _pendingSSH.host) {
         // `claude ssh <host> [dir]` — probe remote, deploy binary if needed,
         // spawn ssh with unix-socket -R forward to a local auth proxy, hand
         // the REPL an SSHSession. Tools run remotely, UI renders locally.
@@ -4727,7 +4728,7 @@ async function run(): Promise<CommanderCommand> {
   // (parallels the DIRECT_CONNECT/cc:// pattern above). If commander reaches
   // this action it means the argv rewrite didn't fire (e.g. user ran
   // `claude ssh` with no host) — just print usage.
-  if (false) {
+  if (isSshRemoteEnabled()) {
     program
       .command('ssh <host> [dir]')
       .description(

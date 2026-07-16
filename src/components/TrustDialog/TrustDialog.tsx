@@ -18,7 +18,6 @@ import {
   getApiKeyHelperSources,
   getBashPermissionSources,
   getDangerousEnvVarsSources,
-  getGcpCommandsSources,
   getHooksSources,
   getOtelHeadersHelperSources,
 } from './utils.js';
@@ -45,9 +44,6 @@ export function TrustDialog({ onDone, commands }: Props): React.ReactNode {
   // Check for apiKeyHelper which executes arbitrary commands
   const apiKeyHelperSources = getApiKeyHelperSources();
   const hasApiKeyHelper = apiKeyHelperSources.length > 0;
-  // Check for GCP commands which execute arbitrary commands
-  const gcpCommandsSources = getGcpCommandsSources();
-  const hasGcpCommands = gcpCommandsSources.length > 0;
   // Check for otelHeadersHelper which executes arbitrary commands
   const otelHeadersHelperSources = getOtelHeadersHelperSources();
   const hasOtelHeadersHelper = otelHeadersHelperSources.length > 0;
@@ -100,7 +96,6 @@ export function TrustDialog({ onDone, commands }: Props): React.ReactNode {
       hasHooks,
       hasBashExecution: hasAnyBashExecution,
       hasApiKeyHelper,
-      hasGcpCommands,
       hasOtelHeadersHelper,
       hasDangerousEnvVars,
     });
@@ -109,7 +104,6 @@ export function TrustDialog({ onDone, commands }: Props): React.ReactNode {
     hasHooks,
     hasAnyBashExecution,
     hasApiKeyHelper,
-    hasGcpCommands,
     hasOtelHeadersHelper,
     hasDangerousEnvVars,
   ]);
@@ -133,7 +127,6 @@ export function TrustDialog({ onDone, commands }: Props): React.ReactNode {
       hasHooks,
       hasBashExecution: hasAnyBashExecution,
       hasApiKeyHelper,
-      hasGcpCommands,
       hasOtelHeadersHelper,
       hasDangerousEnvVars,
     });

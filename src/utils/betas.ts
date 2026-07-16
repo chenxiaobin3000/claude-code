@@ -16,7 +16,6 @@ import {
   STRUCTURED_OUTPUTS_BETA_HEADER,
   TOKEN_EFFICIENT_TOOLS_BETA_HEADER,
   SEARCH_EXTRA_TOOLS_BETA_HEADER_1P,
-  SEARCH_EXTRA_TOOLS_BETA_HEADER_3P,
   WEB_SEARCH_BETA_HEADER,
 } from '../constants/betas.js'
 import { OAUTH_BETA_HEADER } from '../constants/oauth.js'
@@ -110,16 +109,6 @@ export function modelSupportsISP(model: string): boolean {
   )
 }
 
-function vertexModelSupportsWebSearch(model: string): boolean {
-  const canonical = getCanonicalName(model)
-  // Web search only supported on Claude 4.0+ models on Vertex
-  return (
-    canonical.includes('claude-opus-4') ||
-    canonical.includes('claude-sonnet-4') ||
-    canonical.includes('claude-haiku-4')
-  )
-}
-
 // Context management is supported on Claude 4+ models
 export function modelSupportsContextManagement(model: string): boolean {
   const canonical = getCanonicalName(model)
@@ -162,14 +151,9 @@ export function modelSupportsAutoMode(_model: string): boolean {
 
 /**
  * Get the correct tool search beta header for the current API provider.
- * - Vertex AI: tool-search-tool-2025-10-19
- * - All other providers: advanced-tool-use-2025-11-20
+ * Uses the shared advanced-tool-use header.
  */
 export function getSearchExtraToolsBetaHeader(): string {
-  const provider = getAPIProvider()
-  if (provider === 'vertex') {
-    return SEARCH_EXTRA_TOOLS_BETA_HEADER_3P
-  }
   return SEARCH_EXTRA_TOOLS_BETA_HEADER_1P
 }
 
@@ -290,10 +274,6 @@ export const getAllModelBetas = memoize((model: string): string[] => {
     betaHeaders.push(TOKEN_EFFICIENT_TOOLS_BETA_HEADER)
   }
 
-  // Add web search beta for Vertex Claude 4.0+ models only
-  if (provider === 'vertex' && vertexModelSupportsWebSearch(model)) {
-    betaHeaders.push(WEB_SEARCH_BETA_HEADER)
-  }
   // Foundry only ships models that already support Web Search
   if (provider === 'foundry') {
     betaHeaders.push(WEB_SEARCH_BETA_HEADER)

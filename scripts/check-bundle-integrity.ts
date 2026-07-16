@@ -80,7 +80,6 @@ const BUN_MODULES = new Set(['bun', 'bun:ffi', 'bun:test', 'bun:sqlite'])
 // that the supported OpenAI-compatible CLI path is broken.
 const OPTIONAL_RUNTIME_MODULES = new Set([
   '@napi-rs/keyring',
-  'node-fetch', // Legacy Google/Vertex dependency; provider path is unsupported.
 ])
 
 // macOS JXA / native 框架（通过 ObjC.import，非真正的 require）
@@ -109,6 +108,7 @@ interface Finding {
     | 'third-party-node-require'
     | 'bun-runtime-only'
     | 'optional-runtime'
+    | 'forbidden-provider-artifact'
   severity: 'error' | 'warning'
   file: string
   line: number
@@ -141,6 +141,27 @@ async function main() {
     const filePath = join(distDir, file)
     const content = await readFile(filePath, 'utf-8')
     const lines = content.split('\n')
+
+    for (const marker of [
+      '@anthropic-ai/vertex-sdk',
+      'google-auth-library',
+      'gcp-metadata',
+      'AnthropicVertex',
+      'ANTHROPIC_VERTEX_PROJECT_ID',
+      'CLAUDE_CODE_SKIP_VERTEX_AUTH',
+      'VERTEX_REGION_CLAUDE_',
+    ]) {
+      if (content.includes(marker)) {
+        findings.push({
+          type: 'forbidden-provider-artifact',
+          severity: 'error',
+          file,
+          line: 1,
+          module: marker,
+          snippet: marker,
+        })
+      }
+    }
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
@@ -335,6 +356,17 @@ async function main() {
   )
   const bunRuntimeOnly = warnings.filter(f => f.type === 'bun-runtime-only')
   const optionalRuntime = warnings.filter(f => f.type === 'optional-runtime')
+  const forbiddenProviderArtifacts = errors.filter(
+    f => f.type === 'forbidden-provider-artifact',
+  )
+
+  if (forbiddenProviderArtifacts.length > 0) {
+    console.log('Forbidden removed-provider code found in build artifacts:')
+    for (const f of forbiddenProviderArtifacts) {
+      console.log(`   ${f.file}: ${f.module}`)
+    }
+    console.log()
+  }
 
   if (brokenRefs.length > 0) {
     console.log('❌ 断裂的 chunk 引用（引用了不存在的文件）:')

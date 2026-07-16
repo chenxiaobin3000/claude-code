@@ -7,8 +7,7 @@
  * overridden by a user's ~/.claude/settings.json.
  *
  * @[MODEL LAUNCH]: New models usually don't need changes here —
- * VERTEX_REGION_CLAUDE_* is prefix-matched. New providers or new routing
- * config vars (endpoint, project, region, auth) do.
+ * New providers or routing config vars (endpoint, project, region, auth) do.
  *
  * OpenAI-compatible endpoint and model routing is loaded from ~/.claude/models.json.
  * Only credentials and request-tuning variables remain environment based.
@@ -18,18 +17,13 @@ const PROVIDER_MANAGED_ENV_VARS = new Set([
   'CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST',
   // Endpoint config (base URLs, project/resource identifiers)
   'ANTHROPIC_BASE_URL',
-  'ANTHROPIC_VERTEX_BASE_URL',
   'ANTHROPIC_FOUNDRY_BASE_URL',
   'ANTHROPIC_FOUNDRY_RESOURCE',
-  'ANTHROPIC_VERTEX_PROJECT_ID',
-  // Region routing (per-model VERTEX_REGION_CLAUDE_* handled by prefix below)
-  'CLOUD_ML_REGION',
   // Auth
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_AUTH_TOKEN',
   'CLAUDE_CODE_OAUTH_TOKEN',
   'ANTHROPIC_FOUNDRY_API_KEY',
-  'CLAUDE_CODE_SKIP_VERTEX_AUTH',
   'CLAUDE_CODE_SKIP_FOUNDRY_AUTH',
   // Model defaults — often set to provider-specific ID formats
   'ANTHROPIC_MODEL',
@@ -52,18 +46,9 @@ const PROVIDER_MANAGED_ENV_VARS = new Set([
   'CLAUDE_CODE_SUBAGENT_MODEL',
 ])
 
-const PROVIDER_MANAGED_ENV_PREFIXES = [
-  // Per-model Vertex region overrides — scales with model releases, so
-  // prefix-matched to avoid drift on each launch.
-  'VERTEX_REGION_CLAUDE_',
-]
-
 export function isProviderManagedEnvVar(key: string): boolean {
   const upper = key.toUpperCase()
-  return (
-    PROVIDER_MANAGED_ENV_VARS.has(upper) ||
-    PROVIDER_MANAGED_ENV_PREFIXES.some(p => upper.startsWith(p))
-  )
+  return PROVIDER_MANAGED_ENV_VARS.has(upper)
 }
 
 /**
@@ -71,7 +56,6 @@ export function isProviderManagedEnvVar(key: string): boolean {
  */
 export const DANGEROUS_SHELL_SETTINGS = [
   'apiKeyHelper',
-  'gcpAuthRefresh',
   'otelHeadersHelper',
   'statusLine',
 ] as const
@@ -87,7 +71,7 @@ export const DANGEROUS_SHELL_SETTINGS = [
  * Dangerous env vars (NOT in this list):
  *
  * === REDIRECT TO ATTACKER-CONTROLLED SERVER ===
- * - ANTHROPIC_BASE_URL, ANTHROPIC_FOUNDRY_BASE_URL, ANTHROPIC_VERTEX_BASE_URL
+ * - ANTHROPIC_BASE_URL, ANTHROPIC_FOUNDRY_BASE_URL
  * - HTTP_PROXY, HTTPS_PROXY, NO_PROXY, http_proxy, https_proxy, no_proxy
  * - OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
  *
@@ -142,7 +126,6 @@ export const SAFE_ENV_VARS = new Set([
   'CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL',
   'CLAUDE_CODE_MAX_OUTPUT_TOKENS',
   'CLAUDE_CODE_SKIP_FOUNDRY_AUTH',
-  'CLAUDE_CODE_SKIP_VERTEX_AUTH',
   'CLAUDE_CODE_SUBAGENT_MODEL',
   'DISABLE_AUTOUPDATER',
   'DISABLE_BUG_COMMAND',
@@ -175,13 +158,4 @@ export const SAFE_ENV_VARS = new Set([
   'OTEL_METRICS_INCLUDE_VERSION',
   'OTEL_RESOURCE_ATTRIBUTES',
   'USE_BUILTIN_RIPGREP',
-  'VERTEX_REGION_CLAUDE_3_5_HAIKU',
-  'VERTEX_REGION_CLAUDE_3_5_SONNET',
-  'VERTEX_REGION_CLAUDE_3_7_SONNET',
-  'VERTEX_REGION_CLAUDE_4_0_OPUS',
-  'VERTEX_REGION_CLAUDE_4_0_SONNET',
-  'VERTEX_REGION_CLAUDE_4_1_OPUS',
-  'VERTEX_REGION_CLAUDE_4_5_SONNET',
-  'VERTEX_REGION_CLAUDE_4_6_SONNET',
-  'VERTEX_REGION_CLAUDE_HAIKU_4_5',
 ])
