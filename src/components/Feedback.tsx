@@ -13,7 +13,7 @@ import type { CommandResultDisplay } from '../commands.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import { Box, Text, useInput } from '@anthropic/ink';
 import { useKeybinding } from '../keybindings/useKeybinding.js';
-import { queryHaiku } from '../services/api/claude.js';
+import { queryHaiku } from '../services/model/queryHelpers.js';
 import { startsWithApiErrorPrefix } from '../services/api/errors.js';
 import type { Message } from '../types/message.js';
 import { checkAndRefreshOAuthTokenIfNeeded } from '../utils/auth.js';

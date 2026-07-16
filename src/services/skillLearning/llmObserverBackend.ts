@@ -1,4 +1,4 @@
-import { queryHaiku } from '../api/claude.js'
+import { queryHaiku } from '../model/queryHelpers.js'
 import { asSystemPrompt } from '../../utils/systemPromptType.js'
 import { getSkillLearningConfig } from './config.js'
 import type { InstinctCandidate } from './instinctParser.js'

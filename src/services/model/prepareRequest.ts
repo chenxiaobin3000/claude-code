@@ -1,4 +1,10 @@
-import type { BetaToolUnion } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
+import type {
+  BetaContentBlockParam,
+  BetaImageBlockParam,
+  BetaRequestDocumentBlock,
+  BetaToolResultBlockParam,
+  BetaToolUnion,
+} from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import {
   SEARCH_EXTRA_TOOLS_TOOL_NAME,
   isDeferredTool,
@@ -112,4 +118,73 @@ export function prepareMessages(
   prepared = ensureToolResultPairing(prepared)
   if (!options.allowAdvisorBlocks) prepared = stripAdvisorBlocks(prepared)
   return prepared as (AssistantMessage | UserMessage)[]
+}
+
+function isMedia(
+  block: BetaContentBlockParam,
+): block is BetaImageBlockParam | BetaRequestDocumentBlock {
+  return block.type === 'image' || block.type === 'document'
+}
+
+function isToolResult(
+  block: BetaContentBlockParam,
+): block is BetaToolResultBlockParam {
+  return block.type === 'tool_result'
+}
+
+/** Keep the most recent media blocks when a request exceeds the API limit. */
+export function stripExcessMediaItems(
+  messages: (UserMessage | AssistantMessage)[],
+  limit: number,
+): (UserMessage | AssistantMessage)[] {
+  let toRemove = 0
+  for (const message of messages) {
+    if (!Array.isArray(message.message.content)) continue
+    for (const block of message.message.content) {
+      if (isMedia(block)) toRemove++
+      if (isToolResult(block) && Array.isArray(block.content)) {
+        for (const nested of block.content) {
+          if (isMedia(nested as BetaContentBlockParam)) toRemove++
+        }
+      }
+    }
+  }
+  toRemove -= limit
+  if (toRemove <= 0) return messages
+
+  return messages.map(message => {
+    if (toRemove <= 0 || !Array.isArray(message.message.content)) return message
+    const before = toRemove
+    const content = message.message.content
+      .map(block => {
+        if (
+          toRemove <= 0 ||
+          !isToolResult(block) ||
+          !Array.isArray(block.content)
+        ) {
+          return block
+        }
+        const filtered = block.content.filter(nested => {
+          if (toRemove > 0 && isMedia(nested as BetaContentBlockParam)) {
+            toRemove--
+            return false
+          }
+          return true
+        })
+        return filtered.length === block.content.length
+          ? block
+          : { ...block, content: filtered }
+      })
+      .filter(block => {
+        if (toRemove > 0 && isMedia(block)) {
+          toRemove--
+          return false
+        }
+        return true
+      })
+
+    return before === toRemove
+      ? message
+      : { ...message, message: { ...message.message, content } }
+  }) as (UserMessage | AssistantMessage)[]
 }

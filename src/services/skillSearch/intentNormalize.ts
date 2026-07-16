@@ -20,7 +20,7 @@
  * - Feature-flagged: `SKILL_SEARCH_INTENT_ENABLED=1` to opt in.
  */
 
-import { queryHaiku } from '../api/claude.js'
+import { queryHaiku } from '../model/queryHelpers.js'
 import { asSystemPrompt } from '../../utils/systemPromptType.js'
 import { logForDebugging } from '../../utils/debug.js'
 

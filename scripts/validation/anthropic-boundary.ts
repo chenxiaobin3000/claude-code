@@ -69,12 +69,15 @@ if (!client.includes('Anthropic first-party model access has been removed')) {
 
 const claudePath = 'src/services/api/claude.ts'
 const claude = await source(claudePath)
-forbid(claudePath, claude, [/export async function verifyApiKey\s*\(/])
-const routeDelegate = claude.indexOf('yield* queryPreparedModel(')
-const routeTail =
-  routeDelegate < 0 ? '' : claude.slice(routeDelegate, routeDelegate + 600)
-if (routeDelegate < 0 || !/if \(handledByProvider\) return/.test(routeTail)) {
-  fail('main model query must delegate to OpenAI and return before legacy code')
+forbid(claudePath, claude, [
+  /export async function/,
+  /getAnthropicClient/,
+  /anthropic\.beta\.messages/,
+  /executeNonStreamingRequest/,
+  /getAPIProvider\s*\(/,
+])
+if (!claude.includes("from '../model/query.js'")) {
+  fail('claude.ts must remain a compatibility facade over model/query')
 }
 const modelQuery = await source('src/services/model/query.ts')
 if (!/yield\* queryModelOpenAI\(request, signal\)/.test(modelQuery)) {

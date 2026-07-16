@@ -4,7 +4,7 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from 'src/services/analytics/index.js'
-import { queryHaiku } from 'src/services/api/claude.js'
+import { queryHaiku } from 'src/services/model/queryHelpers.js'
 import { AbortError } from 'src/utils/errors.js'
 import { getWebFetchUserAgent } from 'src/utils/http.js'
 import { logError } from 'src/utils/log.js'

@@ -20,6 +20,7 @@ const validationScripts = [
   'scripts/validation/foundry-boundary.ts',
   'scripts/validation/sdk-compat-boundary.ts',
   'scripts/validation/provider-boundary.ts',
+  'scripts/validation/model-preparation.ts',
   'scripts/validation/message-conversion.ts',
   'scripts/validation/openai-stream.ts',
   'scripts/validation/model-stream.ts',

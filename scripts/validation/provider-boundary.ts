@@ -23,12 +23,36 @@ for (const forbidden of [
   /queryModelOpenAI/,
   /from ['"]openai['"]/,
   /services\/api\/openai/,
+  /getAnthropicClient/,
+  /anthropic\.beta\.messages/,
+  /executeNonStreamingRequest/,
+  /withRetry/,
+  /CACHE_EDITING_BETA_HEADER/,
+  /TASK_BUDGETS_BETA_HEADER/,
+  /\bfunction\b/,
 ]) {
   rejectPattern(claudePath, claude, forbidden)
 }
-requirePattern(claudePath, claude, /queryPreparedModel\s*\(/)
-requirePattern(claudePath, claude, /prepareTools\s*\(/)
-requirePattern(claudePath, claude, /prepareMessages\s*\(/)
+requirePattern(claudePath, claude, /from ['"]\.\.\/model\/query\.js['"]/)
+requirePattern(claudePath, claude, /from ['"]\.\.\/model\/queryHelpers\.js['"]/)
+if (claude.length > 1_500) {
+  throw new Error('[provider-boundary] claude.ts must remain a thin facade')
+}
+
+const queryPath = 'src/services/model/query.ts'
+const query = await source(queryPath)
+requirePattern(queryPath, query, /prepareTools\s*\(/)
+requirePattern(queryPath, query, /prepareMessages\s*\(/)
+requirePattern(queryPath, query, /stripExcessMediaItems\s*\(/)
+requirePattern(queryPath, query, /queryPreparedModel\s*\(/)
+for (const forbidden of [
+  /getAnthropicClient/,
+  /anthropic\.beta\.messages/,
+  /getAPIProvider\s*\(/,
+  /firstParty/,
+]) {
+  rejectPattern(queryPath, query, forbidden)
+}
 
 const openaiPath = 'src/services/api/openai/index.ts'
 const openai = await source(openaiPath)
