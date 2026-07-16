@@ -102,7 +102,12 @@ CLI 入口
 - `src/cli/arguments/`：Commander 根参数、功能参数和子命令注册
 - `src/cli/modes/`：交互、print、resume、SSH、remote 等运行模式编排
 - `src/cli/initialization/`：命令级、迁移和首屏后延迟服务初始化
-- `src/screens/REPL.tsx`：交互式终端主界面
+- `src/screens/REPL.tsx`：交互式终端的稳定导出入口
+- `src/screens/repl/ReplController.tsx`：REPL 跨域编排控制器
+- `src/screens/repl/session/`：会话消息与时间线状态
+- `src/screens/repl/input/`：输入框、快捷键和 transcript 控制
+- `src/screens/repl/agents/`：任务、Agent 状态与消息投影
+- `src/screens/repl/view/`：transcript 纯渲染组件
 - `src/query.ts`：模型查询、流式响应和工具调用循环
 - `src/tools.ts`：工具集合与默认工具预设
 - `src/services/tools/`：工具编排和流式工具执行
@@ -226,7 +231,7 @@ bun run check
 
 部分模块已经承担过多职责：
 
-- `src/screens/REPL.tsx`：约 299 KB
+- `src/screens/repl/ReplController.tsx`：约 270 KB（入口已分层，跨域编排仍是后续收缩重点）
 - `src/cli/print.ts`：约 223 KB
 - `src/utils/messages.ts`：约 214 KB
 - `src/utils/sessionStorage.ts`：约 187 KB
@@ -257,7 +262,7 @@ Bun 与 Vite/Rollup 的依赖处理和代码转换逻辑不同，需要避免两
 
 1. 完善根级许可证和 CI。
 2. 在干净环境中恢复可复现安装，并跑通静态检查。
-3. 继续拆分 `REPL.tsx`、`messages.ts` 和 `sessionStorage.ts`；`main.tsx` 已完成分层。
+3. 继续收缩 `ReplController.tsx` 的查询与运行时编排，并拆分 `messages.ts` 和 `sessionStorage.ts`；`main.tsx` 与 REPL 入口已完成分层。
 4. 统一 Bun/Node 两种构建产物的兼容策略。
 5. 对 Feature Flag 进行分层和组合约束。
 6. 对远程控制、插件加载、Shell 权限和制品服务进行专项安全审计。

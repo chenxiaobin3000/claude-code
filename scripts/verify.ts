@@ -21,6 +21,7 @@ const validationScripts = [
   'scripts/validation/sdk-compat-boundary.ts',
   'scripts/validation/provider-boundary.ts',
   'scripts/validation/main-boundary.ts',
+  'scripts/validation/repl-boundary.ts',
   'scripts/validation/model-preparation.ts',
   'scripts/validation/message-conversion.ts',
   'scripts/validation/openai-stream.ts',
