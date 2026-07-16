@@ -32,9 +32,30 @@ for (const forbidden of [
 
 const controllerPath = 'src/screens/repl/ReplController.tsx'
 const controller = await source(controllerPath)
-if (controller.split(/\r?\n/).length > 4_300) {
+if (controller.split(/\r?\n/).length > 1_800) {
   throw new Error(
-    '[repl-boundary] ReplController.tsx exceeded the post-split orchestration ceiling',
+    '[repl-boundary] ReplController.tsx exceeded the controller ceiling',
+  )
+}
+requirePattern(
+  controllerPath,
+  controller,
+  /from ['"]\.\/ReplRuntimeController\.js['"]/,
+)
+for (const forbidden of [
+  /useState\s*\(/,
+  /useEffect\s*\(/,
+  /query\s*\(/,
+  /<ReplView\b/,
+]) {
+  rejectPattern(controllerPath, controller, forbidden)
+}
+
+const runtimeControllerPath = 'src/screens/repl/ReplRuntimeController.tsx'
+const runtimeController = await source(runtimeControllerPath)
+if (runtimeController.split(/\r?\n/).length > 3_500) {
+  throw new Error(
+    '[repl-boundary] ReplRuntimeController.tsx exceeded the runtime orchestration ceiling',
   )
 }
 for (const required of [
@@ -42,7 +63,6 @@ for (const required of [
   /useReplInputState\s*\(/,
   /useTranscriptControls\s*\(/,
   /useReplAgentState\s*\(/,
-  /buildDisplayedAgentMessages\s*\(/,
   /usePipeRouting\s*\(/,
   /usePipeLifecycle\s*\(/,
   /useRemoteRuntime\s*\(/,
@@ -53,9 +73,9 @@ for (const required of [
   /useConversationResume\s*\(/,
   /useConversationActions\s*\(/,
   /useAgentActions\s*\(/,
-  /<TranscriptScreen\b/,
+  /<ReplView\b/,
 ]) {
-  requirePattern(controllerPath, controller, required)
+  requirePattern(runtimeControllerPath, runtimeController, required)
 }
 for (const forbidden of [
   /function TranscriptModeFooter\s*\(/,
@@ -76,7 +96,29 @@ for (const forbidden of [
   /usePipeIpc\s*\(/,
   /<TranscriptModeFooter\b/,
 ]) {
-  rejectPattern(controllerPath, controller, forbidden)
+  rejectPattern(runtimeControllerPath, runtimeController, forbidden)
+}
+
+const mainViewPath = 'src/screens/repl/view/ReplView.tsx'
+const mainView = await source(mainViewPath)
+for (const required of [
+  /buildDisplayedAgentMessages\s*\(/,
+  /<TranscriptScreen\b/,
+  /<ReplDialogLayer\b/,
+  /<ReplMessageSelector\b/,
+]) {
+  requirePattern(mainViewPath, mainView, required)
+}
+for (const forbidden of [
+  /queryGuard\./,
+  /launchUltraplan\s*\(/,
+  /partialCompactConversation\s*\(/,
+  /clearConversation\s*\(/,
+  /setConversationId\s*\(/,
+  /useRemoteRuntime\s*\(/,
+  /switchSession\s*\(/,
+]) {
+  rejectPattern(mainViewPath, mainView, forbidden)
 }
 
 const layers = [
@@ -95,6 +137,11 @@ const layers = [
   'src/screens/repl/query/useQueryRunner.ts',
   'src/screens/repl/runtime/usePipeRuntime.ts',
   'src/screens/repl/runtime/useRemoteRuntime.ts',
+  'src/screens/repl/interaction/useCancelInteraction.ts',
+  'src/screens/repl/interaction/useExitInteraction.tsx',
+  'src/screens/repl/interaction/ReplDialogLayer.tsx',
+  'src/screens/repl/interaction/ReplMessageSelector.tsx',
+  'src/screens/repl/view/ReplView.tsx',
   'src/screens/repl/view/TranscriptChrome.tsx',
   'src/screens/repl/view/TranscriptScreen.tsx',
   'src/screens/repl/view/dialogFocus.ts',
