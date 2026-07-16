@@ -1,5 +1,4 @@
 import { feature } from 'bun:bundle'
-import { isAutoUpdaterDisabled } from '../../utils/config.js'
 
 // Lazy require to avoid circular dependency: teammate.ts -> AppState.tsx -> ... -> main.tsx
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -171,7 +170,6 @@ export async function logStartupTelemetry(): Promise<void> {
       SandboxManager.areUnsandboxedCommandsAllowed(),
     is_auto_bash_allowed_if_sandbox_enabled:
       SandboxManager.isAutoAllowBashIfSandboxedEnabled(),
-    auto_updater_disabled: isAutoUpdaterDisabled(),
     prefers_reduced_motion: getInitialSettings().prefersReducedMotion ?? false,
     ...getCertEnvVarTelemetry(),
   })

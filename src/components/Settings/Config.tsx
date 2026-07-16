@@ -8,8 +8,6 @@ import figures from 'figures';
 import { type GlobalConfig, saveGlobalConfig, getCurrentProjectConfig, type OutputStyle } from '../../utils/config.js';
 import {
   getGlobalConfig,
-  getAutoUpdaterDisabledReason,
-  formatAutoUpdaterDisabledReason,
   getRemoteControlAtStartup,
 } from '../../utils/config.js';
 import chalk from 'chalk';
@@ -38,7 +36,6 @@ import { ModelPicker } from '../ModelPicker.js';
 import { modelDisplayString, isOpus1mMergeEnabled } from '../../utils/model/model.js';
 import { isBilledAsExtraUsage } from '../../utils/extraUsage.js';
 import { ClaudeMdExternalIncludesDialog } from '../ClaudeMdExternalIncludesDialog.js';
-import { ChannelDowngradeDialog, type ChannelDowngradeChoice } from '../ChannelDowngradeDialog.js';
 import { Dialog } from '@anthropic/ink';
 import { Select } from '../CustomSelect/index.js';
 import { OutputStylePicker } from '../OutputStylePicker.js';
@@ -124,9 +121,7 @@ type SubMenu =
   | 'TeammateModel'
   | 'ExternalIncludes'
   | 'OutputStyle'
-  | 'ChannelDowngrade'
-  | 'Language'
-  | 'EnableAutoUpdates';
+  | 'Language';
 export function Config({
   onClose,
   context,
@@ -250,8 +245,6 @@ export function Config({
 
   const memoryFiles = React.use(getMemoryFiles(true)) as MemoryFileInfo[];
   const shouldShowExternalIncludesToggle = hasExternalClaudeMdIncludes(memoryFiles);
-
-  const autoUpdaterDisabledReason = getAutoUpdaterDisabledReason();
 
   function onChangeMainModelConfig(value: string | null): void {
     const previousModel = mainLoopModel;
@@ -699,24 +692,6 @@ export function Config({
           },
         ]
       : []),
-    // autoUpdates setting is hidden - use DISABLE_AUTOUPDATER env var to control
-    autoUpdaterDisabledReason
-      ? {
-          id: 'autoUpdatesChannel',
-          label: 'Auto-update channel',
-          value: 'disabled',
-          type: 'managedEnum' as const,
-          onChange() {},
-        }
-      : {
-          id: 'autoUpdatesChannel',
-          label: 'Auto-update channel',
-          value: settingsData?.autoUpdatesChannel ?? 'latest',
-          type: 'managedEnum' as const,
-          onChange() {
-            // Handled via toggleSetting -> 'ChannelDowngrade'
-          },
-        },
     {
       id: 'theme',
       label: 'Theme',
@@ -1214,9 +1189,6 @@ export function Config({
           : `${globalConfig.remoteControlAtStartup ? 'Enabled' : 'Disabled'} Remote Control for all sessions`;
       formattedChanges.push(remoteLabel);
     }
-    if (settingsData?.autoUpdatesChannel !== initialSettingsData.current?.autoUpdatesChannel) {
-      formattedChanges.push(`Set auto-update channel to ${chalk.bold(settingsData?.autoUpdatesChannel ?? 'latest')}`);
-    }
     if (formattedChanges.length > 0) {
       onClose(formattedChanges.join('\n'));
     } else {
@@ -1229,7 +1201,6 @@ export function Config({
     mainLoopModel,
     currentOutputStyle,
     currentLanguage,
-    settingsData?.autoUpdatesChannel,
     isFastModeEnabled() ? (settingsData as Record<string, unknown> | undefined)?.fastMode : undefined,
     onClose,
   ]);
@@ -1262,8 +1233,6 @@ export function Config({
       alwaysThinkingEnabled: iu?.alwaysThinkingEnabled,
       fastMode: iu?.fastMode,
       promptSuggestionEnabled: iu?.promptSuggestionEnabled,
-      autoUpdatesChannel: iu?.autoUpdatesChannel,
-      minimumVersion: iu?.minimumVersion,
       language: iu?.language,
       ...(feature('TRANSCRIPT_CLASSIFIER')
         ? {
@@ -1402,37 +1371,6 @@ export function Config({
       }
     }
 
-    if (setting.id === 'autoUpdatesChannel') {
-      if (autoUpdaterDisabledReason) {
-        // Auto-updates are disabled - show enable dialog instead
-        setShowSubmenu('EnableAutoUpdates');
-        setTabsHidden(true);
-        return;
-      }
-      const currentChannel = settingsData?.autoUpdatesChannel ?? 'latest';
-      if (currentChannel === 'latest') {
-        // Switching to stable - show downgrade dialog
-        setShowSubmenu('ChannelDowngrade');
-        setTabsHidden(true);
-      } else {
-        // Switching to latest - just do it and clear minimumVersion
-        isDirty.current = true;
-        updateSettingsForSource('userSettings', {
-          autoUpdatesChannel: 'latest',
-          minimumVersion: undefined,
-        });
-        setSettingsData(prev => ({
-          ...prev,
-          autoUpdatesChannel: 'latest',
-          minimumVersion: undefined,
-        }));
-        logEvent('tengu_autoupdate_channel_changed', {
-          channel: 'latest' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        });
-      }
-      return;
-    }
-
     if (setting.type === 'enum') {
       isDirty.current = true;
       const currentIndex = setting.options.indexOf(setting.value);
@@ -1441,10 +1379,8 @@ export function Config({
       return;
     }
   }, [
-    autoUpdaterDisabledReason,
     filteredSettingsItems,
     selectedIndex,
-    settingsData?.autoUpdatesChannel,
     setTabsHidden,
   ]);
 
@@ -1743,103 +1679,6 @@ export function Config({
             </Byline>
           </Text>
         </>
-      ) : showSubmenu === 'EnableAutoUpdates' ? (
-        <Dialog
-          title="Enable Auto-Updates"
-          onCancel={() => {
-            setShowSubmenu(null);
-            setTabsHidden(false);
-          }}
-          hideBorder
-          hideInputGuide
-        >
-          {autoUpdaterDisabledReason?.type !== 'config' ? (
-            <>
-              <Text>
-                {autoUpdaterDisabledReason?.type === 'env'
-                  ? 'Auto-updates are controlled by an environment variable and cannot be changed here.'
-                  : 'Auto-updates are disabled in development builds.'}
-              </Text>
-              {autoUpdaterDisabledReason?.type === 'env' && (
-                <Text dimColor>Unset {autoUpdaterDisabledReason.envVar} to re-enable auto-updates.</Text>
-              )}
-            </>
-          ) : (
-            <Select
-              options={[
-                {
-                  label: 'Enable with latest channel',
-                  value: 'latest',
-                },
-                {
-                  label: 'Enable with stable channel',
-                  value: 'stable',
-                },
-              ]}
-              onChange={(channel: string) => {
-                isDirty.current = true;
-                setShowSubmenu(null);
-                setTabsHidden(false);
-
-                saveGlobalConfig(current => ({
-                  ...current,
-                  autoUpdates: true,
-                }));
-                setGlobalConfig({ ...getGlobalConfig(), autoUpdates: true });
-
-                updateSettingsForSource('userSettings', {
-                  autoUpdatesChannel: channel as 'latest' | 'stable',
-                  minimumVersion: undefined,
-                });
-                setSettingsData(prev => ({
-                  ...prev,
-                  autoUpdatesChannel: channel as 'latest' | 'stable',
-                  minimumVersion: undefined,
-                }));
-                logEvent('tengu_autoupdate_enabled', {
-                  channel: channel as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                });
-              }}
-            />
-          )}
-        </Dialog>
-      ) : showSubmenu === 'ChannelDowngrade' ? (
-        <ChannelDowngradeDialog
-          currentVersion={MACRO.VERSION}
-          onChoice={(choice: ChannelDowngradeChoice) => {
-            setShowSubmenu(null);
-            setTabsHidden(false);
-
-            if (choice === 'cancel') {
-              // User cancelled - don't change anything
-              return;
-            }
-
-            isDirty.current = true;
-            // Switch to stable channel
-            const newSettings: {
-              autoUpdatesChannel: 'stable';
-              minimumVersion?: string;
-            } = {
-              autoUpdatesChannel: 'stable',
-            };
-
-            if (choice === 'stay') {
-              // User wants to stay on current version until stable catches up
-              newSettings.minimumVersion = MACRO.VERSION;
-            }
-
-            updateSettingsForSource('userSettings', newSettings);
-            setSettingsData(prev => ({
-              ...prev,
-              ...newSettings,
-            }));
-            logEvent('tengu_autoupdate_channel_changed', {
-              channel: 'stable' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-              minimum_version_set: choice === 'stay',
-            });
-          }}
-        />
       ) : (
         <Box flexDirection="column" gap={1} marginY={insideModal ? undefined : 1}>
           <SearchBox
@@ -1896,11 +1735,6 @@ export function Config({
                             <Text color={isSelected ? 'suggestion' : undefined}>
                               {permissionModeShortTitle(setting.value as PermissionMode)}
                             </Text>
-                          ) : setting.id === 'autoUpdatesChannel' && autoUpdaterDisabledReason ? (
-                            <Box flexDirection="column">
-                              <Text color={isSelected ? 'suggestion' : undefined}>disabled</Text>
-                              <Text dimColor>({formatAutoUpdaterDisabledReason(autoUpdaterDisabledReason)})</Text>
-                            </Box>
                           ) : (
                             <Text color={isSelected ? 'suggestion' : undefined}>{setting.value.toString()}</Text>
                           )}

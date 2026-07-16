@@ -147,8 +147,6 @@ export async function logTenguInit({
         assistantActivationPath:
           assistantActivationPath as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       }),
-      autoUpdatesChannel: (getInitialSettings().autoUpdatesChannel ??
-        'latest') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       ...(process.env.USER_TYPE === 'ant'
         ? (() => {
             const cwd = getCwd()

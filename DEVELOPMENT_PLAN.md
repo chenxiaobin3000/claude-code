@@ -43,6 +43,7 @@
 - 自动化测试内容已按项目精简要求移除，当前回归主要依赖类型检查、构建检查和人工冒烟测试。
 - 语音模式、录音、音频 NAPI Workspace 和相关二进制依赖已经移除。
 - 本地版本号与 CLI 版本已统一为 `2.1.116`，构建版本以根目录 `package.json` 为唯一来源，源码直跑入口使用相同兜底值；该版本号不代表对应的官方版本。
+- CLI 不具备自安装或自更新能力：根级 `install`、`update`、`rollback`（包括 `ccb update`）以及 native/local installer、自动更新器、版本锁和更新频道配置均已移除。版本升级只能由外部分发渠道替换产物；插件安装、插件自动更新、SSH 远端部署和 standalone EXE 构建不受影响。包管理器来源检测已迁为只读 Doctor 能力；2026-07-16 执行 `bun run verify -- --ci` 全矩阵通过，耗时 120.3 秒，最终 EXE 帮助中不存在上述三个根命令。
 
 ### 2.4 当前工程与验证基线
 
@@ -96,6 +97,7 @@
 5. 新模型必须同时补齐模型 ID、上下文、推理参数、价格、显示名称和兼容能力判断。
 6. 保持语音功能移除状态，除非后续单独立项恢复。
 7. 不在源码目录引入 `*.test.ts` 或测试框架；轻量逻辑验证统一写入 `scripts/validation`，并由现有 `bun run verify` 执行，不形成第二层验证。
+8. CLI 永远不得安装、升级、降级或替换自身；版本变更由包管理、发布系统或人工替换产物完成。插件更新属于独立能力，不得复用为 CLI 更新通道。
 
 ## 5. 当前验证与构建基线
 
@@ -147,6 +149,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 | `tool-permissions.ts` | 权限规则解析、序列化和通配匹配 | exact/prefix/wildcard、括号与反斜杠转义、命令边界、Bash 大小写敏感、PowerShell 大小写不敏感 |
 | `shell-parsers.ts` | Bash 纯 TypeScript AST 解析与 PowerShell JSON AST 转换 | 管道、控制符、命令替换、转义分号、heredoc、cmdlet/路径/模块前缀、参数、变量、重定向 |
 | `model-diagnostics.ts` | 日志脱敏和摘要纯函数 | API Key、OAuth/JWT、URL 凭据、Prompt、截断和安全诊断字段 |
+| `self-update-boundary.ts` | CLI 自更新禁用边界 | 禁止根级 install/update/rollback、安装器与更新器实现及配置字段；保留插件安装/更新和 standalone 构建 |
 
 每个脚本都可由 `bun run scripts/validation/<name>.ts` 独立运行；`scripts/verify.ts` 按固定清单逐项执行，项目不增加第二个总验证命令。PowerShell 轻量验证不启动 `pwsh`，只调用运行路径实际使用的 `transformPowerShellParseOutput` 纯转换边界，因此可在 Windows/Linux CI 中得到相同结果；外部 PowerShell 进程发现与启动不属于本组纯函数验证。2026-07-16 五项脚本独立执行总耗时低于 1 秒，随后完整 `bun run verify` 通过，三构建链、模型和工具调用均成功，总耗时 69.8 秒。
 
@@ -165,6 +168,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - 全新环境可按文档完成安装、构建和启动。
 - `bun run typecheck`、`bun run lint`、构建完整性检查和 CLI 冒烟检查全部通过。
 - Bun 与 Node CLI 产物均能执行 `--version`；支持的平台上 standalone EXE 可以启动。
+- CLI 帮助中不存在根级 `install`、`update` 或 `rollback`，源码边界检查禁止恢复任何自安装、自更新或自降级实现。
 - 至少两个 OpenAI/OpenAI-compatible 模型完成流式对话与工具调用。
 - 失败时能定位 Provider、模型注册与解析、鉴权或流解析阶段。
 

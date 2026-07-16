@@ -15,7 +15,6 @@ import { useAppState, useSetAppState } from '../../state/AppState.js';
 import type { ToolPermissionContext } from '../../Tool.js';
 import type { Message } from '../../types/message.js';
 import type { PromptInputMode, VimMode } from '../../types/textInputTypes.js';
-import type { AutoUpdaterResult } from '../../utils/autoUpdater.js';
 import { isFullscreenEnvEnabled } from '../../utils/fullscreen.js';
 import { getPipeDisplayRole, isPipeControlled } from '../../utils/pipeTransport.js';
 import { isUndercover } from '../../utils/undercover.js';
@@ -37,11 +36,7 @@ type Props = {
   };
   vimMode: VimMode | undefined;
   mode: PromptInputMode;
-  autoUpdaterResult: AutoUpdaterResult | null;
-  isAutoUpdating: boolean;
   verbose: boolean;
-  onAutoUpdaterResult: (result: AutoUpdaterResult) => void;
-  onChangeIsUpdating: (isUpdating: boolean) => void;
   suggestions: SuggestionItem[];
   selectedSuggestion: number;
   maxColumnWidth?: number;
@@ -72,11 +67,7 @@ function PromptInputFooter({
   exitMessage,
   vimMode,
   mode,
-  autoUpdaterResult,
-  isAutoUpdating,
   verbose,
-  onAutoUpdaterResult,
-  onChangeIsUpdating,
   suggestions,
   selectedSuggestion,
   maxColumnWidth,
@@ -182,13 +173,9 @@ function PromptInputFooter({
           {isFullscreen ? null : (
             <Notifications
               apiKeyStatus={apiKeyStatus}
-              autoUpdaterResult={autoUpdaterResult}
               debug={debug}
-              isAutoUpdating={isAutoUpdating}
               verbose={verbose}
               messages={messages}
-              onAutoUpdaterResult={onAutoUpdaterResult}
-              onChangeIsUpdating={onChangeIsUpdating}
               ideSelection={ideSelection}
               mcpClients={mcpClients}
               isInputWrapped={isInputWrapped}

@@ -135,7 +135,7 @@ export async function setupShellCompletion(theme: ThemeName): Promise<string> {
 
 /**
  * Regenerate cached shell completion scripts in ~/.claude/.
- * Called after `claude update` so completions stay in sync with the new binary.
+ * Called when command registrations change so completions stay in sync.
  */
 export async function regenerateCompletionCache(): Promise<void> {
   const shell = detectShell()

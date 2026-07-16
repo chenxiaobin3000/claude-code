@@ -14,7 +14,6 @@ import { calculateTokenWarningState } from '../../services/compact/autoCompact.j
 import type { MCPServerConnection } from '../../services/mcp/types.js';
 import type { Message } from '../../types/message.js';
 import { getApiKeyHelperElapsedMs, getConfiguredApiKeyHelper, getSubscriptionType } from '../../utils/auth.js';
-import type { AutoUpdaterResult } from '../../utils/autoUpdater.js';
 import { getExternalEditor } from '../../utils/editor.js';
 import { isEnvTruthy } from '../../utils/envUtils.js';
 import { formatDuration } from '../../utils/format.js';
@@ -33,13 +32,9 @@ export const FOOTER_TEMPORARY_STATUS_TIMEOUT = 5000;
 
 type Props = {
   apiKeyStatus: VerificationStatus;
-  autoUpdaterResult: AutoUpdaterResult | null;
-  isAutoUpdating: boolean;
   debug: boolean;
   verbose: boolean;
   messages: Message[];
-  onAutoUpdaterResult: (result: AutoUpdaterResult) => void;
-  onChangeIsUpdating: (isUpdating: boolean) => void;
   ideSelection: IDESelection | undefined;
   mcpClients?: MCPServerConnection[];
   isInputWrapped?: boolean;
@@ -48,13 +43,9 @@ type Props = {
 
 export function Notifications({
   apiKeyStatus,
-  autoUpdaterResult: _autoUpdaterResult,
   debug,
-  isAutoUpdating: _isAutoUpdating,
   verbose,
   messages,
-  onAutoUpdaterResult: _onAutoUpdaterResult,
-  onChangeIsUpdating: _onChangeIsUpdating,
   ideSelection,
   mcpClients,
   isInputWrapped = false,

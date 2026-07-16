@@ -823,7 +823,7 @@ export function registerSubcommands(
   program
     .command('doctor')
     .description(
-      'Check the health of your Claude Code auto-updater. Note: The workspace trust dialog is skipped and stdio servers from .mcp.json are spawned for health checks. Only use this command in directories you trust.',
+      'Check Claude Code runtime health. Note: The workspace trust dialog is skipped and stdio servers from .mcp.json are spawned for health checks. Only use this command in directories you trust.',
     )
     .action(async () => {
       const [{ doctorHandler }, { createRoot }] = await Promise.all([
@@ -846,58 +846,6 @@ export function registerSubcommands(
         await up()
       })
   }
-
-  // claude rollback (ant-only)
-  // Rolls back to previous releases
-  if (process.env.USER_TYPE === 'ant') {
-    program
-      .command('rollback [target]')
-      .description(
-        '[ANT-ONLY] Roll back to a previous release\n\nExamples:\n  claude rollback                                    Go 1 version back from current\n  claude rollback 3                                  Go 3 versions back from current\n  claude rollback 2.0.73-dev.20251217.t190658        Roll back to a specific version',
-      )
-      .option('-l, --list', 'List recent published versions with ages')
-      .option('--dry-run', 'Show what would be installed without installing')
-      .option(
-        '--safe',
-        'Roll back to the server-pinned safe version (set by oncall during incidents)',
-      )
-      .action(
-        async (
-          target?: string,
-          options?: {
-            list?: boolean
-            dryRun?: boolean
-            safe?: boolean
-          },
-        ) => {
-          const { rollback } = await import('src/cli/rollback.js')
-          await rollback(target, options)
-        },
-      )
-  }
-
-  // claude install
-  program
-    .command('install [target]')
-    .description(
-      'Install Claude Code native build. Use [target] to specify version (stable, latest, or specific version)',
-    )
-    .option('--force', 'Force installation even if already installed')
-    .action(
-      async (target: string | undefined, options: { force?: boolean }) => {
-        const { installHandler } = await import('../../cli/handlers/util.js')
-        await installHandler(target, options)
-      },
-    )
-
-  // claude update — update ccb to the latest version via npm or bun
-  program
-    .command('update')
-    .description('Update claude-code-best (ccb) to the latest version')
-    .action(async () => {
-      const { updateCCB } = await import('../../cli/updateCCB.js')
-      await updateCCB()
-    })
 
   // ant-only commands
   if (process.env.USER_TYPE === 'ant') {

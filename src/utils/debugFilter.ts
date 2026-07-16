@@ -91,7 +91,6 @@ export function extractDebugCategories(message: string): string[] {
   }
 
   // Pattern 5: Look for secondary categories after the first pattern
-  // e.g., "AutoUpdaterWrapper: Installation type: development"
   const secondaryMatch = message.match(
     /:\s*([^:]+?)(?:\s+(?:type|mode|status|event))?:/,
   )

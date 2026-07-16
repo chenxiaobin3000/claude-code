@@ -227,7 +227,7 @@ async function updatePlugins(
 export function autoUpdateMarketplacesAndPluginsInBackground(): void {
   void (async () => {
     if (shouldSkipPluginAutoupdate()) {
-      logForDebugging('Plugin autoupdate: skipped (auto-updater disabled)')
+      logForDebugging('Plugin autoupdate: skipped by privacy policy')
       return
     }
 

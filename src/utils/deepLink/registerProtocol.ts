@@ -28,7 +28,7 @@ import { getErrnoCode } from '../errors.js'
 import { execFileNoThrow } from '../execFileNoThrow.js'
 import { getInitialSettings } from '../settings/settings.js'
 import { which } from '../which.js'
-import { getUserBinDir, getXDGDataHome } from '../xdg.js'
+import { getXDGDataHome } from '../xdg.js'
 
 export const MACOS_BUNDLE_ID = 'com.anthropic.claude-code-url-handler'
 const APP_NAME = 'Claude Code URL Handler'
@@ -233,20 +233,11 @@ export async function registerProtocolHandler(
 }
 
 /**
- * Resolve the claude binary path for protocol registration. Prefers the
- * native installer's stable symlink (~/.local/bin/claude) which survives
- * auto-updates; falls back to process.execPath when the symlink is absent
- * (dev builds, non-native installs).
+ * Resolve the current executable path for protocol registration. The CLI
+ * never creates or manages a separate installation symlink.
  */
 async function resolveClaudePath(): Promise<string> {
-  const binaryName = process.platform === 'win32' ? 'claude.exe' : 'claude'
-  const stablePath = path.join(getUserBinDir(), binaryName)
-  try {
-    await fs.realpath(stablePath)
-    return stablePath
-  } catch {
-    return process.execPath
-  }
+  return process.execPath
 }
 
 /**
@@ -255,7 +246,7 @@ async function resolveClaudePath(): Promise<string> {
  * directly (symlink target, .desktop Exec line, registry value) rather than
  * a cached flag in ~/.claude.json, so:
  *   - the check is per-machine (config can sync across machines; OS state can't)
- *   - stale paths self-heal (install-method change → re-register next session)
+ *   - stale paths self-heal (distribution path change → re-register next session)
  *   - deleted artifacts self-heal
  *
  * Any read error (ENOENT, EACCES, reg nonzero) → false → re-register.

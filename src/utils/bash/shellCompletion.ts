@@ -5,7 +5,7 @@ import {
   tryParseShellCommand,
 } from '../bash/shellQuote.js'
 import { logForDebugging } from '../debug.js'
-import { getShellType } from '../localInstaller.js'
+import { getShellType } from '../shellType.js'
 import * as Shell from '../Shell.js'
 
 // Constants

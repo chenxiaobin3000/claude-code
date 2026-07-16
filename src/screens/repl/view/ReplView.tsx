@@ -160,7 +160,6 @@ export function ReplView({ state }: { state: ReplViewState }): React.ReactNode {
     apiKeyStatus,
     apiMetricsRef,
     autoRunIssueReason,
-    autoUpdaterResult,
     bashTools,
     bashToolsProcessedIdx,
     cancelRequestProps,
@@ -257,7 +256,6 @@ export function ReplView({ state }: { state: ReplViewState }): React.ReactNode {
     searchOpen,
     searchQuery,
     setAppState,
-    setAutoUpdaterResult,
     setConversationId,
     setCursor,
     setHaikuTitle,
@@ -723,8 +721,6 @@ export function ReplView({ state }: { state: ReplViewState }): React.ReactNode {
                       onExit={handleExit}
                       verbose={verbose}
                       messages={messages}
-                      onAutoUpdaterResult={setAutoUpdaterResult}
-                      autoUpdaterResult={autoUpdaterResult}
                       input={inputValue}
                       onInputChange={setInputValue}
                       mode={inputMode}

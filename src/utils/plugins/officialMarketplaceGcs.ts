@@ -21,7 +21,7 @@ import { errorMessage, getErrnoCode } from '../errors.js'
 type SafeString = AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
 
 // CDN-fronted domain for the public GCS bucket (same bucket the native
-// binary ships from — nativeInstaller/download.ts:24 uses the raw GCS URL).
+// binary distribution also uses the raw GCS URL).
 // `{sha}.zip` is content-addressed so CDN can cache it indefinitely;
 // `latest` has Cache-Control: max-age=300 so CDN staleness is bounded.
 // Backend (anthropic#317037) populates this prefix.
