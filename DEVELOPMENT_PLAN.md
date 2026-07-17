@@ -65,6 +65,7 @@
 - 已新增统一最小验证命令 `bun run verify`，顺序覆盖锁定安装、类型检查、Lint，以及 Bun bundle、Vite/Rollup Node bundle、Windows x64 standalone EXE 三条构建链的完整性、版本、启动、单轮模型请求和 `Read` 工具调用。验证直接使用 `~/.claude/models.json` 的默认模型，并限制为回环或私有网络地址。2026-07-16 使用本地 llama.cpp（Qwen3.5-9B-Q6_K，65,536 上下文）完成三构建链全矩阵复验，所有检查通过，总耗时 69.1 秒。
 - 多模型注册表已于 2026-07-15 完成：重复模型 ID 和无效默认模型会在加载时失败；同地址模型复用 OpenAI Client，不同地址使用独立 Client；旧 `OPENAI_MODEL`、`OPENAI_BASE_URL`、角色模型环境变量、模型映射和 `providers.json` 注册表已从运行链移除。类型检查、Lint、Bun 构建、Vite 构建及 Bun/Node CLI 启动验证通过。
 - 第二模型验收已于 2026-07-16 完成：通过 `https://api.deepseek.com` 调用注册模型 `deepseek-v4-flash`，单轮流式响应和受权限约束的 `Read` 工具调用均通过；凭据只从配置指定的环境变量读取，未写入模型注册表、命令输出或诊断日志。结合本地 llama.cpp 的 Qwen3.5-9B-Q6_K 验证，至少两个 OpenAI-compatible 模型完成了流式响应和工具调用验收。
+- OpenAI-compatible 模型对齐已于 2026-07-17 完成验收：注册表、精确模型 Profile、共享 Chat Completions 请求构造、工具选择、流事件、Usage 明细和协议错误分类均由 `scripts/validation` 定向覆盖；未登记模型使用固定默认 Profile 并告警，不探测 endpoint、不按名称猜测、不自动换字段或增加厂商分支。`bun run verify -- --ci` 全矩阵通过（139.0 秒）；普通 `bun run verify` 使用本地 llama.cpp 对 Bun bundle、Vite/Node bundle 和 Windows standalone EXE 分别完成真实单轮请求及 `Read` 工具调用（159.4 秒）。
 - `bun run typecheck`、`bun run lint`、三条构建链的完整性检查、CLI 启动、模型请求和工具调用必须持续通过，不允许把已修复问题重新定义为长期允许失败的状态。
 - Feature Flag 已统一登记在 `scripts/feature-policy.ts`，按稳定、实验、内部/部署专用三组提供机器可读的默认值、验收目标、依赖和冲突关系。默认构建当前只启用 20 个具有验收覆盖标识的稳定能力；实验与内部能力分别要求显式授权，未知 Flag、非法值、缺失依赖和冲突组合在开发或构建启动时直接失败。Bun bundle、Vite/Node bundle、standalone EXE 与 `bun run dev` 共用同一解析器，规则说明见 `FEATURE_FLAGS.md`。
 - 工程结构防回归由 `provider-boundary`、`sdk-compat-boundary`、各已移除 Provider boundary、`main-boundary`、`repl-boundary`、`utility-modules-boundary`、`dependency-boundary` 和 `feature-flags` 等轻量脚本持续执行；它们共同约束 Provider 主路径、兼容层保留范围、巨石入口规模与依赖方向、workspace/依赖契约及 Feature Policy。2026-07-17 Windows x64 `bun run verify -- --ci` 完整验收通过，18/18 workspace、全部轻量边界、Bun bundle、Vite/Node bundle、standalone EXE、版本和启动冒烟均通过，总耗时 114.5 秒。
@@ -191,23 +192,6 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 ## 6. 后续开发路线图
 
-### P0：OpenAI-compatible 模型对齐
-
-目标：建立统一、可配置的 OpenAI-compatible 模型调用链。
-
-- [x] 建立以模型为核心的 `~/.claude/models.json` 注册表；每个模型配置唯一 ID 和 OpenAI-compatible 地址，地址允许重复（2026-07-15 已完成）。
-- [x] `/model` 保留原有 UI 流程并直接展示注册模型；请求按所选模型解析地址和凭据，不再依赖 `OPENAI_MODEL`、`OPENAI_BASE_URL` 或 Claude 模型映射（2026-07-15 已完成）。
-- [x] 按模型 ID 显式硬编码上下文窗口、最大输出 Token、推理参数、Prompt Cache 和价格，并为映射增加轻量验证（2026-07-17 已完成：新增唯一静态 `modelProfiles.ts`，专用模型严格按完整 ID 匹配，未登记模型使用复制自 Qwen 的固定默认 Profile 并输出补充专用配置提示；上下文、输出限制、OpenAI 请求体和成本计算改为读取 Profile，输出环境变量只能降低不能扩大模型上限；移除启动时 Capability 刷新、磁盘 Capability Cache、模型名 `includes` 推理判断及未知价格向 Claude 价格回退。新增 `model-profiles` 验证并接入 `bun run verify`；默认回退调整后 CI 全矩阵 157.1 秒通过，普通模式使用本地 Qwen 完成三类产物真实模型请求和 `Read` 工具调用，140.0 秒全部通过）。
-- [x] 移除 OpenAI 模型映射和隐式 fallback；未注册模型在发送请求前直接报错（2026-07-15 已完成）。
-- [x] 核对 OpenAI Chat Completions 的推理参数、工具选择、流事件和 Usage 字段（2026-07-17 已完成实现并验收：模型 Profile 固定输出字段、推理方言、temperature、并行工具和严格 Schema 策略；主请求与 `sideQuery` 共用构造规则并接通 `thinkingConfig`/`effortValue`；工具选择支持 none/auto/required/指定函数；流适配补齐 refusal、交错并行工具、异常断流和遗留协议拒绝；Usage 保留 raw/cache/reasoning/total/完整性且不重复计费；轻量验证覆盖字段契约和非法组合。`bun run verify -- --ci` 的锁定安装、TypeScript、Biome、18 个 workspace、轻量验证和三类构建产物全部通过（139.0 秒）；普通 `bun run verify` 使用本地 llama.cpp 对 Bun bundle、Vite/Node bundle 和 Windows standalone EXE 分别完成真实单轮请求及 `Read` 工具调用（159.4 秒））。
-- [x] 对不兼容 OpenAI 协议的 endpoint 给出清晰错误，不增加专用适配分支（2026-07-17 已完成：新增统一错误分类和 Chat Completions JSON/SSE 结构守卫，接入主流式请求、`sideQuery` 和模型验证；协议错误明确区分路由、必要字段和响应结构，不探测 endpoint、不删字段重试、不切换备用路由、不增加厂商分支；错误分类写入现有脱敏诊断日志，`openai-errors` 轻量验证并入 `bun run verify`）。
-
-验收标准：
-
-- `/model` 正确显示 OpenAI 或当前 OpenAI-compatible endpoint 可用的模型。
-- 至少两个 OpenAI-compatible 模型可以流式响应并调用工具。
-- 上下文、推理参数、Prompt Cache 和价格统计与实际模型能力一致。
-
 ### P0：权限、Sandbox 和 Worktree 安全
 
 目标：优先补齐最新版最重要的安全差异。
@@ -310,13 +294,12 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 建议按照以下顺序推进，每一阶段完成验收后再进入下一阶段：
 
 1. Provider 接口收敛及 Anthropic SDK 兼容边界梳理。
-2. OpenAI-compatible 模型能力硬编码映射与协议稳定性。
-3. 核心巨石文件和 workspace 工程结构治理。
-4. 权限、Sandbox、Worktree 安全。
-5. Safe Mode、Doctor、会话迁移。
-6. Agent 和后台任务状态统一。
-7. Hook、Plugin、Skill、MCP 扩展协议。
-8. 性能优化及可选产品能力。
+2. 核心巨石文件和 workspace 工程结构治理。
+3. 权限、Sandbox、Worktree 安全。
+4. Safe Mode、Doctor、会话迁移。
+5. Agent 和后台任务状态统一。
+6. Hook、Plugin、Skill、MCP 扩展协议。
+7. 性能优化及可选产品能力。
 
 不建议首先重写为官方原生二进制架构。该改造投入大、风险高，且不会直接解决模型协议、安全和稳定性问题。应先把当前 TypeScript 架构维护到可靠状态，再通过独立调研决定是否迁移 Rust、Go 或其他原生运行时。
 
