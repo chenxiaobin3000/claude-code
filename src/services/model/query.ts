@@ -36,6 +36,7 @@ async function* executeModelQuery(params: {
   systemPrompt: SystemPrompt
   tools: Tools
   signal: AbortSignal
+  thinkingConfig: ThinkingConfig
   options: ModelQueryOptions
 }): AsyncGenerator<
   StreamEvent | AssistantMessage | SystemAPIErrorMessage,
@@ -57,6 +58,7 @@ async function* executeModelQuery(params: {
       systemPrompt: params.systemPrompt,
       ...preparedTools,
       options: params.options,
+      thinkingConfig: params.thinkingConfig,
     },
     params.signal,
   )
@@ -74,9 +76,17 @@ export async function* queryModelWithStreaming(params: {
   void,
   void
 > {
-  const { messages, systemPrompt, tools, signal, options } = params
+  const { messages, systemPrompt, thinkingConfig, tools, signal, options } =
+    params
   return yield* withStreamingVCR(messages, async function* () {
-    yield* executeModelQuery({ messages, systemPrompt, tools, signal, options })
+    yield* executeModelQuery({
+      messages,
+      systemPrompt,
+      thinkingConfig,
+      tools,
+      signal,
+      options,
+    })
   })
 }
 

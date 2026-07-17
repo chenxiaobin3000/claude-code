@@ -128,13 +128,20 @@ function sanitizeJsonSchema(
  */
 export function anthropicToolChoiceToOpenAI(
   toolChoice: unknown,
-): string | { type: 'function'; function: { name: string } } | undefined {
+):
+  | 'none'
+  | 'auto'
+  | 'required'
+  | { type: 'function'; function: { name: string } }
+  | undefined {
   if (!toolChoice || typeof toolChoice !== 'object') return undefined
 
   const tc = toolChoice as Record<string, unknown>
   const type = tc.type as string
 
   switch (type) {
+    case 'none':
+      return 'none'
     case 'auto':
       return 'auto'
     case 'any':

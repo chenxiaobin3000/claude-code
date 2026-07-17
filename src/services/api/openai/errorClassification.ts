@@ -73,7 +73,7 @@ function formatUserMessage(
     case 'protocol_route':
       return `OpenAI compatibility error: endpoint${target} does not expose the required POST /chat/completions route. Check whether baseUrl includes the correct API prefix such as /v1. No provider-specific fallback was attempted.`
     case 'protocol_request':
-      return `OpenAI compatibility error: endpoint${target} rejected a required Chat Completions request field. It must support streaming, stream_options, messages, tools, and tool_choice when used. No fields were removed and no provider-specific fallback was attempted. Provider detail: ${details.message}`
+      return `OpenAI compatibility error: endpoint${target} rejected a Chat Completions field required by the selected model profile. Check its output-token, reasoning, temperature, streaming, and tool capabilities. No fields were removed and no provider-specific fallback was attempted. Provider detail: ${details.message}`
     case 'protocol_response':
       return `OpenAI compatibility error: endpoint${target} returned a response that does not follow the OpenAI Chat Completions JSON/SSE contract. No provider-specific response adapter was attempted. Provider detail: ${details.message}`
     case 'server_error':
@@ -152,8 +152,8 @@ function classifyDetails(
   if (
     (status === 400 || status === 422) &&
     includesAny(value, [
-      /(?:unknown|unsupported|unrecognized|unexpected|invalid).{0,40}(?:stream_options|stream|tools?|tool_choice|messages?)/,
-      /(?:stream_options|stream|tools?|tool_choice|messages?).{0,40}(?:unknown|unsupported|unrecognized|not supported|not allowed)/,
+      /(?:unknown|unsupported|unrecognized|unexpected|invalid).{0,40}(?:max_completion_tokens|max_tokens|reasoning_effort|thinking|temperature|parallel_tool_calls|stream_options|stream|tools?|tool_choice|messages?)/,
+      /(?:max_completion_tokens|max_tokens|reasoning_effort|thinking|temperature|parallel_tool_calls|stream_options|stream|tools?|tool_choice|messages?).{0,40}(?:unknown|unsupported|unrecognized|not supported|not allowed)/,
     ])
   ) {
     return 'protocol_request'

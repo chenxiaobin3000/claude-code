@@ -14,6 +14,11 @@ export type NonNullableUsage = {
   cache_creation_input_tokens: number
   cache_read_input_tokens: number
   output_tokens: number
+  raw_input_tokens?: number
+  total_tokens?: number
+  reasoning_output_tokens?: number
+  cache_write_input_tokens?: number
+  usage_complete?: boolean
   server_tool_use: { web_search_requests: number; web_fetch_requests: number }
   service_tier: string
   cache_creation: {
@@ -37,6 +42,11 @@ export const EMPTY_USAGE: Readonly<NonNullableUsage> = {
   cache_creation_input_tokens: 0,
   cache_read_input_tokens: 0,
   output_tokens: 0,
+  raw_input_tokens: 0,
+  total_tokens: 0,
+  reasoning_output_tokens: 0,
+  cache_write_input_tokens: 0,
+  usage_complete: false,
   server_tool_use: { web_search_requests: 0, web_fetch_requests: 0 },
   service_tier: 'standard',
   cache_creation: {

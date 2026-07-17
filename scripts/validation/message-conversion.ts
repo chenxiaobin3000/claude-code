@@ -189,6 +189,11 @@ assertDeepEqual(
 )
 
 assertEqual(
+  anthropicToolChoiceToOpenAI({ type: 'none' }),
+  'none',
+  'disabled tool choice',
+)
+assertEqual(
   anthropicToolChoiceToOpenAI({ type: 'auto' }),
   'auto',
   'automatic tool choice',

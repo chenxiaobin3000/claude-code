@@ -35,6 +35,10 @@ import { normalizeModelStringForAPI } from './model/model.js'
 import { resolveModelTarget } from './model/modelRegistry.js'
 import { getOpenAIClient } from '../services/api/openai/client.js'
 import {
+  buildOpenAINonStreamingRequestBody,
+  resolveOpenAIMaxTokens,
+} from '../services/api/openai/requestBody.js'
+import {
   assertOpenAIChatCompletionResponse,
   createOpenAIRequestError,
 } from '../services/api/openai/errorClassification.js'
@@ -388,6 +392,7 @@ async function sideQueryViaOpenAICompatible(
     tool_choice,
     max_tokens = 1024,
     temperature,
+    thinking,
     signal,
   } = opts
 
@@ -424,16 +429,20 @@ async function sideQueryViaOpenAICompatible(
 
   const start = Date.now()
 
-  const requestParams: Record<string, unknown> = {
+  const requestParams = buildOpenAINonStreamingRequestBody({
     model: openaiModel,
     messages: openaiMessages,
-    max_tokens,
-  }
-  if (temperature !== undefined) requestParams.temperature = temperature
-  if (openaiTools && openaiTools.length > 0) {
-    requestParams.tools = openaiTools
-    if (openaiToolChoice) requestParams.tool_choice = openaiToolChoice
-  }
+    tools: openaiTools ?? [],
+    toolChoice: openaiToolChoice,
+    thinkingConfig:
+      thinking === false
+        ? { type: 'disabled' }
+        : thinking !== undefined
+          ? { type: 'enabled', budgetTokens: thinking }
+          : undefined,
+    maxTokens: resolveOpenAIMaxTokens(openaiModel, max_tokens),
+    temperatureOverride: temperature,
+  })
 
   const sensitiveValues = [
     target.apiKey,
@@ -444,7 +453,7 @@ async function sideQueryViaOpenAICompatible(
   >
   try {
     response = await client.chat.completions.create(
-      requestParams as unknown as import('openai/resources/chat/completions/completions.mjs').ChatCompletionCreateParamsNonStreaming,
+      requestParams,
       { signal },
     )
   } catch (error) {
@@ -476,6 +485,9 @@ async function sideQueryViaOpenAICompatible(
   if (message?.content) {
     contentBlocks.push({ type: 'text', text: message.content })
   }
+  if (message?.refusal) {
+    contentBlocks.push({ type: 'text', text: message.refusal })
+  }
 
   if (message?.tool_calls) {
     for (const tc of message.tool_calls) {
@@ -483,15 +495,55 @@ async function sideQueryViaOpenAICompatible(
       if (tc.type === 'function' && 'function' in tc) {
         const fn = (tc as { function: { name: string; arguments: string } })
           .function
+        let input: unknown
+        try {
+          input = JSON.parse(fn.arguments || '{}')
+        } catch (error) {
+          throw createOpenAIRequestError(
+            new Error(
+              `invalid_chat_completion_response: tool ${JSON.stringify(fn.name)} returned invalid JSON arguments`,
+              { cause: error },
+            ),
+            {
+              endpoint: target.baseUrl,
+              phase: 'response',
+              secrets: sensitiveValues,
+            },
+          )
+        }
         contentBlocks.push({
           type: 'tool_use',
           id: tc.id ?? `toolu_${Date.now()}`,
           name: fn.name,
-          input: JSON.parse(fn.arguments || '{}'),
+          input,
         })
+      } else {
+        throw createOpenAIRequestError(
+          new Error(
+            'invalid_chat_completion_response: endpoint returned an unsupported custom tool call',
+          ),
+          {
+            endpoint: target.baseUrl,
+            phase: 'response',
+            secrets: sensitiveValues,
+          },
+        )
       }
     }
   }
+
+  const usageDetails = response.usage as
+    | {
+        prompt_tokens_details?: {
+          cached_tokens?: number
+          cache_write_tokens?: number
+        }
+        completion_tokens_details?: { reasoning_tokens?: number }
+      }
+    | undefined
+  const rawInputTokens = response.usage?.prompt_tokens ?? 0
+  const cachedInputTokens =
+    usageDetails?.prompt_tokens_details?.cached_tokens ?? 0
 
   const now = Date.now()
   const requestId = response.id
@@ -505,8 +557,8 @@ async function sideQueryViaOpenAICompatible(
       openaiModel as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     inputTokens: response.usage?.prompt_tokens ?? 0,
     outputTokens: response.usage?.completion_tokens ?? 0,
-    cachedInputTokens: 0,
-    uncachedInputTokens: response.usage?.prompt_tokens ?? 0,
+    cachedInputTokens,
+    uncachedInputTokens: Math.max(0, rawInputTokens - cachedInputTokens),
     durationMsIncludingRetries: now - start,
     timeSinceLastApiCallMs:
       lastCompletion !== null ? now - lastCompletion : undefined,
@@ -529,8 +581,17 @@ async function sideQueryViaOpenAICompatible(
     stop_reason: stopReason as BetaMessage['stop_reason'],
     stop_sequence: null,
     usage: {
-      input_tokens: response.usage?.prompt_tokens ?? 0,
+      input_tokens: Math.max(0, rawInputTokens - cachedInputTokens),
       output_tokens: response.usage?.completion_tokens ?? 0,
+      cache_read_input_tokens: cachedInputTokens,
+      cache_creation_input_tokens: 0,
+      raw_input_tokens: rawInputTokens,
+      total_tokens: response.usage?.total_tokens ?? 0,
+      reasoning_output_tokens:
+        usageDetails?.completion_tokens_details?.reasoning_tokens ?? 0,
+      cache_write_input_tokens:
+        usageDetails?.prompt_tokens_details?.cache_write_tokens ?? 0,
+      usage_complete: response.usage !== undefined,
     },
-  } as BetaMessage
+  } as unknown as BetaMessage
 }

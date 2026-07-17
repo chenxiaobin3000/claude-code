@@ -11,6 +11,7 @@ export function mergeUsage(
   partUsage: BetaMessageDeltaUsage | undefined,
 ): NonNullableUsage {
   if (!partUsage) return { ...usage }
+  const openAIUsage = partUsage as unknown as Partial<NonNullableUsage>
 
   return {
     input_tokens:
@@ -28,6 +29,19 @@ export function mergeUsage(
         ? partUsage.cache_read_input_tokens
         : usage.cache_read_input_tokens,
     output_tokens: partUsage.output_tokens ?? usage.output_tokens,
+    raw_input_tokens:
+      openAIUsage.raw_input_tokens ?? usage.raw_input_tokens ?? 0,
+    total_tokens: openAIUsage.total_tokens ?? usage.total_tokens ?? 0,
+    reasoning_output_tokens:
+      openAIUsage.reasoning_output_tokens ??
+      usage.reasoning_output_tokens ??
+      0,
+    cache_write_input_tokens:
+      openAIUsage.cache_write_input_tokens ??
+      usage.cache_write_input_tokens ??
+      0,
+    usage_complete:
+      openAIUsage.usage_complete ?? usage.usage_complete ?? false,
     server_tool_use: {
       web_search_requests:
         partUsage.server_tool_use?.web_search_requests ??
@@ -83,6 +97,18 @@ export function accumulateUsage(
     cache_read_input_tokens:
       totalUsage.cache_read_input_tokens + messageUsage.cache_read_input_tokens,
     output_tokens: totalUsage.output_tokens + messageUsage.output_tokens,
+    raw_input_tokens:
+      (totalUsage.raw_input_tokens ?? 0) +
+      (messageUsage.raw_input_tokens ?? 0),
+    total_tokens:
+      (totalUsage.total_tokens ?? 0) + (messageUsage.total_tokens ?? 0),
+    reasoning_output_tokens:
+      (totalUsage.reasoning_output_tokens ?? 0) +
+      (messageUsage.reasoning_output_tokens ?? 0),
+    cache_write_input_tokens:
+      (totalUsage.cache_write_input_tokens ?? 0) +
+      (messageUsage.cache_write_input_tokens ?? 0),
+    usage_complete: messageUsage.usage_complete ?? false,
     server_tool_use: {
       web_search_requests:
         totalUsage.server_tool_use.web_search_requests +

@@ -30,6 +30,7 @@ export {
 import { randomUUID } from 'crypto'
 import { createAssistantAPIErrorMessage } from '../../../utils/messages.js'
 import type { SDKAssistantMessageError } from '../../../entrypoints/agentSdkTypes.js'
+import { APIUserAbortError } from '@anthropic-ai/sdk/error'
 import {
   logModelRequestError,
   logModelRequestFirstToken,
@@ -164,6 +165,12 @@ export async function* queryModelOpenAI(
         ).length
       )
     }, 0)
+    if (usage.usage_complete === false) {
+      logForDebugging(
+        '[OpenAI] Stream completed without a final usage chunk; token and cost totals may be incomplete.',
+        { level: 'warn' },
+      )
+    }
     logModelRequestSuccess({
       requestId,
       provider: 'openai',
@@ -172,6 +179,11 @@ export async function* queryModelOpenAI(
       ttftMs: firstTokenReceived ? ttftMs : null,
       inputTokens: usage.input_tokens,
       outputTokens: usage.output_tokens,
+      rawInputTokens: usage.raw_input_tokens,
+      totalTokens: usage.total_tokens,
+      reasoningTokens: usage.reasoning_output_tokens,
+      cacheWriteTokens: usage.cache_write_input_tokens,
+      usageComplete: usage.usage_complete,
       stopReason,
       toolCallCount,
     })
@@ -198,6 +210,7 @@ export async function* queryModelOpenAI(
       ...(enableThinking && { thinking: { type: 'enabled' } }),
     })
   } catch (error) {
+    if (signal.aborted) throw new APIUserAbortError()
     const classifiedError = classifyOpenAIError(error, {
       endpoint: diagnosticEndpoint,
       phase: errorPhase,

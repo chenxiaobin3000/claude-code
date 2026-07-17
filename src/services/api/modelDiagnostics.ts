@@ -26,6 +26,11 @@ export interface ModelRequestSuccessDiagnostic extends ModelDiagnosticBase {
   durationMs: number
   inputTokens: number
   outputTokens: number
+  rawInputTokens?: number
+  totalTokens?: number
+  reasoningTokens?: number
+  cacheWriteTokens?: number
+  usageComplete?: boolean
   stopReason: string | null
   toolCallCount: number
   ttftMs: number | null
@@ -108,6 +113,11 @@ export function logModelRequestSuccess(
       ttftMs: diagnostic.ttftMs,
       inputTokens: diagnostic.inputTokens,
       outputTokens: diagnostic.outputTokens,
+      rawInputTokens: diagnostic.rawInputTokens,
+      totalTokens: diagnostic.totalTokens,
+      reasoningTokens: diagnostic.reasoningTokens,
+      cacheWriteTokens: diagnostic.cacheWriteTokens,
+      usageComplete: diagnostic.usageComplete,
       stopReason: diagnostic.stopReason,
       toolCallCount: diagnostic.toolCallCount,
     }),

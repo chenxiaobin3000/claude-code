@@ -2,6 +2,13 @@ import type { BetaRawMessageStreamEvent } from '@anthropic-ai/sdk/resources/beta
 import type { ChatCompletionChunk } from 'openai/resources/chat/completions/completions.mjs'
 import { randomUUID } from 'crypto'
 
+function invalidStream(message: string): Error {
+  return Object.assign(
+    new Error(`invalid_chat_completion_response: ${message}`),
+    { code: 'invalid_chat_completion_response' },
+  )
+}
+
 /**
  * Adapt an OpenAI streaming response into Anthropic BetaRawMessageStreamEvent.
  *
@@ -60,6 +67,10 @@ export async function* adaptOpenAIStreamToAnthropic(
   let inputTokens = 0
   let outputTokens = 0
   let cachedReadTokens = 0
+  let cacheWriteTokens = 0
+  let reasoningTokens = 0
+  let totalTokens = 0
+  let usageComplete = false
 
   // Track all open content block indices (for cleanup)
   const openBlockIndices = new Set<number>()
@@ -74,17 +85,30 @@ export async function* adaptOpenAIStreamToAnthropic(
 
     // Extract usage from any chunk that carries it.
     if (chunk.usage) {
+      usageComplete = true
       rawInputTokens = chunk.usage.prompt_tokens ?? rawInputTokens
+      const usageDetails = chunk.usage as unknown as {
+        prompt_tokens_details?: {
+          cached_tokens?: number
+          cache_write_tokens?: number
+        }
+        completion_tokens_details?: { reasoning_tokens?: number }
+      }
       const rawCached =
-        ((chunk.usage as any).prompt_tokens_details?.cached_tokens as
-          | number
-          | undefined) ?? cachedReadTokens
+        usageDetails.prompt_tokens_details?.cached_tokens ?? cachedReadTokens
       // Anthropic's input_tokens = non-cached input only. OpenAI's prompt_tokens
       // includes cached tokens, so subtract. Clamp to 0 in case cached > total
       // due to a streaming race.
       inputTokens = Math.max(0, rawInputTokens - rawCached)
       outputTokens = chunk.usage.completion_tokens ?? outputTokens
       cachedReadTokens = rawCached
+      cacheWriteTokens =
+        usageDetails.prompt_tokens_details?.cache_write_tokens ??
+        cacheWriteTokens
+      reasoningTokens =
+        usageDetails.completion_tokens_details?.reasoning_tokens ??
+        reasoningTokens
+      totalTokens = chunk.usage.total_tokens ?? totalTokens
     }
 
     // Emit message_start on first chunk
@@ -113,6 +137,14 @@ export async function* adaptOpenAIStreamToAnthropic(
 
     // Skip chunks that carry only usage data (no delta content)
     if (!delta) continue
+
+    if (
+      (delta as unknown as { function_call?: unknown }).function_call != null
+    ) {
+      throw invalidStream(
+        'legacy delta.function_call is unsupported; endpoint must emit delta.tool_calls',
+      )
+    }
 
     // Handle reasoning_content → Anthropic thinking block.
     // Empty string is a valid signal: DeepSeek v4 thinking mode sometimes
@@ -149,8 +181,13 @@ export async function* adaptOpenAIStreamToAnthropic(
       }
     }
 
-    // Handle text content
-    if (delta.content != null && delta.content !== '') {
+    // Preserve both normal content and refusal text. The internal protocol has
+    // no separate refusal block, so refusal is surfaced as assistant text.
+    const textFragments = [
+      delta.content,
+      (delta as unknown as { refusal?: string | null }).refusal,
+    ].filter((value): value is string => value != null && value !== '')
+    for (const textFragment of textFragments) {
       if (!textBlockOpen) {
         // Close thinking block if still open
         if (thinkingBlockOpen) {
@@ -181,7 +218,7 @@ export async function* adaptOpenAIStreamToAnthropic(
         index: currentContentIndex,
         delta: {
           type: 'text_delta',
-          text: delta.content,
+          text: textFragment,
         },
       } as BetaRawMessageStreamEvent
     }
@@ -217,6 +254,11 @@ export async function* adaptOpenAIStreamToAnthropic(
           const toolId =
             tc.id || `toolu_${randomUUID().replace(/-/g, '').slice(0, 24)}`
           const toolName = tc.function?.name || ''
+          if (!toolName) {
+            throw invalidStream(
+              `tool call at index ${tcIndex} started without a function name`,
+            )
+          }
 
           toolBlocks.set(tcIndex, {
             contentIndex: currentContentIndex,
@@ -294,7 +336,11 @@ export async function* adaptOpenAIStreamToAnthropic(
     yield {
       type: 'content_block_stop',
       index: idx,
-    } as BetaRawMessageStreamEvent
+    } as unknown as BetaRawMessageStreamEvent
+  }
+
+  if (pendingFinishReason === null) {
+    throw invalidStream('stream ended without a non-null finish_reason')
   }
 
   // Emit message_delta + message_stop
@@ -317,8 +363,13 @@ export async function* adaptOpenAIStreamToAnthropic(
         output_tokens: outputTokens,
         cache_read_input_tokens: cachedReadTokens,
         cache_creation_input_tokens: 0,
+        raw_input_tokens: rawInputTokens,
+        total_tokens: totalTokens,
+        reasoning_output_tokens: reasoningTokens,
+        cache_write_input_tokens: cacheWriteTokens,
+        usage_complete: usageComplete,
       },
-    } as BetaRawMessageStreamEvent
+    } as unknown as BetaRawMessageStreamEvent
 
     yield {
       type: 'message_stop',

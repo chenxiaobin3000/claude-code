@@ -15,6 +15,7 @@ import type {
 import { collectSensitiveStrings } from '../../../utils/logRedaction.js'
 import { resolveModelTarget } from '../../../utils/model/modelRegistry.js'
 import { isDeferredToolsDeltaEnabled } from '../../../utils/searchExtraTools.js'
+import { resolveAppliedEffort } from '../../../utils/effort.js'
 import { getOpenAIClient } from '../../api/openai/client.js'
 import {
   createOpenAIRequestError,
@@ -71,7 +72,15 @@ export const openAIProvider: ModelProvider = {
   async createStream(request, signal, context) {
     const target = resolveModelTarget(request.options.model)
     const model = target.model
-    const enableThinking = isOpenAIThinkingEnabled(model)
+    const effortValue = resolveAppliedEffort(
+      model,
+      request.options.effortValue,
+    )
+    const enableThinking = isOpenAIThinkingEnabled(
+      model,
+      request.thinkingConfig,
+      effortValue,
+    )
     const messages = anthropicMessagesToOpenAI(
       prependDeferredToolListIfNeeded(
         request.messages.filter(isOpenAIConvertibleMessage),
@@ -104,7 +113,8 @@ export const openAIProvider: ModelProvider = {
           messages,
           tools,
           toolChoice,
-          enableThinking,
+          thinkingConfig: request.thinkingConfig,
+          effortValue,
           maxTokens: maxOutputTokens,
           temperatureOverride: request.options.temperatureOverride,
         }),

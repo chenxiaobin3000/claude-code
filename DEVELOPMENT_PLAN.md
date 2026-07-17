@@ -38,6 +38,8 @@
 - 不规划任何非 OpenAI-compatible 协议的专用模型接入。
 - OpenAI-compatible 请求失败统一分类为鉴权、限流、上下文、模型不存在、网络、超时、路由、请求字段、响应结构、服务端和未知错误；路由/字段/JSON/SSE 不兼容必须明确指出协议边界，不允许自动删字段重试、备用路由或厂商专用适配分支。
 - 2026-07-17 协议错误分类完成验收：`bun run verify -- --ci` 的静态检查、18 个 workspace、轻量验证和三类构建产物全部通过（120.4 秒）；普通 `bun run verify` 使用本地 llama.cpp 对 Bun bundle、Vite/Node bundle 和 Windows standalone EXE 分别完成真实流式单轮请求及 `Read` 工具调用（145.1 秒），新增响应结构守卫未误判实际 SSE。
+- Chat Completions 参数契约由精确模型 Profile 固定：输出字段只能是 `max_tokens` 或 `max_completion_tokens`，推理只能是无推理、DeepSeek `thinking` 或 OpenAI `reasoning_effort`，并显式声明 temperature、并行工具调用和严格 Schema 策略。主请求与 `sideQuery` 复用同一构造规则；`thinkingConfig` 和适用模型的 `effortValue` 必须进入请求，禁止根据错误响应动态换字段。
+- 流适配必须保留 text/refusal/reasoning、交错并行工具参数、停止原因和 Usage 明细；无 `finish_reason`、遗留 `function_call`、无函数名或无效 JSON 属于协议错误。内部 Usage 保留 raw input、cache read/write、reasoning、total 和完整性标记；`completion_tokens` 包含 reasoning token，不得重复计费，缺少尾部 Usage 时必须明确记录不完整。
 
 ### 2.3 已知工程状态
 
@@ -155,7 +157,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 | 脚本 | 纯函数边界 | 固定样例覆盖 |
 | --- | --- | --- |
 | `message-conversion.ts` | `anthropicMessagesToOpenAI` | system/user/assistant、thinking、tool use/result 顺序、图片 |
-| `openai-stream.ts` | `adaptOpenAIStreamToAnthropic` | thinking/text、分片工具参数、尾部 Usage、缓存 Token、`tool_use`/`max_tokens` 停止原因 |
+| `openai-stream.ts` | `adaptOpenAIStreamToAnthropic` | thinking/text/refusal、交错并行工具参数、尾部 Usage 与 reasoning/cache 明细、停止原因、异常断流和遗留协议拒绝 |
 | `openai-errors.ts` | OpenAI-compatible 错误分类与结构守卫 | 鉴权/限流/上下文/模型/网络/协议分类、endpoint 与凭据脱敏、非流响应和 SSE chunk 结构 |
 | `tool-permissions.ts` | 权限规则解析、序列化和通配匹配 | exact/prefix/wildcard、括号与反斜杠转义、命令边界、Bash 大小写敏感、PowerShell 大小写不敏感 |
 | `shell-parsers.ts` | Bash 纯 TypeScript AST 解析与 PowerShell JSON AST 转换 | 管道、控制符、命令替换、转义分号、heredoc、cmdlet/路径/模块前缀、参数、变量、重定向 |
@@ -197,7 +199,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - [x] `/model` 保留原有 UI 流程并直接展示注册模型；请求按所选模型解析地址和凭据，不再依赖 `OPENAI_MODEL`、`OPENAI_BASE_URL` 或 Claude 模型映射（2026-07-15 已完成）。
 - [x] 按模型 ID 显式硬编码上下文窗口、最大输出 Token、推理参数、Prompt Cache 和价格，并为映射增加轻量验证（2026-07-17 已完成：新增唯一静态 `modelProfiles.ts`，专用模型严格按完整 ID 匹配，未登记模型使用复制自 Qwen 的固定默认 Profile 并输出补充专用配置提示；上下文、输出限制、OpenAI 请求体和成本计算改为读取 Profile，输出环境变量只能降低不能扩大模型上限；移除启动时 Capability 刷新、磁盘 Capability Cache、模型名 `includes` 推理判断及未知价格向 Claude 价格回退。新增 `model-profiles` 验证并接入 `bun run verify`；默认回退调整后 CI 全矩阵 157.1 秒通过，普通模式使用本地 Qwen 完成三类产物真实模型请求和 `Read` 工具调用，140.0 秒全部通过）。
 - [x] 移除 OpenAI 模型映射和隐式 fallback；未注册模型在发送请求前直接报错（2026-07-15 已完成）。
-- [ ] 核对 OpenAI Chat Completions 的推理参数、工具选择、流事件和 Usage 字段。
+- [x] 核对 OpenAI Chat Completions 的推理参数、工具选择、流事件和 Usage 字段（2026-07-17 已完成实现并验收：模型 Profile 固定输出字段、推理方言、temperature、并行工具和严格 Schema 策略；主请求与 `sideQuery` 共用构造规则并接通 `thinkingConfig`/`effortValue`；工具选择支持 none/auto/required/指定函数；流适配补齐 refusal、交错并行工具、异常断流和遗留协议拒绝；Usage 保留 raw/cache/reasoning/total/完整性且不重复计费；轻量验证覆盖字段契约和非法组合。`bun run verify -- --ci` 的锁定安装、TypeScript、Biome、18 个 workspace、轻量验证和三类构建产物全部通过（139.0 秒）；普通 `bun run verify` 使用本地 llama.cpp 对 Bun bundle、Vite/Node bundle 和 Windows standalone EXE 分别完成真实单轮请求及 `Read` 工具调用（159.4 秒））。
 - [x] 对不兼容 OpenAI 协议的 endpoint 给出清晰错误，不增加专用适配分支（2026-07-17 已完成：新增统一错误分类和 Chat Completions JSON/SSE 结构守卫，接入主流式请求、`sideQuery` 和模型验证；协议错误明确区分路由、必要字段和响应结构，不探测 endpoint、不删字段重试、不切换备用路由、不增加厂商分支；错误分类写入现有脱敏诊断日志，`openai-errors` 轻量验证并入 `bun run verify`）。
 
 验收标准：

@@ -22,20 +22,21 @@ export type EffortValue = EffortLevel | number
 
 // @[MODEL LAUNCH]: Add the new model to the allowlist if it supports the effort parameter.
 export function modelSupportsEffort(model: string): boolean {
-  getModelProfile(model)
-  return false
+  return getModelProfile(model).reasoning.type === 'openai'
 }
 
 // Effort max/xhigh restrictions removed — all models that support effort
 // can now use these levels. API errors are the user's responsibility.
 export function modelSupportsMaxEffort(_model: string): boolean {
-  getModelProfile(_model)
-  return false
+  const reasoning = getModelProfile(_model).reasoning
+  return reasoning.type === 'openai' && reasoning.supportedEfforts.includes('max')
 }
 
 export function modelSupportsXhighEffort(_model: string): boolean {
-  getModelProfile(_model)
-  return false
+  const reasoning = getModelProfile(_model).reasoning
+  return (
+    reasoning.type === 'openai' && reasoning.supportedEfforts.includes('xhigh')
+  )
 }
 
 export function isEffortLevel(value: string): value is EffortLevel {
@@ -257,6 +258,9 @@ export function getOpusDefaultEffortConfig(): OpusDefaultEffortConfig {
 export function getDefaultEffortForModel(
   model: string,
 ): EffortValue | undefined {
-  getModelProfile(model)
-  return undefined
+  const reasoning = getModelProfile(model).reasoning
+  if (reasoning.type !== 'openai') return undefined
+  return reasoning.defaultEffort === 'none' || reasoning.defaultEffort === 'minimal'
+    ? undefined
+    : reasoning.defaultEffort
 }

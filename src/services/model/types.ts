@@ -18,6 +18,7 @@ import type { EffortValue } from '../../utils/effort.js'
 import type { LangfuseSpan } from '../langfuse/index.js'
 import type { Message } from '../../types/message.js'
 import type { SystemPrompt } from '../../utils/systemPromptType.js'
+import type { ThinkingConfig } from '../../utils/thinking.js'
 
 /** Provider-neutral options consumed by the model query orchestrator. */
 export type ModelQueryOptions = {
@@ -59,5 +60,6 @@ export type PreparedModelRequest = {
   toolSchemas: BetaToolUnion[]
   deferredToolNames: ReadonlySet<string>
   useSearchExtraTools: boolean
+  thinkingConfig: ThinkingConfig
   options: ModelQueryOptions
 }

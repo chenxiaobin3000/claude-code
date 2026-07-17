@@ -6,6 +6,7 @@ import { resolve } from 'node:path'
 import type { BetaUsage } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import {
   buildOpenAIRequestBody,
+  buildOpenAIRequestBodyForProfile,
   isOpenAIThinkingEnabled,
   resolveOpenAIMaxTokens,
 } from '../../src/services/api/openai/requestBody.js'
@@ -20,6 +21,7 @@ import {
   getDefaultModelProfileWarning,
   getModelProfile,
   usesDefaultModelProfile,
+  type ModelProfile,
 } from '../../src/utils/model/modelProfiles.js'
 import { calculateUSDCost } from '../../src/utils/modelCost.js'
 import { assert, assertDeepEqual, assertEqual } from './assertions.js'
@@ -128,7 +130,7 @@ assertEqual(
 )
 
 const baseRequest = {
-  messages: [{ role: 'user', content: 'fixture' }],
+  messages: [{ role: 'user' as const, content: 'fixture' }],
   tools: [],
   toolChoice: undefined,
   maxTokens: 4_096,
@@ -136,14 +138,18 @@ const baseRequest = {
 const qwenRequest = buildOpenAIRequestBody({
   ...baseRequest,
   model: 'Qwen3.5-9B-Q6_K',
-  enableThinking: isOpenAIThinkingEnabled('Qwen3.5-9B-Q6_K'),
 }) as Record<string, unknown>
 assertEqual(qwenRequest.thinking, undefined, 'Qwen reasoning fields')
+assertEqual(qwenRequest.max_tokens, 4_096, 'Qwen output token field')
+assertEqual(
+  qwenRequest.max_completion_tokens,
+  undefined,
+  'Qwen must not send OpenAI reasoning output field',
+)
 
 const deepseekRequest = buildOpenAIRequestBody({
   ...baseRequest,
   model: 'deepseek-v4-flash',
-  enableThinking: isOpenAIThinkingEnabled('deepseek-v4-flash'),
 }) as Record<string, unknown>
 assertDeepEqual(
   deepseekRequest.thinking,
@@ -160,6 +166,108 @@ assertEqual(
   undefined,
   'unsupported chat template field',
 )
+const deepseekDisabled = buildOpenAIRequestBody({
+  ...baseRequest,
+  model: 'deepseek-v4-flash',
+  thinkingConfig: { type: 'disabled' },
+}) as Record<string, unknown>
+assertEqual(
+  deepseekDisabled.thinking,
+  undefined,
+  'disabled DeepSeek reasoning',
+)
+
+const openAIReasoningProfile: ModelProfile = {
+  ...DEFAULT_MODEL_PROFILE,
+  reasoning: {
+    type: 'openai',
+    defaultEffort: 'medium',
+    supportedEfforts: ['none', 'low', 'medium', 'high'],
+  },
+  chatCompletions: {
+    outputTokenField: 'max_completion_tokens',
+    parallelToolCalls: true,
+    strictToolSchemas: false,
+    temperature: 'unsupported_with_reasoning',
+  },
+}
+const openAIReasoningRequest = buildOpenAIRequestBodyForProfile(
+  {
+    ...baseRequest,
+    model: 'fixture-openai-reasoning',
+    tools: [
+      {
+        type: 'function',
+        function: {
+          name: 'Fixture',
+          parameters: { type: 'object', properties: {} },
+        },
+      },
+    ],
+    toolChoice: 'required',
+    effortValue: 'high',
+  },
+  openAIReasoningProfile,
+)
+assertEqual(
+  openAIReasoningRequest.max_completion_tokens,
+  4_096,
+  'OpenAI reasoning output token field',
+)
+assertEqual(
+  openAIReasoningRequest.max_tokens,
+  undefined,
+  'OpenAI reasoning deprecated output field',
+)
+assertEqual(
+  openAIReasoningRequest.reasoning_effort,
+  'high',
+  'OpenAI reasoning effort',
+)
+assertEqual(
+  openAIReasoningRequest.parallel_tool_calls,
+  true,
+  'explicit parallel tool policy',
+)
+assertEqual(
+  openAIReasoningProfile.chatCompletions.strictToolSchemas,
+  false,
+  'strict tool schema policy',
+)
+
+for (const [label, build] of [
+  [
+    'reasoning temperature conflict',
+    () =>
+      buildOpenAIRequestBodyForProfile(
+        {
+          ...baseRequest,
+          model: 'fixture-openai-reasoning',
+          temperatureOverride: 0,
+        },
+        openAIReasoningProfile,
+      ),
+  ],
+  [
+    'unsupported reasoning effort',
+    () =>
+      buildOpenAIRequestBodyForProfile(
+        {
+          ...baseRequest,
+          model: 'fixture-openai-reasoning',
+          effortValue: 'xhigh',
+        },
+        openAIReasoningProfile,
+      ),
+  ],
+] as const) {
+  try {
+    build()
+  } catch {
+    continue
+  }
+  throw new Error(`${label} was accepted`)
+}
 
 const usage = {
   input_tokens: 1_000_000,

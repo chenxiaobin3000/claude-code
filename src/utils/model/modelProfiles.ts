@@ -1,6 +1,27 @@
 export type ModelReasoningProfile =
   | { type: 'none' }
   | { type: 'deepseek'; enabledByDefault: boolean }
+  | {
+      type: 'openai'
+      defaultEffort: OpenAIReasoningEffort
+      supportedEfforts: readonly OpenAIReasoningEffort[]
+    }
+
+export type OpenAIReasoningEffort =
+  | 'none'
+  | 'minimal'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'xhigh'
+  | 'max'
+
+export type ModelChatCompletionsProfile = {
+  outputTokenField: 'max_tokens' | 'max_completion_tokens'
+  parallelToolCalls: boolean
+  strictToolSchemas: boolean
+  temperature: 'supported' | 'unsupported_with_reasoning'
+}
 
 export type ModelPromptCacheProfile =
   | { type: 'none' }
@@ -20,6 +41,7 @@ export type ModelProfile = {
   defaultOutputTokens: number
   maxOutputTokens: number
   reasoning: ModelReasoningProfile
+  chatCompletions: ModelChatCompletionsProfile
   promptCache: ModelPromptCacheProfile
   pricing: ModelPricing | null
 }
@@ -35,6 +57,12 @@ export const DEFAULT_MODEL_PROFILE: ModelProfile = {
   defaultOutputTokens: 4_096,
   maxOutputTokens: 4_096,
   reasoning: { type: 'none' },
+  chatCompletions: {
+    outputTokenField: 'max_tokens',
+    parallelToolCalls: false,
+    strictToolSchemas: false,
+    temperature: 'supported',
+  },
   promptCache: { type: 'none' },
   pricing: {
     currency: 'USD',
@@ -50,6 +78,7 @@ export const MODEL_PROFILES = {
   'Qwen3.5-9B-Q6_K': {
     ...DEFAULT_MODEL_PROFILE,
     reasoning: { type: 'none' },
+    chatCompletions: { ...DEFAULT_MODEL_PROFILE.chatCompletions },
     promptCache: { type: 'none' },
     pricing: { ...DEFAULT_MODEL_PROFILE.pricing! },
   },
@@ -58,6 +87,12 @@ export const MODEL_PROFILES = {
     defaultOutputTokens: 4_096,
     maxOutputTokens: 4_096,
     reasoning: { type: 'deepseek', enabledByDefault: true },
+    chatCompletions: {
+      outputTokenField: 'max_tokens',
+      parallelToolCalls: false,
+      strictToolSchemas: false,
+      temperature: 'unsupported_with_reasoning',
+    },
     promptCache: {
       type: 'providerManaged',
       reportsCachedTokens: true,

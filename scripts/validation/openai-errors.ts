@@ -52,6 +52,14 @@ assertKind(
   providerError('unknown field stream_options', 400),
 )
 assertKind(
+  'protocol_request',
+  providerError('reasoning_effort is not supported', 400),
+)
+assertKind(
+  'protocol_request',
+  providerError('unknown field parallel_tool_calls', 422),
+)
+assertKind(
   'protocol_response',
   new Error('unexpected content-type text/html'),
   'stream',

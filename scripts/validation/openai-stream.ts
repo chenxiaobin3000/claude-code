@@ -57,7 +57,8 @@ async function* toolStream(): AsyncGenerator<ChatCompletionChunk> {
       prompt_tokens: 20,
       completion_tokens: 7,
       total_tokens: 27,
-      prompt_tokens_details: { cached_tokens: 5 },
+      prompt_tokens_details: { cached_tokens: 5, cache_write_tokens: 3 },
+      completion_tokens_details: { reasoning_tokens: 2 },
     },
   })
 }
@@ -140,6 +141,11 @@ assertDeepEqual(
     output_tokens: 7,
     cache_read_input_tokens: 5,
     cache_creation_input_tokens: 0,
+    raw_input_tokens: 20,
+    total_tokens: 27,
+    reasoning_output_tokens: 2,
+    cache_write_input_tokens: 3,
+    usage_complete: true,
   },
   'usage conversion',
 )
@@ -162,8 +168,117 @@ assertDeepEqual(
     output_tokens: 0,
     cache_read_input_tokens: 0,
     cache_creation_input_tokens: 0,
+    raw_input_tokens: 0,
+    total_tokens: 0,
+    reasoning_output_tokens: 0,
+    cache_write_input_tokens: 0,
+    usage_complete: false,
   },
   'missing usage defaults',
 )
+
+async function* refusalStream(): AsyncGenerator<ChatCompletionChunk> {
+  yield chunk({
+    choices: [{ delta: { refusal: 'Cannot comply.' }, finish_reason: 'stop' }],
+  })
+}
+const refusalEvents = await collectAsync(
+  adaptOpenAIStreamToAnthropic(refusalStream(), 'fixture-model'),
+)
+const refusalText = refusalEvents.find(
+  event =>
+    event.type === 'content_block_delta' && event.delta.type === 'text_delta',
+)
+assert(
+  refusalText?.type === 'content_block_delta' &&
+    refusalText.delta.type === 'text_delta',
+  'missing refusal text delta',
+)
+assertEqual(refusalText.delta.text, 'Cannot comply.', 'refusal text')
+
+async function* parallelToolStream(): AsyncGenerator<ChatCompletionChunk> {
+  yield chunk({
+    choices: [
+      {
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              id: 'call-a',
+              function: { name: 'Read', arguments: '{"a":' },
+            },
+            {
+              index: 1,
+              id: 'call-b',
+              function: { name: 'Glob', arguments: '{"b":' },
+            },
+          ],
+        },
+        finish_reason: null,
+      },
+    ],
+  })
+  yield chunk({
+    choices: [
+      {
+        delta: {
+          tool_calls: [
+            { index: 1, function: { arguments: '2}' } },
+            { index: 0, function: { arguments: '1}' } },
+          ],
+        },
+        finish_reason: 'tool_calls',
+      },
+    ],
+  })
+}
+const parallelEvents = await collectAsync(
+  adaptOpenAIStreamToAnthropic(parallelToolStream(), 'fixture-model'),
+)
+assertEqual(
+  parallelEvents.filter(
+    event =>
+      event.type === 'content_block_start' &&
+      event.content_block.type === 'tool_use',
+  ).length,
+  2,
+  'parallel tool blocks',
+)
+
+async function assertInvalidStream(
+  stream: AsyncIterable<ChatCompletionChunk>,
+  label: string,
+): Promise<void> {
+  try {
+    await collectAsync(adaptOpenAIStreamToAnthropic(stream, 'fixture-model'))
+  } catch (error) {
+    assert(
+      error instanceof Error &&
+        error.message.includes('invalid_chat_completion_response'),
+      `${label} returned an unclear error`,
+    )
+    return
+  }
+  throw new Error(`${label} was accepted`)
+}
+
+async function* interruptedStream(): AsyncGenerator<ChatCompletionChunk> {
+  yield chunk({
+    choices: [{ delta: { content: 'partial' }, finish_reason: null }],
+  })
+}
+await assertInvalidStream(interruptedStream(), 'unfinished stream')
+
+async function* legacyFunctionStream(): AsyncGenerator<ChatCompletionChunk> {
+  yield chunk({
+    choices: [
+      {
+        delta: { function_call: { name: 'Read', arguments: '{}' } },
+        finish_reason: 'function_call',
+      },
+    ],
+  })
+}
+await assertInvalidStream(legacyFunctionStream(), 'legacy function_call')
 
 console.log('[validation] OpenAI stream adaptation passed')
