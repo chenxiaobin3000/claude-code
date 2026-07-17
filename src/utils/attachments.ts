@@ -194,8 +194,8 @@ import { logForDebugging } from './debug.js'
 import {
   extractTextContent,
   getUserMessageText,
-  isThinkingMessage,
-} from './messages.js'
+} from './messages/text.js'
+import { isThinkingMessage } from './messages/predicates.js'
 import { isHumanTurn } from './messagePredicates.js'
 import { isEnvTruthy, getClaudeConfigHomeDir } from './envUtils.js'
 import { feature } from 'bun:bundle'

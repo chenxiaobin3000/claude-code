@@ -44,6 +44,7 @@
 - 语音模式、录音、音频 NAPI Workspace 和相关二进制依赖已经移除。
 - 本地版本号与 CLI 版本已统一为 `2.1.116`，构建版本以根目录 `package.json` 为唯一来源，源码直跑入口使用相同兜底值；该版本号不代表对应的官方版本。
 - CLI 不具备自安装或自更新能力：根级 `install`、`update`、`rollback`（包括 `ccb update`）以及 native/local installer、自动更新器、版本锁和更新频道配置均已移除。版本升级只能由外部分发渠道替换产物；插件安装、插件自动更新、SSH 远端部署和 standalone EXE 构建不受影响。包管理器来源检测已迁为只读 Doctor 能力；2026-07-16 执行 `bun run verify -- --ci` 全矩阵通过，耗时 120.3 秒，最终 EXE 帮助中不存在上述三个根命令。
+- `src/utils/messages.ts`、`sessionStorage.ts`、`hooks.ts` 已收口为稳定薄入口；纯消息处理、Transcript 链与投影、Hook 匹配和输出协议分别迁入 `utils/messages/`、`utils/sessionStorage/`、`utils/hooks/`。遗留运行时编排由同目录 `*Runtime.ts` 承接并设置只减不增的行数上限，新代码必须直接引用聚焦模块。
 
 ### 2.4 当前工程与验证基线
 
@@ -150,8 +151,12 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 | `shell-parsers.ts` | Bash 纯 TypeScript AST 解析与 PowerShell JSON AST 转换 | 管道、控制符、命令替换、转义分号、heredoc、cmdlet/路径/模块前缀、参数、变量、重定向 |
 | `model-diagnostics.ts` | 日志脱敏和摘要纯函数 | API Key、OAuth/JWT、URL 凭据、Prompt、截断和安全诊断字段 |
 | `self-update-boundary.ts` | CLI 自更新禁用边界 | 禁止根级 install/update/rollback、安装器与更新器实现及配置字段；保留插件安装/更新和 standalone 构建 |
+| `message-utils.ts` | 消息 ID、文本协议和谓词 | 稳定 UUID、XML Tag、文本块、Thinking、Tool Call 和 Compact Boundary |
+| `session-transcript.ts` | Transcript 纯转换 | Entry/Chain 守卫、序列化字段清理、父链顺序与环检测、Agent/Teammate 投影 |
+| `hook-protocol.ts` | Hook 输出协议和匹配 | exact/pipe/regex、非法正则、去重命名空间、Shell/HTTP JSON、blocking 聚合 |
+| `utility-modules-boundary.ts` | 巨石文件拆分边界 | 薄入口、运行时只减不增、子模块规模、纯函数依赖方向和关键循环引用 |
 
-每个脚本都可由 `bun run scripts/validation/<name>.ts` 独立运行；`scripts/verify.ts` 按固定清单逐项执行，项目不增加第二个总验证命令。PowerShell 轻量验证不启动 `pwsh`，只调用运行路径实际使用的 `transformPowerShellParseOutput` 纯转换边界，因此可在 Windows/Linux CI 中得到相同结果；外部 PowerShell 进程发现与启动不属于本组纯函数验证。2026-07-16 五项脚本独立执行总耗时低于 1 秒，随后完整 `bun run verify` 通过，三构建链、模型和工具调用均成功，总耗时 69.8 秒。
+每个脚本都可由 `bun run scripts/validation/<name>.ts` 独立运行；`scripts/verify.ts` 按固定清单逐项执行，项目不增加第二个总验证命令。PowerShell 轻量验证不启动 `pwsh`，只调用运行路径实际使用的 `transformPowerShellParseOutput` 纯转换边界，因此可在 Windows/Linux CI 中得到相同结果；外部 PowerShell 进程发现与启动不属于本组纯函数验证。新增消息、Transcript、Hook 协议与结构边界验证同样直接调用源码模块，不经过兼容入口。
 
 2026-07-16 第二模型实测：显式选择 `deepseek-v4-flash` 后，单轮流式请求返回预期标记；随后仅开放并允许 `Read` 工具读取根目录 `package.json`，模型正确发起工具调用并返回版本 `2.1.116`。测试使用 `OPENAI_MAX_TOKENS=4096`，未记录 API Key 或完整 Prompt。本地功能基线已完成验收；跨平台 CI 仍以 GitHub 托管环境首次实际运行记录作为最终证据。
 
@@ -189,7 +194,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - [x] 拆分 `src/screens/REPL.tsx`，将会话状态、输入控制、任务/Agent 状态和渲染职责分离（2026-07-16 已完成：`REPL.tsx` 收口为 2 行稳定导出入口；新增 `screens/repl/session`、`input`、`agents` 和 `view` 分层，分别承接消息时间线、输入与 transcript 控制、任务/Agent 状态及 transcript 纯渲染组件；剩余跨域编排集中到 `ReplController.tsx`，并新增 `repl-boundary` 防回归检查。`bun run verify --ci` 于 Windows 全部通过，用时 62.1 秒）。
 - [x] 继续收缩 `ReplController.tsx` 的查询生命周期和运行时编排（2026-07-16 已完成：新增 `query`、`runtime` 分层，并将查询统计、流事件适配、单次查询执行、整轮并发/取消收尾、Remote/Direct Connect/SSH、Pipe/Inbox/Mailbox、Prompt 提交、会话恢复/回退及 Agent 提交动作迁出；transcript 分支迁入独立 `TranscriptScreen`，控制器由 5903 行降至 4300 行以内，并将 `repl-boundary` 上限同步收紧。`bun run verify --ci` 于 Windows 全部通过，用时 64.2 秒）。
 - [x] 继续拆分 `ReplController.tsx` 中的主 Prompt 屏幕、Dialog 层和取消/退出交互（2026-07-16 已完成：`ReplController.tsx` 收口为稳定导出入口，低于 1800 行上限；剩余查询、提交和运行时编排明确迁入 `ReplRuntimeController.tsx`，主 Prompt/Transcript 投影迁入 `view/ReplView.tsx`，Dialog 与消息选择副作用迁入 `interaction/ReplDialogLayer.tsx`、`ReplMessageSelector.tsx`，取消和退出分别迁入 `useCancelInteraction.ts`、`useExitInteraction.tsx`。`repl-boundary` 同时限制入口规模、各层 800 行上限，并禁止主视图直接发起查询、切换会话、局部压缩或初始化远程运行时；`bun run verify --ci` 于 Windows 全部通过，用时 71.7 秒）。
-- [ ] 拆分 `src/utils/messages.ts`、`src/utils/sessionStorage.ts` 和 `src/utils/hooks.ts`，优先抽出纯函数与协议转换层，并在 `scripts/validation` 中补充轻量验证脚本。
+- [x] 拆分 `src/utils/messages.ts`、`src/utils/sessionStorage.ts` 和 `src/utils/hooks.ts`，优先抽出纯函数与协议转换层，并在 `scripts/validation` 中补充轻量验证脚本（2026-07-17 已完成首轮结构收口：三个旧入口均缩减为 4 行薄重导出；消息 ID/文本/谓词、Transcript Entry/Agent 投影/父链遍历、Hook matcher/blocking/output parser 已迁入聚焦模块；`attachments` 和 Session Storage 改为直接引用消息子模块以切断关键循环。新增 `message-utils`、`session-transcript`、`hook-protocol`、`utility-modules-boundary` 并接入唯一 `bun run verify`；遗留运行时文件设置只减不增上限，后续职责迁移不得重新扩大入口或运行时实现。`bun run verify -- --ci` 完整矩阵通过，耗时 134.3 秒）。
 - [x] 为所有 workspace 统一最小脚本约定：`typecheck`、`build`、`test` 或明确的 `test:smoke`；不适用的子包需写明原因（2026-07-16 已完成：18/18 workspace 契约、独立类型检查和轻量冒烟通过；4 个独立产物构建通过，14 个源码直引包记录机器可读的不适用原因；统一并入 `bun run verify`，CI 模式全流程耗时 109.5 秒）。
 - [ ] 审计根包 `devDependencies` 中实际进入生产 Bundle 的依赖，明确运行时依赖与构建期依赖，减少发布和供应链审计范围。
 - [ ] 将 Feature Flag 分为稳定、实验、内部/部署专用三组，增加依赖关系和非法组合检查；默认构建只启用有验收覆盖的稳定能力。

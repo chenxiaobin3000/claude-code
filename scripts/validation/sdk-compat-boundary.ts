@@ -91,7 +91,7 @@ for (const call of [
 }
 
 const representativeConsumers: Record<string, RegExp> = {
-  'src/utils/messages.ts': /@anthropic-ai\/sdk/,
+  'src/utils/messagesRuntime.ts': /@anthropic-ai\/sdk/,
   'src/Tool.ts': /@anthropic-ai\/sdk/,
   'src/services/tools/StreamingToolExecutor.ts': /@anthropic-ai\/sdk/,
   'src/services/mcp/client.ts': /@anthropic-ai\/sdk/,
