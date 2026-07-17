@@ -18,10 +18,12 @@ import {
 } from './model/configs.js'
 import {
   firstPartyNameToCanonical,
-  getCanonicalName,
   type ModelShortName,
 } from './model/model.js'
-import { findModelProfile } from './model/modelProfiles.js'
+import {
+  getModelProfile,
+  usesDefaultModelProfile,
+} from './model/modelProfiles.js'
 
 // @see https://platform.claude.com/docs/en/about-claude/pricing
 export type ModelCosts = {
@@ -148,46 +150,27 @@ function tokensToUSDCost(modelCosts: ModelCosts, usage: Usage): number {
 }
 
 export function getModelCosts(model: string, usage: Usage): ModelCosts {
-  const profile = findModelProfile(model)
-  if (profile) {
-    const pricing = profile.pricing
-    if (!pricing) {
-      trackUnknownModelCost(model, model)
-      return UNKNOWN_MODEL_COST
-    }
-    if (
-      ((usage.cache_read_input_tokens ?? 0) > 0 &&
-        pricing.cacheRead === null) ||
-      ((usage.cache_creation_input_tokens ?? 0) > 0 &&
-        pricing.cacheWrite === null)
-    ) {
-      trackUnknownModelCost(model, model)
-    }
-    return {
-      inputTokens: pricing.input,
-      outputTokens: pricing.output,
-      promptCacheReadTokens: pricing.cacheRead ?? 0,
-      promptCacheWriteTokens: pricing.cacheWrite ?? 0,
-      webSearchRequests: 0,
-    }
+  const profile = getModelProfile(model)
+  const pricing = profile.pricing
+  if (usesDefaultModelProfile(model) || !pricing) {
+    trackUnknownModelCost(model, model)
   }
-
-  const shortName = getCanonicalName(model)
-
-  // Check if this is an Opus 4.6 model with fast mode active.
   if (
-    shortName === firstPartyNameToCanonical(CLAUDE_OPUS_4_6_CONFIG.firstParty)
+    !pricing ||
+    ((usage.cache_read_input_tokens ?? 0) > 0 && pricing.cacheRead === null) ||
+    ((usage.cache_creation_input_tokens ?? 0) > 0 &&
+      pricing.cacheWrite === null)
   ) {
-    const isFastMode = usage.speed === 'fast'
-    return getOpus46CostTier(isFastMode)
+    trackUnknownModelCost(model, model)
   }
-
-  const costs = MODEL_COSTS[shortName]
-  if (!costs) {
-    trackUnknownModelCost(model, shortName)
-    return UNKNOWN_MODEL_COST
+  if (!pricing) return UNKNOWN_MODEL_COST
+  return {
+    inputTokens: pricing.input,
+    outputTokens: pricing.output,
+    promptCacheReadTokens: pricing.cacheRead ?? 0,
+    promptCacheWriteTokens: pricing.cacheWrite ?? 0,
+    webSearchRequests: 0,
   }
-  return costs
 }
 
 function trackUnknownModelCost(model: string, shortName: ModelShortName): void {
@@ -200,7 +183,7 @@ function trackUnknownModelCost(model: string, shortName: ModelShortName): void {
 }
 
 // Calculate the cost of a query in US dollars.
-// If the model's costs are not found, use the default model's costs.
+// Unknown model IDs use the explicit default profile and are marked inaccurate.
 export function calculateUSDCost(resolvedModel: string, usage: Usage): number {
   const modelCosts = getModelCosts(resolvedModel, usage)
   return tokensToUSDCost(modelCosts, usage)
@@ -251,18 +234,13 @@ export function formatModelPricing(costs: ModelCosts): string {
  * Returns undefined if model is not found
  */
 export function getModelPricingString(model: string): string | undefined {
-  const profilePricing = findModelProfile(model)?.pricing
-  if (profilePricing) {
-    return formatModelPricing({
-      inputTokens: profilePricing.input,
-      outputTokens: profilePricing.output,
-      promptCacheReadTokens: profilePricing.cacheRead ?? 0,
-      promptCacheWriteTokens: profilePricing.cacheWrite ?? 0,
-      webSearchRequests: 0,
-    })
-  }
-  const shortName = getCanonicalName(model)
-  const costs = MODEL_COSTS[shortName]
-  if (!costs) return undefined
-  return formatModelPricing(costs)
+  const profilePricing = getModelProfile(model).pricing
+  if (!profilePricing) return undefined
+  return formatModelPricing({
+    inputTokens: profilePricing.input,
+    outputTokens: profilePricing.output,
+    promptCacheReadTokens: profilePricing.cacheRead ?? 0,
+    promptCacheWriteTokens: profilePricing.cacheWrite ?? 0,
+    webSearchRequests: 0,
+  })
 }

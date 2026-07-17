@@ -34,7 +34,7 @@
 - 模型注册表入口：`src/utils/model/modelRegistry.ts`；`/model` 直接展示注册表中的模型。
 - 模型查询入口：`src/services/model/query.ts`；`src/services/api/claude.ts` 仅保留兼容重导出。
 - OpenAI-compatible Provider：`src/services/model/providers/openaiProvider.ts`；协议结果编排位于 `src/services/api/openai/index.ts`。
-- 模型能力统一由 `src/utils/model/modelProfiles.ts` 按区分大小写的完整模型 ID 显式硬编码，不在启动时请求 endpoint 探测能力，也不根据响应、命名相似度或未知模型猜测能力。当前登记 `Qwen3.5-9B-Q6_K` 与 `deepseek-v4-flash` 的上下文、默认/最大输出、推理请求格式、Prompt Cache 行为和价格；无法确认的 DeepSeek Cache 价格保持 `null`，不借用其他模型价格。`models.json` 只负责模型、地址、凭据引用及展示信息，未登记模型在配置加载阶段直接失败。
+- 模型能力统一由 `src/utils/model/modelProfiles.ts` 显式硬编码，不在启动时请求 endpoint 探测能力，也不根据响应或名称相似度猜测能力。区分大小写的完整模型 ID 优先匹配专用 Profile；未登记模型统一使用复制自 Qwen 的显式默认 Profile（65,536 上下文、4,096 最大输出、无推理和 Prompt Cache、本地零价格），加载时必须警告正在使用默认配置并建议增加专用 Profile。当前专用登记 `Qwen3.5-9B-Q6_K` 与 `deepseek-v4-flash`；无法确认的 DeepSeek Cache 价格保持 `null`，不借用其他模型价格。`models.json` 只负责模型、地址、凭据引用及展示信息。
 - 不规划任何非 OpenAI-compatible 协议的专用模型接入。
 
 ### 2.3 已知工程状态
@@ -105,7 +105,7 @@
 6. 保持语音功能移除状态，除非后续单独立项恢复。
 7. 不在源码目录引入 `*.test.ts` 或测试框架；轻量逻辑验证统一写入 `scripts/validation`，并由现有 `bun run verify` 执行，不形成第二层验证。
 8. CLI 永远不得安装、升级、降级或替换自身；版本变更由包管理、发布系统或人工替换产物完成。插件更新属于独立能力，不得复用为 CLI 更新通道。
-9. 模型能力必须按模型 ID 在源码中显式硬编码；禁止启动时能力探测、运行时试探、名称模糊匹配或对未知模型进行能力猜测。
+9. 模型能力必须在源码中显式硬编码；禁止启动时能力探测、运行时试探和名称模糊匹配。未知模型只能使用固定默认 Profile 并明确警告，不得动态猜测能力。
 
 ## 5. 当前验证与构建基线
 
@@ -192,7 +192,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 - [x] 建立以模型为核心的 `~/.claude/models.json` 注册表；每个模型配置唯一 ID 和 OpenAI-compatible 地址，地址允许重复（2026-07-15 已完成）。
 - [x] `/model` 保留原有 UI 流程并直接展示注册模型；请求按所选模型解析地址和凭据，不再依赖 `OPENAI_MODEL`、`OPENAI_BASE_URL` 或 Claude 模型映射（2026-07-15 已完成）。
-- [x] 按模型 ID 显式硬编码上下文窗口、最大输出 Token、推理参数、Prompt Cache 和价格，并为映射增加轻量验证（2026-07-17 已完成：新增唯一静态 `modelProfiles.ts`，当前两个模型严格按完整 ID 匹配；上下文、输出限制、OpenAI 请求体和成本计算改为读取 Profile，输出环境变量只能降低不能扩大模型上限；移除启动时 Capability 刷新、磁盘 Capability Cache、模型名 `includes` 推理判断及未知价格向 Claude 价格回退。新增 `model-profiles` 验证并接入 `bun run verify`；CI 全矩阵 117.5 秒通过，普通模式使用本地 Qwen 完成三类产物真实模型请求和 `Read` 工具调用，140.0 秒全部通过）。
+- [x] 按模型 ID 显式硬编码上下文窗口、最大输出 Token、推理参数、Prompt Cache 和价格，并为映射增加轻量验证（2026-07-17 已完成：新增唯一静态 `modelProfiles.ts`，专用模型严格按完整 ID 匹配，未登记模型使用复制自 Qwen 的固定默认 Profile 并输出补充专用配置提示；上下文、输出限制、OpenAI 请求体和成本计算改为读取 Profile，输出环境变量只能降低不能扩大模型上限；移除启动时 Capability 刷新、磁盘 Capability Cache、模型名 `includes` 推理判断及未知价格向 Claude 价格回退。新增 `model-profiles` 验证并接入 `bun run verify`；默认回退调整后 CI 全矩阵 157.1 秒通过，普通模式使用本地 Qwen 完成三类产物真实模型请求和 `Read` 工具调用，140.0 秒全部通过）。
 - [x] 移除 OpenAI 模型映射和隐式 fallback；未注册模型在发送请求前直接报错（2026-07-15 已完成）。
 - [ ] 核对 OpenAI Chat Completions 的推理参数、工具选择、流事件和 Usage 字段。
 - [ ] 对不兼容 OpenAI 协议的 endpoint 给出清晰错误，不增加专用适配分支。

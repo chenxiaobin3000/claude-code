@@ -14,29 +14,18 @@ import {
   getModelMaxOutputTokens,
 } from '../../src/utils/context.js'
 import {
+  DEFAULT_MODEL_PROFILE,
   MODEL_PROFILES,
   findModelProfile,
+  getDefaultModelProfileWarning,
   getModelProfile,
+  usesDefaultModelProfile,
 } from '../../src/utils/model/modelProfiles.js'
 import { calculateUSDCost } from '../../src/utils/modelCost.js'
 import { assert, assertDeepEqual, assertEqual } from './assertions.js'
 
 const root = resolve(import.meta.dir, '../..')
 const source = (path: string) => readFile(resolve(root, path), 'utf8')
-
-function expectFailure(run: () => unknown, expected: string): void {
-  try {
-    run()
-  } catch (error) {
-    assert(error instanceof Error, `${expected}: expected an Error`)
-    assert(
-      error.message.includes(expected),
-      `expected ${JSON.stringify(expected)} in ${JSON.stringify(error.message)}`,
-    )
-    return
-  }
-  throw new Error(`expected failure containing ${JSON.stringify(expected)}`)
-}
 
 assertDeepEqual(
   Object.keys(MODEL_PROFILES),
@@ -80,9 +69,36 @@ assertEqual(
   undefined,
   'model profile matching must be case-sensitive',
 )
-expectFailure(
-  () => getModelProfile('unknown-model'),
-  'Model profile is not registered',
+assertEqual(
+  usesDefaultModelProfile('gemma-new-model'),
+  true,
+  'unknown model default marker',
+)
+assertDeepEqual(
+  getModelProfile('gemma-new-model'),
+  DEFAULT_MODEL_PROFILE,
+  'unknown model fallback profile',
+)
+assert(
+  getDefaultModelProfileWarning('gemma-new-model')?.includes(
+    'using the default Qwen profile',
+  ),
+  'unknown model warning',
+)
+assertEqual(
+  getDefaultModelProfileWarning('Qwen3.5-9B-Q6_K'),
+  undefined,
+  'dedicated profile warning',
+)
+assertEqual(
+  getContextWindowForModel('gemma-new-model'),
+  65_536,
+  'unknown model default context',
+)
+assertDeepEqual(
+  getModelMaxOutputTokens('gemma-new-model'),
+  { default: 4_096, upperLimit: 4_096 },
+  'unknown model default output limits',
 )
 
 assertEqual(
@@ -202,5 +218,10 @@ const context = await source('src/utils/context.ts')
 for (const forbidden of ['getModelCapability', 'getCanonicalName']) {
   assert(!context.includes(forbidden), `context contains ${forbidden}`)
 }
+const registry = await source('src/utils/model/modelRegistry.ts')
+assert(
+  registry.includes('getDefaultModelProfileWarning'),
+  'registry must warn when the default profile is used',
+)
 
 console.log('[model-profiles] PASS')

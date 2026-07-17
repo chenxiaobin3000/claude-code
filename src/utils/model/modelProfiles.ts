@@ -28,23 +28,30 @@ export type ModelProfile = {
  * The only model capability source of truth.
  *
  * Keys are case-sensitive model IDs from models.json. Do not add aliases,
- * substring matching, endpoint probing, or an unknown-model fallback here.
+ * substring matching, or endpoint probing here.
  */
+export const DEFAULT_MODEL_PROFILE: ModelProfile = {
+  contextWindowTokens: 65_536,
+  defaultOutputTokens: 4_096,
+  maxOutputTokens: 4_096,
+  reasoning: { type: 'none' },
+  promptCache: { type: 'none' },
+  pricing: {
+    currency: 'USD',
+    perTokens: 1_000_000,
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+  },
+}
+
 export const MODEL_PROFILES = {
   'Qwen3.5-9B-Q6_K': {
-    contextWindowTokens: 65_536,
-    defaultOutputTokens: 4_096,
-    maxOutputTokens: 4_096,
+    ...DEFAULT_MODEL_PROFILE,
     reasoning: { type: 'none' },
     promptCache: { type: 'none' },
-    pricing: {
-      currency: 'USD',
-      perTokens: 1_000_000,
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-    },
+    pricing: { ...DEFAULT_MODEL_PROFILE.pricing! },
   },
   'deepseek-v4-flash': {
     contextWindowTokens: 1_000_000,
@@ -74,11 +81,16 @@ export function findModelProfile(model: string): ModelProfile | undefined {
 }
 
 export function getModelProfile(model: string): ModelProfile {
-  const profile = findModelProfile(model)
-  if (!profile) {
-    throw new Error(
-      `Model profile is not registered for ${JSON.stringify(model)}. Add an exact entry to src/utils/model/modelProfiles.ts.`,
-    )
-  }
-  return profile
+  return findModelProfile(model) ?? DEFAULT_MODEL_PROFILE
+}
+
+export function usesDefaultModelProfile(model: string): boolean {
+  return findModelProfile(model) === undefined
+}
+
+export function getDefaultModelProfileWarning(
+  model: string,
+): string | undefined {
+  if (!usesDefaultModelProfile(model)) return undefined
+  return `Warning: model ${JSON.stringify(model)} has no dedicated capability profile; using the default Qwen profile (65,536 context tokens, 4,096 maximum output tokens, no reasoning or prompt cache, zero local pricing). Add a dedicated entry to src/utils/model/modelProfiles.ts for accurate behavior.`
 }

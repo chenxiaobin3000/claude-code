@@ -7,7 +7,7 @@ import {
 } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { getClaudeConfigHomeDir } from '../envUtils.js'
-import { getModelProfile } from './modelProfiles.js'
+import { getDefaultModelProfileWarning } from './modelProfiles.js'
 
 export interface ModelRegistryEntry {
   model: string
@@ -118,7 +118,8 @@ function parseModelRegistry(value: unknown): ModelRegistry {
       throw new Error(`duplicate model: ${entry.model}`)
     }
     seen.add(entry.model)
-    getModelProfile(entry.model)
+    const profileWarning = getDefaultModelProfileWarning(entry.model)
+    if (profileWarning) console.warn(profileWarning)
   }
   if (!seen.has(defaultModel)) {
     throw new Error(`defaultModel is not present in models: ${defaultModel}`)
