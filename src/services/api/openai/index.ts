@@ -7,7 +7,6 @@ import type {
 import { logForDebugging } from '../../../utils/debug.js'
 import {
   createSafeError,
-  sanitizeErrorDetails,
   summarizeModelPayload,
 } from '../../../utils/logRedaction.js'
 import { addToTotalSessionCost } from '../../../cost-tracker.js'
@@ -40,6 +39,10 @@ import {
 import type { PreparedModelRequest } from '../../model/types.js'
 import { openAIProvider } from '../../model/providers/openaiProvider.js'
 import { processModelStream } from '../../model/streamProcessor.js'
+import {
+  classifyOpenAIError,
+  type OpenAIErrorPhase,
+} from './errorClassification.js'
 
 /**
  * OpenAI-compatible query path. Converts Anthropic-format messages/tools to
@@ -65,6 +68,8 @@ export async function* queryModelOpenAI(
   const requestId = randomUUID()
   const requestStartedAt = Date.now()
   let diagnosticModel = options.model
+  let diagnosticEndpoint: string | undefined
+  let errorPhase: OpenAIErrorPhase = 'request'
   let sensitiveRequestValues: string[] = []
 
   try {
@@ -81,6 +86,8 @@ export async function* queryModelOpenAI(
       thinking: enableThinking,
     } = providerStream.metadata
     diagnosticModel = openaiModel
+    diagnosticEndpoint = endpoint
+    errorPhase = 'stream'
     sensitiveRequestValues = providerStream.metadata.sensitiveValues
 
     if (useSearchExtraTools) {
@@ -191,7 +198,9 @@ export async function* queryModelOpenAI(
       ...(enableThinking && { thinking: { type: 'enabled' } }),
     })
   } catch (error) {
-    const sanitizedError = sanitizeErrorDetails(error, {
+    const classifiedError = classifyOpenAIError(error, {
+      endpoint: diagnosticEndpoint,
+      phase: errorPhase,
       secrets: sensitiveRequestValues,
     })
     logModelRequestError({
@@ -199,11 +208,12 @@ export async function* queryModelOpenAI(
       provider: 'openai',
       model: diagnosticModel,
       durationMs: Date.now() - requestStartedAt,
-      error: sanitizedError,
+      errorKind: classifiedError.kind,
+      error: classifiedError.details,
     })
-    const safeError = createSafeError(sanitizedError)
+    const safeError = createSafeError(classifiedError.details)
     yield createAssistantAPIErrorMessage({
-      content: `API Error: ${sanitizedError.message}`,
+      content: classifiedError.userMessage,
       apiError: 'api_error',
       error: safeError as unknown as SDKAssistantMessageError,
     })

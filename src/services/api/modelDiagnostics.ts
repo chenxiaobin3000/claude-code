@@ -4,6 +4,7 @@ import {
   redactSensitiveText,
   sanitizeEndpoint,
 } from '../../utils/logRedaction.js'
+import type { OpenAIErrorKind } from './openai/errorClassification.js'
 
 interface ModelDiagnosticBase {
   requestId: string
@@ -33,6 +34,7 @@ export interface ModelRequestSuccessDiagnostic extends ModelDiagnosticBase {
 export interface ModelRequestErrorDiagnostic extends ModelDiagnosticBase {
   durationMs: number
   error: SanitizedErrorDetails
+  errorKind: OpenAIErrorKind
 }
 
 type DiagnosticRecord = Record<
@@ -121,6 +123,7 @@ export function formatModelRequestError(
     provider: diagnostic.provider,
     model: diagnostic.model,
     durationMs: diagnostic.durationMs,
+    errorKind: diagnostic.errorKind,
     errorName: diagnostic.error.name,
     errorMessage: diagnostic.error.message,
     status: diagnostic.error.status,

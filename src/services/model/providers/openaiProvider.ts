@@ -17,6 +17,10 @@ import { resolveModelTarget } from '../../../utils/model/modelRegistry.js'
 import { isDeferredToolsDeltaEnabled } from '../../../utils/searchExtraTools.js'
 import { getOpenAIClient } from '../../api/openai/client.js'
 import {
+  createOpenAIRequestError,
+  validateOpenAIChatCompletionStream,
+} from '../../api/openai/errorClassification.js'
+import {
   buildOpenAIRequestBody,
   isOpenAIThinkingEnabled,
   resolveOpenAIMaxTokens,
@@ -86,28 +90,41 @@ export const openAIProvider: ModelProvider = {
       model,
       request.options.maxOutputTokensOverride,
     )
-    const stream = await getOpenAIClient({
+    const client = getOpenAIClient({
       target,
       maxRetries: 0,
       fetchOverride: request.options.fetchOverride as unknown as typeof fetch,
       source: request.options.querySource,
-    }).chat.completions.create(
-      buildOpenAIRequestBody({
-        model,
-        messages,
-        tools,
-        toolChoice,
-        enableThinking,
-        maxTokens: maxOutputTokens,
-        temperatureOverride: request.options.temperatureOverride,
-      }),
-      { signal },
-    )
+    })
+    let stream: Awaited<ReturnType<typeof client.chat.completions.create>>
+    try {
+      stream = await client.chat.completions.create(
+        buildOpenAIRequestBody({
+          model,
+          messages,
+          tools,
+          toolChoice,
+          enableThinking,
+          maxTokens: maxOutputTokens,
+          temperatureOverride: request.options.temperatureOverride,
+        }),
+        { signal },
+      )
+    } catch (error) {
+      throw createOpenAIRequestError(error, {
+        endpoint: target.baseUrl,
+        phase: 'request',
+        secrets: [target.apiKey, ...collectSensitiveStrings(messages)],
+      })
+    }
 
     return {
       requestId: context.requestId,
       model,
-      events: adaptOpenAIStreamToAnthropic(stream, model),
+      events: adaptOpenAIStreamToAnthropic(
+        validateOpenAIChatCompletionStream(stream),
+        model,
+      ),
       metadata: {
         endpoint: target.baseUrl,
         requestMessages: messages,

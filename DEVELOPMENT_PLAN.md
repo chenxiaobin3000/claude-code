@@ -36,6 +36,8 @@
 - OpenAI-compatible Provider：`src/services/model/providers/openaiProvider.ts`；协议结果编排位于 `src/services/api/openai/index.ts`。
 - 模型能力统一由 `src/utils/model/modelProfiles.ts` 显式硬编码，不在启动时请求 endpoint 探测能力，也不根据响应或名称相似度猜测能力。区分大小写的完整模型 ID 优先匹配专用 Profile；未登记模型统一使用复制自 Qwen 的显式默认 Profile（65,536 上下文、4,096 最大输出、无推理和 Prompt Cache、本地零价格），加载时必须警告正在使用默认配置并建议增加专用 Profile。当前专用登记 `Qwen3.5-9B-Q6_K` 与 `deepseek-v4-flash`；无法确认的 DeepSeek Cache 价格保持 `null`，不借用其他模型价格。`models.json` 只负责模型、地址、凭据引用及展示信息。
 - 不规划任何非 OpenAI-compatible 协议的专用模型接入。
+- OpenAI-compatible 请求失败统一分类为鉴权、限流、上下文、模型不存在、网络、超时、路由、请求字段、响应结构、服务端和未知错误；路由/字段/JSON/SSE 不兼容必须明确指出协议边界，不允许自动删字段重试、备用路由或厂商专用适配分支。
+- 2026-07-17 协议错误分类完成验收：`bun run verify -- --ci` 的静态检查、18 个 workspace、轻量验证和三类构建产物全部通过（120.4 秒）；普通 `bun run verify` 使用本地 llama.cpp 对 Bun bundle、Vite/Node bundle 和 Windows standalone EXE 分别完成真实流式单轮请求及 `Read` 工具调用（145.1 秒），新增响应结构守卫未误判实际 SSE。
 
 ### 2.3 已知工程状态
 
@@ -144,7 +146,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 ### 5.4 模型诊断安全边界
 
-请求开始、首 Token、成功和失败事件只记录请求 ID、Provider、模型、无凭据 endpoint、消息/字符/工具数量、Token 上限、TTFT、总耗时、Usage、停止原因、HTTP 状态、错误码和 Provider 请求 ID。禁止把请求体、Headers、system/user Prompt、工具参数、工具返回值或原始错误对象传入诊断日志。`logForDebugging` 在最终写入前统一清理 Authorization、Bearer/Basic、API Key、OAuth/JWT、敏感 URL 参数和 URL 用户凭据，并截断超长内容；OpenAI 错误还会按本次请求实际使用的 API Key 和消息文本做精确替换。Langfuse LLM observation 仅保留输入、输出和工具的类型、数量、角色分布与序列化长度摘要，不再保存原文。
+请求开始、首 Token、成功和失败事件只记录请求 ID、Provider、模型、无凭据 endpoint、消息/字符/工具数量、Token 上限、TTFT、总耗时、Usage、停止原因、错误分类、HTTP 状态、错误码和 Provider 请求 ID。禁止把请求体、Headers、system/user Prompt、工具参数、工具返回值或原始错误对象传入诊断日志。`logForDebugging` 在最终写入前统一清理 Authorization、Bearer/Basic、API Key、OAuth/JWT、敏感 URL 参数和 URL 用户凭据，并截断超长内容；OpenAI 错误还会按本次请求实际使用的 API Key 和消息文本做精确替换。Langfuse LLM observation 仅保留输入、输出和工具的类型、数量、角色分布与序列化长度摘要，不再保存原文。
 
 `scripts/validation/model-diagnostics.ts` 使用固定伪 API Key、OAuth JWT、URL 凭据和唯一 Prompt 标记验证脱敏、endpoint 清理、错误截断及摘要输出，并已并入唯一的 `bun run verify` 流程。2026-07-16 使用本地 llama.cpp 完成 Bun bundle、Vite/Node bundle 和 Windows x64 EXE 的模型与 `Read` 工具全矩阵验证，新增脱敏检查同时通过，总耗时 66.0 秒；另以 `--debug-file` 执行真实请求，落盘得到请求开始、首 Token、成功三类结构化事件，Prompt 标记未写入日志。
 
@@ -154,6 +156,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 | --- | --- | --- |
 | `message-conversion.ts` | `anthropicMessagesToOpenAI` | system/user/assistant、thinking、tool use/result 顺序、图片 |
 | `openai-stream.ts` | `adaptOpenAIStreamToAnthropic` | thinking/text、分片工具参数、尾部 Usage、缓存 Token、`tool_use`/`max_tokens` 停止原因 |
+| `openai-errors.ts` | OpenAI-compatible 错误分类与结构守卫 | 鉴权/限流/上下文/模型/网络/协议分类、endpoint 与凭据脱敏、非流响应和 SSE chunk 结构 |
 | `tool-permissions.ts` | 权限规则解析、序列化和通配匹配 | exact/prefix/wildcard、括号与反斜杠转义、命令边界、Bash 大小写敏感、PowerShell 大小写不敏感 |
 | `shell-parsers.ts` | Bash 纯 TypeScript AST 解析与 PowerShell JSON AST 转换 | 管道、控制符、命令替换、转义分号、heredoc、cmdlet/路径/模块前缀、参数、变量、重定向 |
 | `model-diagnostics.ts` | 日志脱敏和摘要纯函数 | API Key、OAuth/JWT、URL 凭据、Prompt、截断和安全诊断字段 |
@@ -195,7 +198,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - [x] 按模型 ID 显式硬编码上下文窗口、最大输出 Token、推理参数、Prompt Cache 和价格，并为映射增加轻量验证（2026-07-17 已完成：新增唯一静态 `modelProfiles.ts`，专用模型严格按完整 ID 匹配，未登记模型使用复制自 Qwen 的固定默认 Profile 并输出补充专用配置提示；上下文、输出限制、OpenAI 请求体和成本计算改为读取 Profile，输出环境变量只能降低不能扩大模型上限；移除启动时 Capability 刷新、磁盘 Capability Cache、模型名 `includes` 推理判断及未知价格向 Claude 价格回退。新增 `model-profiles` 验证并接入 `bun run verify`；默认回退调整后 CI 全矩阵 157.1 秒通过，普通模式使用本地 Qwen 完成三类产物真实模型请求和 `Read` 工具调用，140.0 秒全部通过）。
 - [x] 移除 OpenAI 模型映射和隐式 fallback；未注册模型在发送请求前直接报错（2026-07-15 已完成）。
 - [ ] 核对 OpenAI Chat Completions 的推理参数、工具选择、流事件和 Usage 字段。
-- [ ] 对不兼容 OpenAI 协议的 endpoint 给出清晰错误，不增加专用适配分支。
+- [x] 对不兼容 OpenAI 协议的 endpoint 给出清晰错误，不增加专用适配分支（2026-07-17 已完成：新增统一错误分类和 Chat Completions JSON/SSE 结构守卫，接入主流式请求、`sideQuery` 和模型验证；协议错误明确区分路由、必要字段和响应结构，不探测 endpoint、不删字段重试、不切换备用路由、不增加厂商分支；错误分类写入现有脱敏诊断日志，`openai-errors` 轻量验证并入 `bun run verify`）。
 
 验收标准：
 

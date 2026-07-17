@@ -158,9 +158,8 @@ function classifyDetails(
   ) {
     return 'protocol_request'
   }
+  if (status !== undefined && status >= 500) return 'server_error'
   if (
-    phase === 'response' ||
-    phase === 'stream' ||
     includesAny(value, [
       /invalid_chat_completion/,
       /server[- ]sent events?|\bsse\b/,
@@ -168,11 +167,11 @@ function classifyDetails(
       /content.?type.{0,30}(?:html|text\/plain|unexpected)/,
       /unexpected token.{0,10}</,
       /(?:json|response).{0,30}(?:parse|invalid|malformed)/,
-    ])
+    ]) ||
+    ((phase === 'response' || phase === 'stream') && status === undefined)
   ) {
     return 'protocol_response'
   }
-  if (status !== undefined && status >= 500) return 'server_error'
   return 'unknown'
 }
 

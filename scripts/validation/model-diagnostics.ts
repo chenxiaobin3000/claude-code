@@ -53,6 +53,7 @@ const errorLine = formatModelRequestError({
   provider: 'openai',
   model: 'deepseek-local',
   durationMs: 42,
+  errorKind: 'authentication',
   error: sanitizedError,
 })
 
@@ -67,6 +68,10 @@ for (const [label, value] of [
   assertAbsent(value, 'url-token', label)
 }
 assert(errorLine.includes('401'), 'diagnostic error line lost HTTP status')
+assert(
+  errorLine.includes('authentication'),
+  'diagnostic error line lost error classification',
+)
 assert(errorLine.includes('invalid_api_key'), 'diagnostic error line lost code')
 assert(
   errorLine.includes('request-safe-123'),

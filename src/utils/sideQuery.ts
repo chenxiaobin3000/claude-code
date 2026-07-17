@@ -35,6 +35,11 @@ import { normalizeModelStringForAPI } from './model/model.js'
 import { resolveModelTarget } from './model/modelRegistry.js'
 import { getOpenAIClient } from '../services/api/openai/client.js'
 import {
+  assertOpenAIChatCompletionResponse,
+  createOpenAIRequestError,
+} from '../services/api/openai/errorClassification.js'
+import { collectSensitiveStrings } from './logRedaction.js'
+import {
   anthropicMessagesToOpenAI,
   anthropicToolsToOpenAI,
   anthropicToolChoiceToOpenAI,
@@ -430,10 +435,34 @@ async function sideQueryViaOpenAICompatible(
     if (openaiToolChoice) requestParams.tool_choice = openaiToolChoice
   }
 
-  const response = await client.chat.completions.create(
-    requestParams as unknown as import('openai/resources/chat/completions/completions.mjs').ChatCompletionCreateParamsNonStreaming,
-    { signal },
-  )
+  const sensitiveValues = [
+    target.apiKey,
+    ...collectSensitiveStrings(openaiMessages),
+  ]
+  let response: Awaited<
+    ReturnType<typeof client.chat.completions.create>
+  >
+  try {
+    response = await client.chat.completions.create(
+      requestParams as unknown as import('openai/resources/chat/completions/completions.mjs').ChatCompletionCreateParamsNonStreaming,
+      { signal },
+    )
+  } catch (error) {
+    throw createOpenAIRequestError(error, {
+      endpoint: target.baseUrl,
+      phase: 'request',
+      secrets: sensitiveValues,
+    })
+  }
+  try {
+    assertOpenAIChatCompletionResponse(response)
+  } catch (error) {
+    throw createOpenAIRequestError(error, {
+      endpoint: target.baseUrl,
+      phase: 'response',
+      secrets: sensitiveValues,
+    })
+  }
 
   const choice = response.choices[0]
   const message = choice?.message
