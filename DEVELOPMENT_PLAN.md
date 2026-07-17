@@ -34,21 +34,25 @@
 - 模型注册表入口：`src/utils/model/modelRegistry.ts`；`/model` 直接展示注册表中的模型。
 - 模型查询入口：`src/services/model/query.ts`；`src/services/api/claude.ts` 仅保留兼容重导出。
 - OpenAI-compatible Provider：`src/services/model/providers/openaiProvider.ts`；协议结果编排位于 `src/services/api/openai/index.ts`。
+- 模型能力由源码中针对模型 ID 的显式硬编码规则决定，不在启动时请求 endpoint 探测能力，也不根据响应、命名相似度或未知模型猜测能力。新增或调整模型能力时必须同步修改明确的模型映射和轻量验证；`models.json` 只负责模型、地址、凭据引用及展示信息。
 - 不规划任何非 OpenAI-compatible 协议的专用模型接入。
 
 ### 2.3 已知工程状态
 
 - 项目以 TypeScript 为主体，构建和开发流程依赖 Bun，部分产物可由 Node.js 执行。
 - 官方已经转向平台原生可执行文件，本项目仍是 JS/TS 应用架构。
-- 自动化测试内容已按项目精简要求移除，当前回归主要依赖类型检查、构建检查和人工冒烟测试。
+- 官方大型测试体系和源码目录内的 `*.test.ts` 已按项目精简要求移除；回归统一使用 `scripts/validation` 独立轻量验证、workspace 冒烟、类型检查、Biome、三类构建和 CLI/模型/工具调用验收，不引入第二层总入口。
 - 语音模式、录音、音频 NAPI Workspace 和相关二进制依赖已经移除。
 - 本地版本号与 CLI 版本已统一为 `2.1.116`，构建版本以根目录 `package.json` 为唯一来源，源码直跑入口使用相同兜底值；该版本号不代表对应的官方版本。
 - CLI 不具备自安装或自更新能力：根级 `install`、`update`、`rollback`（包括 `ccb update`）以及 native/local installer、自动更新器、版本锁和更新频道配置均已移除。版本升级只能由外部分发渠道替换产物；插件安装、插件自动更新、SSH 远端部署和 standalone EXE 构建不受影响。包管理器来源检测已迁为只读 Doctor 能力；2026-07-16 执行 `bun run verify -- --ci` 全矩阵通过，耗时 120.3 秒，最终 EXE 帮助中不存在上述三个根命令。
+- Provider 调度、共享请求预处理、OpenAI 请求、流事件适配和 Usage 统计已分层到 `src/services/model`；`src/services/api/claude.ts` 仅保留兼容重导出。模型主路径固定为 OpenAI-compatible，Anthropic SDK 仅承担内部消息、工具、流事件和 Usage 类型兼容，保留范围及删除规则见 `ANTHROPIC_SDK_COMPATIBILITY.md`。Anthropic 账号及官方直连、Bedrock、Vertex 和 Foundry 专用传输与鉴权不得恢复。
+- `src/main.tsx` 已收口为薄入口，启动阶段、参数注册、运行模式和服务初始化分别由 `src/cli/startup`、`arguments`、`modes`、`initialization` 承担。`src/screens/REPL.tsx` 同样为稳定入口，会话、输入、Agent、查询、运行时、视图和交互职责分布在 `src/screens/repl` 对应子层；入口和遗留 Runtime 均受只减不增的结构边界约束。
 - `src/utils/messages.ts`、`sessionStorage.ts`、`hooks.ts` 已收口为稳定薄入口；纯消息处理、Transcript 链与投影、Hook 匹配和输出协议分别迁入 `utils/messages/`、`utils/sessionStorage/`、`utils/hooks/`。遗留运行时编排由同目录 `*Runtime.ts` 承接并设置只减不增的行数上限，新代码必须直接引用聚焦模块。
+- 根包依赖按“发布后外部解析”与“构建时嵌入 Bundle”划分：生产依赖仅保留 Chrome MCP bridge、`fflate`、`undici` 和 `ws`，其余源码及 workspace 输入归入 `devDependencies`；完整职责与审计规则见 `DEPENDENCY_AUDIT.md`。`bun.lock` 必须纳入版本控制，并由冻结安装检查保证干净检出可复现。
 
 ### 2.4 当前工程与验证基线
 
-以下状态由 2026-07-15 至 2026-07-16 的实际检查和验收确认，后续改动不得降低这些基线能力：
+以下状态由 2026-07-15 至 2026-07-17 的实际检查和验收确认，后续改动不得降低这些基线能力：
 
 - Bun workspace 当前包含 18 个子包。
 - 18 个 workspace 均遵循机器可检查的最小脚本契约：必须提供独立 `typecheck` 和 `test`/`test:smoke`；有独立产物的包必须提供 `build`，源码直引包则必须在 `workspaceValidation.build.reason` 中说明不适用原因。统一由 `bun run workspaces:verify` 发现和执行，并已接入唯一总入口 `bun run verify`。
@@ -59,6 +63,7 @@
 - 第二模型验收已于 2026-07-16 完成：通过 `https://api.deepseek.com` 调用注册模型 `deepseek-v4-flash`，单轮流式响应和受权限约束的 `Read` 工具调用均通过；凭据只从配置指定的环境变量读取，未写入模型注册表、命令输出或诊断日志。结合本地 llama.cpp 的 Qwen3.5-9B-Q6_K 验证，至少两个 OpenAI-compatible 模型完成了流式响应和工具调用验收。
 - `bun run typecheck`、`bun run lint`、三条构建链的完整性检查、CLI 启动、模型请求和工具调用必须持续通过，不允许把已修复问题重新定义为长期允许失败的状态。
 - Feature Flag 已统一登记在 `scripts/feature-policy.ts`，按稳定、实验、内部/部署专用三组提供机器可读的默认值、验收目标、依赖和冲突关系。默认构建当前只启用 20 个具有验收覆盖标识的稳定能力；实验与内部能力分别要求显式授权，未知 Flag、非法值、缺失依赖和冲突组合在开发或构建启动时直接失败。Bun bundle、Vite/Node bundle、standalone EXE 与 `bun run dev` 共用同一解析器，规则说明见 `FEATURE_FLAGS.md`。
+- 工程结构防回归由 `provider-boundary`、`sdk-compat-boundary`、各已移除 Provider boundary、`main-boundary`、`repl-boundary`、`utility-modules-boundary`、`dependency-boundary` 和 `feature-flags` 等轻量脚本持续执行；它们共同约束 Provider 主路径、兼容层保留范围、巨石入口规模与依赖方向、workspace/依赖契约及 Feature Policy。2026-07-17 Windows x64 `bun run verify -- --ci` 完整验收通过，18/18 workspace、全部轻量边界、Bun bundle、Vite/Node bundle、standalone EXE、版本和启动冒烟均通过，总耗时 114.5 秒。
 
 ## 3. 与官方 v2.1.210 的主要差异
 
@@ -100,6 +105,7 @@
 6. 保持语音功能移除状态，除非后续单独立项恢复。
 7. 不在源码目录引入 `*.test.ts` 或测试框架；轻量逻辑验证统一写入 `scripts/validation`，并由现有 `bun run verify` 执行，不形成第二层验证。
 8. CLI 永远不得安装、升级、降级或替换自身；版本变更由包管理、发布系统或人工替换产物完成。插件更新属于独立能力，不得复用为 CLI 更新通道。
+9. 模型能力必须按模型 ID 在源码中显式硬编码；禁止启动时能力探测、运行时试探、名称模糊匹配或对未知模型进行能力猜测。
 
 ## 5. 当前验证与构建基线
 
@@ -180,44 +186,14 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 ## 6. 后续开发路线图
 
-### P0：工程结构与 Provider 边界治理
-
-目标：降低核心模块修改风险，明确 OpenAI 模型主路径与 Anthropic SDK 内部兼容层的边界。
-
-- [x] 建立明确的 Provider 接口边界，将共享消息预处理、OpenAI 请求、流事件适配和 Usage 统计分层，避免继续在 `src/services/api/claude.ts` 中扩展条件分支（2026-07-16 已新增 `services/model` 分层、唯一 OpenAI Provider 调度、统一 Usage 与流事件处理，并接入 `provider-boundary` 防回归检查）。
-- [x] 对 `src/services/api/claude.ts` 中 Provider 调度后的不可达第一方实现进行引用和职责审计；将仍被外部调用的共享 Helper 迁移到 `services/model` 对应分层，在确认不承担 Anthropic SDK 内部兼容职责后，删除旧请求、鉴权、缓存 Beta、重试和流处理代码，并增加防回归检查（2026-07-16 已将查询编排、轻量查询、Token Limit、Metadata、Cache Control 和媒体预处理迁入 `services/model`，`claude.ts` 仅保留兼容重导出，并通过 `provider-boundary` 限制其恢复实现）。
-- [x] 保留 Anthropic SDK 作为内部消息、工具和流事件兼容层，梳理并记录其实际调用范围；不得仅因模型 Provider 固定为 OpenAI 就删除 SDK 类型或共享处理逻辑（2026-07-16 已完成历史删除复核，新增 `ANTHROPIC_SDK_COMPATIBILITY.md`、`sdk-compat-boundary` 防回归检查，并补齐消息、工具和流事件行为验证）。
-- [x] 明确移除范围仅包括 Anthropic 账号登录、账号鉴权和官方模型直连入口，并增加检查防止这些入口被意外恢复（2026-07-16 已移除账号鉴权实现、官方直连回退和账号专属命令，并接入 `anthropic-boundary` 验证）。
-- [x] 完成 Bedrock 非主路径审计并删除专用 Provider 实现、AWS 鉴权配置和依赖，同时保留共享 Anthropic SDK 消息兼容逻辑（2026-07-15 已验证 Bun/Vite 构建及 Bun/Node CLI 启动）。
-- [x] 对 Vertex 非主路径分支完成引用和运行时审计；确认其不承担共享 SDK 兼容职责且运行不可达后，已删除客户端、GCP 鉴权、区域配置、专用请求行为和依赖，并增加源码及构建产物防回归检查（2026-07-16）。
-- [x] 对 Foundry 非主路径分支完成引用和运行时审计；确认其仅为独立传输与 Azure Identity 鉴权实现、不承担共享 SDK 兼容职责且运行不可达后，已删除客户端、Provider 行为、模型与环境配置以及依赖，并增加源码及构建产物防回归检查；历史 API Key 名称仅保留在子进程密钥过滤中（2026-07-16）。
-- [x] 拆分 `src/main.tsx`，按启动阶段、参数注册、运行模式和服务初始化划分模块（2026-07-16 已完成：新增 `src/cli/startup`、`src/cli/arguments`、`src/cli/modes` 和 `src/cli/initialization` 分层；设置预加载、入口识别、早期 argv 改写、命令级初始化、迁移、首屏后延迟服务、Commander 根参数/功能参数/子命令注册、print 快速路径及默认运行体均已迁出，`main.tsx` 由 5528 行缩减至 150 行以内，并新增 `main-boundary` 防回归检查。`bun run verify --ci` 于 Windows 全部通过，用时 72.0 秒，覆盖 TypeScript、Biome、轻量验证、Bun/Vite 构建、Node CLI、Windows standalone EXE 及各产物 `--version`/`--help` 启动冒烟）。
-- [x] 拆分 `src/screens/REPL.tsx`，将会话状态、输入控制、任务/Agent 状态和渲染职责分离（2026-07-16 已完成：`REPL.tsx` 收口为 2 行稳定导出入口；新增 `screens/repl/session`、`input`、`agents` 和 `view` 分层，分别承接消息时间线、输入与 transcript 控制、任务/Agent 状态及 transcript 纯渲染组件；剩余跨域编排集中到 `ReplController.tsx`，并新增 `repl-boundary` 防回归检查。`bun run verify --ci` 于 Windows 全部通过，用时 62.1 秒）。
-- [x] 继续收缩 `ReplController.tsx` 的查询生命周期和运行时编排（2026-07-16 已完成：新增 `query`、`runtime` 分层，并将查询统计、流事件适配、单次查询执行、整轮并发/取消收尾、Remote/Direct Connect/SSH、Pipe/Inbox/Mailbox、Prompt 提交、会话恢复/回退及 Agent 提交动作迁出；transcript 分支迁入独立 `TranscriptScreen`，控制器由 5903 行降至 4300 行以内，并将 `repl-boundary` 上限同步收紧。`bun run verify --ci` 于 Windows 全部通过，用时 64.2 秒）。
-- [x] 继续拆分 `ReplController.tsx` 中的主 Prompt 屏幕、Dialog 层和取消/退出交互（2026-07-16 已完成：`ReplController.tsx` 收口为稳定导出入口，低于 1800 行上限；剩余查询、提交和运行时编排明确迁入 `ReplRuntimeController.tsx`，主 Prompt/Transcript 投影迁入 `view/ReplView.tsx`，Dialog 与消息选择副作用迁入 `interaction/ReplDialogLayer.tsx`、`ReplMessageSelector.tsx`，取消和退出分别迁入 `useCancelInteraction.ts`、`useExitInteraction.tsx`。`repl-boundary` 同时限制入口规模、各层 800 行上限，并禁止主视图直接发起查询、切换会话、局部压缩或初始化远程运行时；`bun run verify --ci` 于 Windows 全部通过，用时 71.7 秒）。
-- [x] 拆分 `src/utils/messages.ts`、`src/utils/sessionStorage.ts` 和 `src/utils/hooks.ts`，优先抽出纯函数与协议转换层，并在 `scripts/validation` 中补充轻量验证脚本（2026-07-17 已完成首轮结构收口：三个旧入口均缩减为 4 行薄重导出；消息 ID/文本/谓词、Transcript Entry/Agent 投影/父链遍历、Hook matcher/blocking/output parser 已迁入聚焦模块；`attachments` 和 Session Storage 改为直接引用消息子模块以切断关键循环。新增 `message-utils`、`session-transcript`、`hook-protocol`、`utility-modules-boundary` 并接入唯一 `bun run verify`；遗留运行时文件设置只减不增上限，后续职责迁移不得重新扩大入口或运行时实现。`bun run verify -- --ci` 完整矩阵通过，耗时 134.3 秒）。
-- [x] 完成上述工具模块的第二轮职责迁移（2026-07-17）：消息侧新增 `factories`、`normalization`、`rejections`、`streamReducer`、`contentMerge`、`contentFilters` 和 `toolPairing`，会话侧新增 `firstPrompt`、`recovery`，Hook 侧新增 `selection`、`resultProcessor`、`elicitationParser`；对应轻量脚本增加多内容块标准化、流增量、snip 删除与父链重连、Elicitation 和 Hook 权限结果样例。三个遗留 Runtime 分别由 5791/5184/5018 行收缩到不超过 4000/4700/4550 行，子模块继续限制为 800 行且禁止反向依赖 Runtime；Runtime 仅允许继续收缩，后续 I/O 与生命周期编排按相同边界逐批迁移。`bun run verify -- --ci` 完整矩阵通过，耗时 148.7 秒。
-- [x] 为所有 workspace 统一最小脚本约定：`typecheck`、`build`、`test` 或明确的 `test:smoke`；不适用的子包需写明原因（2026-07-16 已完成：18/18 workspace 契约、独立类型检查和轻量冒烟通过；4 个独立产物构建通过，14 个源码直引包记录机器可读的不适用原因；统一并入 `bun run verify`，CI 模式全流程耗时 109.5 秒）。
-- [x] 审计根包 `devDependencies` 中实际进入生产 Bundle 的依赖，明确运行时依赖与构建期依赖，减少发布和供应链审计范围（2026-07-17 已完成：确认 Bun bundle、Vite/Node bundle 与 standalone EXE 默认全量打包，但产物审计识别并保留 `ws` 的动态运行时引用；发布安装依赖收口为 Chrome MCP bridge、`fflate`、`undici` 和 `ws`，ACP SDK、`highlight.js` 改为仅用于生成生产 Bundle 的开发依赖；补充根源码直接使用的 `workflow-engine` workspace 声明，移除 `@smithy/core`、`@types/sharp`、`@types/shell-quote`、Husky 和 lint-staged 等无直接职责依赖，锁定安装总包数由 1217 降至 1197；修正 `*.lock` 误排除 `bun.lock` 的问题，使冻结安装可由干净检出复现。新增 `DEPENDENCY_AUDIT.md` 与 `dependency-boundary` 并接入唯一 `bun run verify`；`bun run verify -- --ci` 完整矩阵通过，耗时 141.6 秒）。
-- [x] 将 Feature Flag 分为稳定、实验、内部/部署专用三组，增加依赖关系和非法组合检查；默认构建只启用有验收覆盖的稳定能力（2026-07-17 已完成：88 个源码 Flag 全部登记，默认集合收口为 20 个稳定项；实验和内部项增加独立授权门槛，支持依赖、冲突和稳定默认项显式关闭；三条构建链与开发入口统一使用策略解析器，新增 `FEATURE_FLAGS.md` 与独立 `feature-flags` 轻量验证并接入 `bun run verify`；Windows x64 `bun run verify -- --ci` 全矩阵通过，耗时 114.5 秒）。
-
-验收标准：
-
-- OpenAI-compatible 模型请求主路径清晰，Anthropic SDK 兼容层的保留原因和调用边界有明确文档。
-- 不存在 Anthropic 账号登录、账号鉴权或官方模型直连的可用入口。
-- 关键巨石文件有清晰的领域边界，新功能不再继续扩大其职责。
-- 每个 workspace 都能被统一验证流程发现并得到明确结果。
-- Feature Flag 的默认集合、依赖关系和支持级别可由机器读取并在构建时校验。
-
 ### P0：OpenAI-compatible 模型对齐
 
 目标：建立统一、可配置的 OpenAI-compatible 模型调用链。
 
 - [x] 建立以模型为核心的 `~/.claude/models.json` 注册表；每个模型配置唯一 ID 和 OpenAI-compatible 地址，地址允许重复（2026-07-15 已完成）。
 - [x] `/model` 保留原有 UI 流程并直接展示注册模型；请求按所选模型解析地址和凭据，不再依赖 `OPENAI_MODEL`、`OPENAI_BASE_URL` 或 Claude 模型映射（2026-07-15 已完成）。
-- [ ] 按接口能力配置上下文窗口、最大输出 Token、推理参数、Prompt Cache 和价格。
+- [ ] 按模型 ID 显式硬编码上下文窗口、最大输出 Token、推理参数、Prompt Cache 和价格，并为映射增加轻量验证。
 - [x] 移除 OpenAI 模型映射和隐式 fallback；未注册模型在发送请求前直接报错（2026-07-15 已完成）。
-- [ ] 增加启动时模型能力探测，减少对模型名称的硬编码判断。
 - [ ] 核对 OpenAI Chat Completions 的推理参数、工具选择、流事件和 Usage 字段。
 - [ ] 对不兼容 OpenAI 协议的 endpoint 给出清晰错误，不增加专用适配分支。
 
@@ -329,7 +305,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 建议按照以下顺序推进，每一阶段完成验收后再进入下一阶段：
 
 1. Provider 接口收敛及 Anthropic SDK 兼容边界梳理。
-2. OpenAI-compatible 模型能力探测与协议稳定性。
+2. OpenAI-compatible 模型能力硬编码映射与协议稳定性。
 3. 核心巨石文件和 workspace 工程结构治理。
 4. 权限、Sandbox、Worktree 安全。
 5. Safe Mode、Doctor、会话迁移。
