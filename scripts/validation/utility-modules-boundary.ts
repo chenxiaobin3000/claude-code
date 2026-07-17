@@ -22,9 +22,9 @@ for (const path of [
 }
 
 const runtimeCaps: Record<string, number> = {
-  'src/utils/messagesRuntime.ts': 5810,
-  'src/utils/sessionStorageRuntime.ts': 5200,
-  'src/utils/hooksRuntime.ts': 5030,
+  'src/utils/messagesRuntime.ts': 4000,
+  'src/utils/sessionStorageRuntime.ts': 4700,
+  'src/utils/hooksRuntime.ts': 4550,
 }
 for (const [path, cap] of Object.entries(runtimeCaps)) {
   const lines = lineCount(await source(path))
@@ -63,9 +63,13 @@ for (const directory of ['src/utils/messages', 'src/utils/sessionStorage', 'src/
   for (const entry of await readdir(join(root, directory), { withFileTypes: true })) {
     if (!entry.isFile() || !entry.name.endsWith('.ts')) continue
     const path = join(directory, entry.name)
-    const lines = lineCount(await source(path))
+    const text = await source(path)
+    const lines = lineCount(text)
     if (lines > 800) {
       throw new Error(`[utility-modules-boundary] ${path} has ${lines} lines (max 800)`)
+    }
+    if (/from ['"][^'"]*Runtime\.js['"]/.test(text)) {
+      throw new Error(`[utility-modules-boundary] ${path} must not depend on a legacy Runtime module`)
     }
   }
 }

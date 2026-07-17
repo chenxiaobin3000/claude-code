@@ -1,4 +1,7 @@
 export * from './hooks/blockingMessages.js'
+export { parseElicitationHookOutput } from './hooks/elicitationParser.js'
+export * from './hooks/selection.js'
+export { processHookJSONOutput } from './hooks/resultProcessor.js'
 export * from './hooks/matcher.js'
 export * from './hooks/outputParser.js'
 export * from './hooksRuntime.js'

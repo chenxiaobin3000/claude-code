@@ -1,4 +1,6 @@
 export * from './sessionStorage/agentTranscripts.js'
 export * from './sessionStorage/conversationChain.js'
 export * from './sessionStorage/entries.js'
+export * from './sessionStorage/firstPrompt.js'
+export * from './sessionStorage/recovery.js'
 export * from './sessionStorageRuntime.js'
