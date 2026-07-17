@@ -9,7 +9,11 @@ import { useShortcutDisplay } from '../keybindings/useShortcutDisplay.js';
 import { useAppState, useSetAppState } from '../state/AppState.js';
 import { gracefulShutdown } from '../utils/gracefulShutdown.js';
 import { updateSettingsForSource } from '../utils/settings/settings.js';
-import type { ThemeSetting } from '../utils/theme.js';
+import {
+  getCustomThemes,
+  getThemeBaseName,
+  type ThemeSetting,
+} from '../utils/theme.js';
 import { Select } from './CustomSelect/index.js';
 import { Byline, KeyboardShortcutHint } from '@anthropic/ink';
 import { getColorModuleUnavailableReason, getSyntaxTheme } from './StructuredDiff/colorDiff.js';
@@ -40,7 +44,10 @@ export function ThemePicker({
   const themeSetting = useThemeSetting();
   const { columns } = useTerminalSize();
   const colorModuleUnavailableReason = getColorModuleUnavailableReason();
-  const syntaxTheme = colorModuleUnavailableReason === null ? getSyntaxTheme(theme) : null;
+  const syntaxTheme =
+    colorModuleUnavailableReason === null
+      ? getSyntaxTheme(getThemeBaseName(theme))
+      : null;
   const { setPreviewTheme, savePreview, cancelPreview } = usePreviewTheme();
   const syntaxHighlightingDisabled = useAppState(s => s.settings.syntaxHighlightingDisabled) ?? false;
   const setAppState = useSetAppState();
@@ -89,6 +96,10 @@ export function ThemePicker({
       label: 'Light mode (ANSI colors only)',
       value: 'light-ansi',
     },
+    ...getCustomThemes().map(customTheme => ({
+      label: `${customTheme.name} (custom)`,
+      value: customTheme.id,
+    })),
   ];
 
   const content = (
@@ -125,7 +136,7 @@ export function ThemePicker({
                   await gracefulShutdown(0);
                 }
           }
-          visibleOptionCount={themeOptions.length}
+          visibleOptionCount={Math.min(themeOptions.length, 12)}
           defaultValue={themeSetting}
           defaultFocusValue={themeSetting}
         />

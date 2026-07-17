@@ -62,10 +62,11 @@
 - 18 个 workspace 均遵循机器可检查的最小脚本契约：必须提供独立 `typecheck` 和 `test`/`test:smoke`；有独立产物的包必须提供 `build`，源码直引包则必须在 `workspaceValidation.build.reason` 中说明不适用原因。统一由 `bun run workspaces:verify` 发现和执行，并已接入唯一总入口 `bun run verify`。
 - Git 管理的 TypeScript 源码约 2,746 个文件、56 万行。
 - 当前模型主路径由 `getAPIProvider()` 固定路由至 `openai`。Anthropic 账号登录、鉴权和官方模型直连已移除；Anthropic SDK 因大量内部消息、工具和流事件调用而继续作为兼容层保留。Bedrock Provider 已于 2026-07-15 移除；Vertex 客户端、GCP 鉴权、区域配置、专用请求行为和依赖已于 2026-07-16 移除；Foundry 客户端、Azure Identity 鉴权、专用配置和依赖也已于 2026-07-16 移除。
-- 已新增统一最小验证命令 `bun run verify`，顺序覆盖锁定安装、类型检查、Lint，以及 Bun bundle、Vite/Rollup Node bundle、Windows x64 standalone EXE 三条构建链的完整性、版本、启动、单轮模型请求和 `Read` 工具调用。验证直接使用 `~/.claude/models.json` 的默认模型，并限制为回环或私有网络地址。2026-07-16 使用本地 llama.cpp（Qwen3.5-9B-Q6_K，65,536 上下文）完成三构建链全矩阵复验，所有检查通过，总耗时 69.1 秒。
+- 已新增统一最小验证命令 `bun run verify`，顺序覆盖锁定安装、类型检查、Lint，以及 Bun bundle、Vite/Rollup Node bundle、Windows x64 standalone EXE 三条构建链的完整性、版本、启动、单轮模型请求和 `Read` 工具调用。验证默认使用 `~/.claude/models.json` 的默认模型，也可用 `CLAUDE_CODE_VERIFY_MODEL` 显式选择注册表中的本地模型；地址始终限制为回环或私有网络，禁止误用外部付费接口。2026-07-16 使用本地 llama.cpp（Qwen3.5-9B-Q6_K，65,536 上下文）完成三构建链全矩阵复验，所有检查通过，总耗时 69.1 秒。
 - 多模型注册表已于 2026-07-15 完成：重复模型 ID 和无效默认模型会在加载时失败；同地址模型复用 OpenAI Client，不同地址使用独立 Client；旧 `OPENAI_MODEL`、`OPENAI_BASE_URL`、角色模型环境变量、模型映射和 `providers.json` 注册表已从运行链移除。类型检查、Lint、Bun 构建、Vite 构建及 Bun/Node CLI 启动验证通过。
 - 第二模型验收已于 2026-07-16 完成：通过 `https://api.deepseek.com` 调用注册模型 `deepseek-v4-flash`，单轮流式响应和受权限约束的 `Read` 工具调用均通过；凭据只从配置指定的环境变量读取，未写入模型注册表、命令输出或诊断日志。结合本地 llama.cpp 的 Qwen3.5-9B-Q6_K 验证，至少两个 OpenAI-compatible 模型完成了流式响应和工具调用验收。
 - OpenAI-compatible 模型对齐已于 2026-07-17 完成验收：注册表、精确模型 Profile、共享 Chat Completions 请求构造、工具选择、流事件、Usage 明细和协议错误分类均由 `scripts/validation` 定向覆盖；未登记模型使用固定默认 Profile 并告警，不探测 endpoint、不按名称猜测、不自动换字段或增加厂商分支。`bun run verify -- --ci` 全矩阵通过（139.0 秒）；普通 `bun run verify` 使用本地 llama.cpp 对 Bun bundle、Vite/Node bundle 和 Windows standalone EXE 分别完成真实单轮请求及 `Read` 工具调用（159.4 秒）。
+- 主题来源固定为 6 个内置主题和启动时从 `~/.claude/themes/*.json` 只读加载的本地 JSON；文件名生成 `custom:<slug>` 配置值，`base` 继承内置 Palette，`overrides` 只覆盖合法颜色 Token。程序不创建、编辑、删除或热更新主题文件，也不加载 Plugin 主题；外部文件变更在重启后生效，当前自定义主题缺失或损坏时回退 `dark` 并警告。
 - `bun run typecheck`、`bun run lint`、三条构建链的完整性检查、CLI 启动、模型请求和工具调用必须持续通过，不允许把已修复问题重新定义为长期允许失败的状态。
 - Feature Flag 已统一登记在 `scripts/feature-policy.ts`，按稳定、实验、内部/部署专用三组提供机器可读的默认值、验收目标、依赖和冲突关系。默认构建当前只启用 20 个具有验收覆盖标识的稳定能力；实验与内部能力分别要求显式授权，未知 Flag、非法值、缺失依赖和冲突组合在开发或构建启动时直接失败。Bun bundle、Vite/Node bundle、standalone EXE 与 `bun run dev` 共用同一解析器，规则说明见 `FEATURE_FLAGS.md`。
 - 工程结构防回归由 `provider-boundary`、`sdk-compat-boundary`、各已移除 Provider boundary、`main-boundary`、`repl-boundary`、`utility-modules-boundary`、`dependency-boundary` 和 `feature-flags` 等轻量脚本持续执行；它们共同约束 Provider 主路径、兼容层保留范围、巨石入口规模与依赖方向、workspace/依赖契约及 Feature Policy。2026-07-17 Windows x64 `bun run verify -- --ci` 完整验收通过，18/18 workspace、全部轻量边界、Bun bundle、Vite/Node bundle、standalone EXE、版本和启动冒烟均通过，总耗时 114.5 秒。
@@ -163,6 +164,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 | `tool-permissions.ts` | 权限规则解析、序列化和通配匹配 | exact/prefix/wildcard、括号与反斜杠转义、命令边界、Bash 大小写敏感、PowerShell 大小写不敏感 |
 | `shell-parsers.ts` | Bash 纯 TypeScript AST 解析与 PowerShell JSON AST 转换 | 管道、控制符、命令替换、转义分号、heredoc、cmdlet/路径/模块前缀、参数、变量、重定向 |
 | `model-diagnostics.ts` | 日志脱敏和摘要纯函数 | API Key、OAuth/JWT、URL 凭据、Prompt、截断和安全诊断字段 |
+| `themes.ts` | 本地主题解析、Palette 合并和注册表 | Dracula 固定样例、颜色格式、非法字段隔离、损坏 JSON、配置 ID、单一 Palette 来源和 base 回退 |
 | `self-update-boundary.ts` | CLI 自更新禁用边界 | 禁止根级 install/update/rollback、安装器与更新器实现及配置字段；保留插件安装/更新和 standalone 构建 |
 | `message-utils.ts` | 消息 ID、文本协议和谓词 | 稳定 UUID、XML Tag、文本块、Thinking、Tool Call 和 Compact Boundary |
 | `session-transcript.ts` | Transcript 纯转换 | Entry/Chain 守卫、序列化字段清理、父链顺序与环检测、Agent/Teammate 投影 |

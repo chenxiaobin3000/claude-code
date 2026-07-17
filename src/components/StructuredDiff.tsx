@@ -5,6 +5,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { Box, NoSelect, RawAnsi, useTheme } from '@anthropic/ink';
 import { isFullscreenEnvEnabled } from '../utils/fullscreen.js';
 import sliceAnsi from '../utils/sliceAnsi.js';
+import { getThemeBaseName } from '../utils/theme.js';
 import { expectColorDiff } from './StructuredDiff/colorDiff.js';
 import { StructuredDiffFallback } from './StructuredDiff/Fallback.js';
 
@@ -129,7 +130,16 @@ export const StructuredDiff = memo(function StructuredDiff({
   const cached =
     skipHighlighting || syntaxHighlightingDisabled
       ? null
-      : renderColorDiff(patch, firstLine, filePath, fileContent ?? null, theme, safeWidth, dim, splitGutter);
+      : renderColorDiff(
+          patch,
+          firstLine,
+          filePath,
+          fileContent ?? null,
+          getThemeBaseName(theme),
+          safeWidth,
+          dim,
+          splitGutter,
+        );
 
   if (!cached) {
     return (

@@ -97,8 +97,14 @@ export const THEME_NAMES = [
   'dark-ansi',
 ] as const
 
-/** A renderable theme. Always resolvable to a concrete color palette. */
-export type ThemeName = (typeof THEME_NAMES)[number]
+/** A built-in renderable theme. */
+export type BuiltinThemeName = (typeof THEME_NAMES)[number]
+
+/** A user theme loaded from ~/.claude/themes/<slug>.json. */
+export type CustomThemeName = `custom:${string}`
+
+/** A renderable built-in or user theme. */
+export type ThemeName = BuiltinThemeName | CustomThemeName
 
 export const THEME_SETTINGS = ['auto', ...THEME_NAMES] as const
 
@@ -106,7 +112,15 @@ export const THEME_SETTINGS = ['auto', ...THEME_NAMES] as const
  * A theme preference as stored in user config. `'auto'` follows the system
  * dark/light mode and is resolved to a ThemeName at runtime.
  */
-export type ThemeSetting = (typeof THEME_SETTINGS)[number]
+export type ThemeSetting = 'auto' | ThemeName
+
+export type RegisteredCustomTheme = {
+  id: CustomThemeName
+  slug: string
+  name: string
+  base: BuiltinThemeName
+  palette: Theme
+}
 
 /**
  * Light theme using explicit RGB values to avoid inconsistencies
@@ -595,7 +609,7 @@ const darkDaltonizedTheme: Theme = {
   rainbow_violet_shimmer: 'rgb(230,180,210)',
 }
 
-export function getTheme(themeName: ThemeName): Theme {
+function getBuiltinTheme(themeName: BuiltinThemeName): Theme {
   switch (themeName) {
     case 'light':
       return lightTheme
@@ -610,6 +624,51 @@ export function getTheme(themeName: ThemeName): Theme {
     default:
       return darkTheme
   }
+}
+
+let customThemes = new Map<CustomThemeName, RegisteredCustomTheme>()
+
+export function registerCustomThemes(
+  themes: readonly RegisteredCustomTheme[],
+): void {
+  customThemes = new Map(themes.map(theme => [theme.id, theme]))
+}
+
+export function getCustomThemes(): readonly RegisteredCustomTheme[] {
+  return [...customThemes.values()]
+}
+
+export function isBuiltinThemeName(value: unknown): value is BuiltinThemeName {
+  return (
+    typeof value === 'string' &&
+    (THEME_NAMES as readonly string[]).includes(value)
+  )
+}
+
+export function isCustomThemeName(value: unknown): value is CustomThemeName {
+  return typeof value === 'string' && /^custom:[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value)
+}
+
+export function isThemeSetting(value: unknown): value is ThemeSetting {
+  return value === 'auto' || isBuiltinThemeName(value) || isCustomThemeName(value)
+}
+
+export function hasCustomTheme(themeName: CustomThemeName): boolean {
+  return customThemes.has(themeName)
+}
+
+export function getThemeBaseName(themeName: ThemeName): BuiltinThemeName {
+  if (isCustomThemeName(themeName)) {
+    return customThemes.get(themeName)?.base ?? 'dark'
+  }
+  return themeName
+}
+
+export function getTheme(themeName: ThemeName): Theme {
+  if (isCustomThemeName(themeName)) {
+    return customThemes.get(themeName)?.palette ?? darkTheme
+  }
+  return getBuiltinTheme(themeName)
 }
 
 // Create a chalk instance with 256-color level for Apple Terminal

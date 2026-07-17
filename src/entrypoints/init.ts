@@ -55,6 +55,10 @@ import { initSentry } from '../utils/sentry.js'
 import { initUser } from '../utils/user.js'
 import { initLangfuse, shutdownLangfuse } from '../services/langfuse/index.js'
 import { setThemeConfigCallbacks } from '@anthropic/ink'
+import {
+  getValidThemeSetting,
+  loadUserCustomThemes,
+} from '../utils/customThemes.js'
 
 // initialize1PEventLogging is dynamically imported to defer OpenTelemetry sdk-logs/resources
 
@@ -70,8 +74,9 @@ export const init = memoize(async (): Promise<void> => {
   try {
     const configsStart = Date.now()
     enableConfigs()
+    loadUserCustomThemes()
     setThemeConfigCallbacks({
-      loadTheme: () => getGlobalConfig().theme,
+      loadTheme: () => getValidThemeSetting(getGlobalConfig().theme),
       saveTheme: setting =>
         saveGlobalConfig(current => ({ ...current, theme: setting })),
     })

@@ -5,6 +5,7 @@ import { type AppState, AppStateProvider } from '../state/AppState.js';
 import { onChangeAppState } from '../state/onChangeAppState.js';
 import type { FpsMetrics } from '../utils/fpsTracker.js';
 import { ThemeProvider } from '@anthropic/ink';
+import { getValidThemeSetting } from '../utils/customThemes.js';
 import { getGlobalConfig, saveGlobalConfig } from '../utils/config.js';
 
 type Props = {
@@ -24,7 +25,7 @@ export function App({ getFpsMetrics, stats, initialState, children }: Props): Re
       <StatsProvider store={stats}>
         <AppStateProvider initialState={initialState} onChangeAppState={onChangeAppState}>
           <ThemeProvider
-            initialState={getGlobalConfig().theme}
+            initialState={getValidThemeSetting(getGlobalConfig().theme)}
             onThemeSave={setting => saveGlobalConfig(current => ({ ...current, theme: setting }))}
           >
             {children}

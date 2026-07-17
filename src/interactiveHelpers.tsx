@@ -25,6 +25,7 @@ import { handleMcpjsonServerApprovals } from './services/mcpServerApproval.js';
 import { AppStateProvider } from './state/AppState.js';
 import { onChangeAppState } from './state/onChangeAppState.js';
 import { ThemeProvider } from '@anthropic/ink';
+import { getValidThemeSetting } from './utils/customThemes.js';
 import {
   getExternalClaudeMdIncludes,
   getMemoryFiles,
@@ -102,7 +103,7 @@ export function showSetupDialog<T = void>(
 ): Promise<T> {
   return showDialog<T>(root, done => (
     <ThemeProvider
-      initialState={getGlobalConfig().theme}
+      initialState={getValidThemeSetting(getGlobalConfig().theme)}
       onThemeSave={setting => saveGlobalConfig(current => ({ ...current, theme: setting }))}
     >
       <AppStateProvider onChangeAppState={options?.onChangeAppState}>

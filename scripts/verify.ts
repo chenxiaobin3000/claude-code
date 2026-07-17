@@ -39,6 +39,7 @@ const validationScripts = [
   'scripts/validation/tool-permissions.ts',
   'scripts/validation/shell-parsers.ts',
   'scripts/validation/model-diagnostics.ts',
+  'scripts/validation/themes.ts',
 ]
 
 interface RunOptions {
@@ -156,7 +157,8 @@ function isLocalAddress(hostname: string): boolean {
 }
 
 function resolveModelConfig(): ModelConfig {
-  const configured = resolveModelTarget()
+  const requestedModel = process.env.CLAUDE_CODE_VERIFY_MODEL?.trim()
+  const configured = resolveModelTarget(requestedModel || undefined)
   const { baseUrl, model } = configured
 
   let endpoint: URL
@@ -169,7 +171,7 @@ function resolveModelConfig(): ModelConfig {
   }
   if (!isLocalAddress(endpoint.hostname)) {
     throw new Error(
-      `Configured default model does not use a local llama.cpp address: ${endpoint.origin}. Verification will not call an external endpoint.`,
+      `Configured verification model does not use a local llama.cpp address: ${endpoint.origin}. Verification will not call an external endpoint.`,
     )
   }
 

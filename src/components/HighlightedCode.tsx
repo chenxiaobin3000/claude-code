@@ -4,6 +4,7 @@ import { useSettings } from '../hooks/useSettings.js';
 import { Ansi, Box, type DOMElement, measureElement, NoSelect, Text, useTheme } from '@anthropic/ink';
 import { isFullscreenEnvEnabled } from '../utils/fullscreen.js';
 import sliceAnsi from '../utils/sliceAnsi.js';
+import { getThemeBaseName } from '../utils/theme.js';
 import { countCharInString } from '../utils/stringUtils.js';
 import { HighlightedCodeFallback } from './HighlightedCode/Fallback.js';
 import { expectColorFile } from './StructuredDiff/colorDiff.js';
@@ -74,7 +75,7 @@ export const HighlightedCode = memo(function HighlightedCode({
     if (colorFile === null) {
       return null;
     }
-    return colorFile.render(theme, measuredWidth, dim);
+    return colorFile.render(getThemeBaseName(theme), measuredWidth, dim);
   }, [colorFile, theme, measuredWidth, dim]);
 
   // Gutter width matches ColorFile's layout in lib.rs: space + right-aligned
