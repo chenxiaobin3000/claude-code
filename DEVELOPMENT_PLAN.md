@@ -112,6 +112,7 @@
 7. 不在源码目录引入 `*.test.ts` 或测试框架；轻量逻辑验证统一写入 `scripts/validation`，并由现有 `bun run verify` 执行，不形成第二层验证。
 8. CLI 永远不得安装、升级、降级或替换自身；版本变更由包管理、发布系统或人工替换产物完成。插件更新属于独立能力，不得复用为 CLI 更新通道。
 9. 模型能力必须在源码中显式硬编码；禁止启动时能力探测、运行时试探和名称模糊匹配。未知模型只能使用固定默认 Profile 并明确警告，不得动态猜测能力。
+10. 项目不再维护 Artifact、公共制品托管、远程 Plugin Marketplace、遥测/可观测性上报或 Anthropic 云服务接口；第三方网络能力只保留模型、微信、GitHub、搜索以及用户显式配置的 MCP、WebFetch 和 HTTP Hook 等独立功能。
 
 ## 5. 当前验证与构建基线
 
@@ -194,6 +195,29 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 ## 6. 后续开发路线图
 
+### P0：第三方云接口收敛与遗留清理
+
+状态：已立项，尚未开发。本节描述目标状态，不代表相关源码、依赖或配置当前已经移除。
+
+目标：移除不属于独立 OpenAI-compatible CLI 核心能力的公共托管、远程市场、遥测和 Anthropic 云依赖，缩小发布包网络面、凭据面及供应链审计范围。
+
+- [ ] 完整移除 Artifact 能力及 Cloud Artifacts 客户端和服务端实现，包括 Artifact Tool、相关命令/UI/权限/Prompt、`packages/cloud-artifacts`、`cloud-artifacts.claude-code-best.win` 默认地址、内置共享 Token、TTL/公开页面逻辑，以及 Artifact HTML 对 unpkg Mermaid/Highlight.js 的远程加载；不保留本地生成、上传、分享或公开 URL 的替代分支。
+- [ ] 移除远程 Plugin Marketplace 能力，包括官方 Marketplace CDN、GitHub 安装量统计、远程 Marketplace 浏览/添加、Git/HTTPS Marketplace 克隆、MCPB 远程下载和插件自动更新；保留本地目录 Plugin、Skill、Hook、内置 Plugin 及其加载/校验能力，不把 Plugin 清理扩大为 MCP 或本地扩展体系删除。
+- [ ] 移除全部遥测和可观测性上报：Anthropic 1P Event Logging、BigQuery Metrics、GrowthBook 远程配置、Sentry、Datadog、Langfuse、OpenTelemetry OTLP 和 Beta Tracing；先把影响运行行为的远程 Feature Flag 固化到 `scripts/feature-policy.ts` 或本地显式配置，再删除 SDK、初始化、刷新、缓存、失败队列、环境变量和关闭/flush 路径。
+- [ ] 清理 `~/.claude/telemetry` 中只服务于已移除上报链的失败队列与缓存读取逻辑；不得自动删除用户已有文件，迁移只停止读取和新增写入，并在发布说明中说明可由用户自行清理。
+- [ ] 移除全部 Anthropic 云服务接口，包括事件日志、指标与组织开关、Feedback/Transcript Share、Public Files API、Claude Remote Control/Bridge、Remote Trigger、Trusted Device、Claude OAuth/API Key/角色接口和依赖 Claude 账号的推送/附件链路；自托管 RCS/ACP 若不依赖 Anthropic 域名、Claude OAuth 或服务端下发凭据，可作为独立能力保留并单独验证。
+- [ ] 保留 `@anthropic-ai/sdk` 作为本地消息、工具、流事件和 Usage 类型兼容层，禁止清理工作把 SDK 类型引用误判为 Anthropic 网络 Provider；继续执行 `ANTHROPIC_SDK_COMPATIBILITY.md` 的边界规则。
+- [ ] 删除无调用入口或已失效的接口实现：ChatGPT `auth.openai.com`/`chatgpt.com/backend-api/codex/responses`、Anthropic 官方 MCP Registry 预取、旧国内模型供应商引导表、内部 GitHub Webhook/KAIROS 分支，以及与已移除云接口绑定的常量、设置项、Feature Flag、UI、命令和依赖。
+- [ ] 增加第三方接口边界验证，扫描禁止域名、禁止 SDK、禁止环境变量和孤立网络调用；默认构建中出现 `api.anthropic.com`、`claude.ai` 云 API、`cloud-artifacts.claude-code-best.win`、Sentry/Datadog/Langfuse/OTLP 或远程 Marketplace 调用时直接失败。文档链接若确需保留，必须与运行时网络请求白名单分开维护。
+- [ ] 更新 README、依赖审计、Feature Policy、帮助文本、配置 Schema、环境变量说明和三类构建完整性检查，确保删除后的产物不再宣传或暗示上述云能力。
+
+验收标准：
+
+- `bun run verify -- --ci` 和普通 `bun run verify` 全部通过，OpenAI-compatible 模型、微信、GitHub、搜索、本地 Plugin、用户配置 MCP/WebFetch/HTTP Hook 及保留的自托管 RCS/ACP 能力不回归；CLI 帮助、工具注册表和构建产物中不存在 Artifact 能力。
+- 三类构建产物不包含已禁止的域名、接口路径、客户端初始化代码或仅服务于这些能力的生产依赖；启动和退出阶段不产生遥测、Feature Flag 拉取、远程 Marketplace 或 Anthropic 云请求。
+- 未设置任何环境变量时，除显式模型请求和用户主动调用的保留工具外，CLI 不主动连接第三方服务。
+- 删除 Cloud Artifact、远程 Marketplace、遥测或 Anthropic 账号配置后，旧设置必须被安全忽略并给出一次性迁移说明，不得导致启动失败或泄露旧 Token。
+
 ### P0：权限、Sandbox 和 Worktree 安全
 
 目标：优先补齐最新版最重要的安全差异。
@@ -255,7 +279,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - [ ] Hook 支持直接 MCP Tool 调用。
 - [ ] 增加 `continueOnBlock`、`MessageDisplay`、`additionalContext` 等最新字段。
 - [ ] 支持 Hook 命令参数数组，减少 Shell 转义问题。
-- [ ] 增加 Plugin 依赖检查、最低版本约束、prune 和动态重载。
+- [ ] 为本地目录和内置 Plugin 增加依赖检查、最低版本约束、prune 和动态重载；不恢复远程 Marketplace、下载、安装量或自动更新接口。
 - [ ] 增加 `disableBundledSkills` 和嵌套 `.claude/skills` 发现规则。
 - [ ] 增加 `claude mcp login/logout`。
 - [ ] 完善 MCP 启动重试、审批状态、OAuth 凭据清理和会话重连。
@@ -295,13 +319,14 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 建议按照以下顺序推进，每一阶段完成验收后再进入下一阶段：
 
-1. Provider 接口收敛及 Anthropic SDK 兼容边界梳理。
-2. 核心巨石文件和 workspace 工程结构治理。
-3. 权限、Sandbox、Worktree 安全。
-4. Safe Mode、Doctor、会话迁移。
-5. Agent 和后台任务状态统一。
-6. Hook、Plugin、Skill、MCP 扩展协议。
-7. 性能优化及可选产品能力。
+1. 第三方云接口收敛：先固化远程 Feature Flag，再移除 Artifact、远程 Marketplace、遥测、Anthropic 云接口和无调用入口残留。
+2. Provider 接口收敛及 Anthropic SDK 本地兼容边界复核。
+3. 核心巨石文件和 workspace 工程结构治理。
+4. 权限、Sandbox、Worktree 安全。
+5. Safe Mode、Doctor、会话迁移。
+6. Agent 和后台任务状态统一。
+7. Hook、Plugin、Skill、MCP 本地扩展协议。
+8. 性能优化及可选产品能力。
 
 不建议首先重写为官方原生二进制架构。该改造投入大、风险高，且不会直接解决模型协议、安全和稳定性问题。应先把当前 TypeScript 架构维护到可靠状态，再通过独立调研决定是否迁移 Rust、Go 或其他原生运行时。
 
