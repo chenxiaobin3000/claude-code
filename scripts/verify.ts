@@ -27,6 +27,7 @@ const validationScripts = [
   'scripts/validation/utility-modules-boundary.ts',
   'scripts/validation/repl-boundary.ts',
   'scripts/validation/model-preparation.ts',
+  'scripts/validation/model-profiles.ts',
   'scripts/validation/message-conversion.ts',
   'scripts/validation/message-utils.ts',
   'scripts/validation/session-transcript.ts',

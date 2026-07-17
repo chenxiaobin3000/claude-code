@@ -98,7 +98,6 @@ export const SAFE_ENV_VARS = new Set([
   // OpenAI provider specific
   'OPENAI_API_KEY',
   'OPENAI_AUTH_MODE',
-  'OPENAI_ENABLE_THINKING',
   'OPENAI_MAX_TOKENS',
   'OPENAI_ORG_ID',
   'OPENAI_PROJECT_ID',

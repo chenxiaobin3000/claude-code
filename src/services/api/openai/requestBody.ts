@@ -4,45 +4,32 @@
  * triggering heavy module side-effects (OpenAI client, stream adapter, etc.).
  */
 import type { ChatCompletionCreateParamsStreaming } from 'openai/resources/chat/completions/completions.mjs'
-import { isEnvTruthy, isEnvDefinedFalsy } from '../../../utils/envUtils.js'
+import { getModelProfile } from '../../../utils/model/modelProfiles.js'
 
 /**
  * Detect whether thinking mode should be enabled for this model.
  *
- * Enabled when:
- * 1. OPENAI_ENABLE_THINKING=1 is set (explicit enable), OR
- * 2. Model name contains "deepseek" or "mimo" (auto-detect, case-insensitive)
- *
- * Disabled when:
- * - OPENAI_ENABLE_THINKING=0/false/no/off is explicitly set (overrides model detection)
- *
- * @param model - The resolved OpenAI model name
+ * This is an exact model-profile lookup. Environment overrides and model-name
+ * inference are intentionally not supported.
  */
 export function isOpenAIThinkingEnabled(model: string): boolean {
-  // Explicit disable takes priority (overrides model auto-detect)
-  if (isEnvDefinedFalsy(process.env.OPENAI_ENABLE_THINKING)) return false
-  // Explicit enable
-  if (isEnvTruthy(process.env.OPENAI_ENABLE_THINKING)) return true
-  // Auto-detect from model name (DeepSeek and MiMo models support thinking mode).
-  const modelLower = model.toLowerCase()
-  return modelLower.includes('deepseek') || modelLower.includes('mimo')
+  const reasoning = getModelProfile(model).reasoning
+  return reasoning.type !== 'none' && reasoning.enabledByDefault
 }
 
 /**
  * Resolve max output tokens for the OpenAI-compatible path.
  *
  * Override priority:
- * 1. maxOutputTokensOverride (programmatic, from query pipeline)
- * 2. OPENAI_MAX_TOKENS env var (OpenAI-specific, useful for local models
- *    with small context windows, e.g. RTX 3060 12GB running 65536-token models)
- * 3. CLAUDE_CODE_MAX_OUTPUT_TOKENS env var (generic override)
- * 4. upperLimit default (64000)
+ * Overrides may lower the static model default, but can never expand the
+ * hardcoded model capability.
  */
 export function resolveOpenAIMaxTokens(
-  upperLimit: number,
+  model: string,
   maxOutputTokensOverride?: number,
 ): number {
-  return (
+  const profile = getModelProfile(model)
+  const requested =
     maxOutputTokensOverride ??
     (process.env.OPENAI_MAX_TOKENS
       ? parseInt(process.env.OPENAI_MAX_TOKENS, 10) || undefined
@@ -50,20 +37,19 @@ export function resolveOpenAIMaxTokens(
     (process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS
       ? parseInt(process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS, 10) || undefined
       : undefined) ??
-    upperLimit
-  )
+    profile.defaultOutputTokens
+
+  if (!Number.isInteger(requested) || requested <= 0) {
+    throw new Error(`Invalid max output token limit for model ${model}`)
+  }
+  return Math.min(requested, profile.maxOutputTokens)
 }
 
 /**
  * Build the request body for OpenAI chat.completions.create().
  * Extracted for testability — the thinking mode params are injected here.
  *
- * Three thinking-mode formats are sent simultaneously; each endpoint uses the
- * format it recognizes and ignores the others:
- * - Official DeepSeek API:    `thinking: { type: 'enabled' }`
- * - Self-hosted DeepSeek:     `enable_thinking: true` + `chat_template_kwargs: { thinking: true }`
- * - MiMo (Xiaomi):            `chat_template_kwargs: { enable_thinking: true }`
- * OpenAI SDK passes unknown keys through to the HTTP body.
+ * Reasoning fields are selected only from the exact static model profile.
  */
 export function buildOpenAIRequestBody(params: {
   model: string
@@ -75,8 +61,6 @@ export function buildOpenAIRequestBody(params: {
   temperatureOverride?: number
 }): ChatCompletionCreateParamsStreaming & {
   thinking?: { type: string }
-  enable_thinking?: boolean
-  chat_template_kwargs?: { thinking: boolean; enable_thinking: boolean }
 } {
   const {
     model,
@@ -87,6 +71,7 @@ export function buildOpenAIRequestBody(params: {
     maxTokens,
     temperatureOverride,
   } = params
+  const reasoning = getModelProfile(model).reasoning
   return {
     model,
     messages,
@@ -97,18 +82,10 @@ export function buildOpenAIRequestBody(params: {
     }),
     stream: true,
     stream_options: { include_usage: true },
-    // Enable chain-of-thought output for DeepSeek and MiMo models.
-    // When active, temperature/top_p/presence_penalty/frequency_penalty are ignored.
-    ...(enableThinking && {
-      // Official DeepSeek API format
-      thinking: { type: 'enabled' },
-      // Self-hosted DeepSeek-V3.2 format
-      enable_thinking: true,
-      // Both DeepSeek self-hosted and MiMo formats in chat_template_kwargs
-      chat_template_kwargs: { thinking: true, enable_thinking: true },
-    }),
-    // Only send temperature when thinking mode is off (DeepSeek ignores it anyway,
-    // but other providers may respect it)
+    ...(enableThinking &&
+      reasoning.type === 'deepseek' && {
+        thinking: { type: 'enabled' },
+      }),
     ...(!enableThinking &&
       temperatureOverride !== undefined && {
         temperature: temperatureOverride,

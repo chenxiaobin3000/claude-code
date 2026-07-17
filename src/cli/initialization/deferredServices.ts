@@ -6,7 +6,6 @@ import { checkHasTrustDialogAccepted } from '../../utils/config.js'
 import { getCwd } from '../../utils/cwd.js'
 import { logForDiagnosticsNoPII } from '../../utils/diagLogs.js'
 import { isBareMode, isEnvTruthy } from '../../utils/envUtils.js'
-import { refreshModelCapabilities } from '../../utils/model/modelCapabilities.js'
 import { countFilesRoundedRg } from '../../utils/ripgrep.js'
 import { settingsChangeDetector } from '../../utils/settings/changeDetector.js'
 import { skillChangeDetector } from '../../utils/skills/skillChangeDetector.js'
@@ -41,7 +40,6 @@ export function startDeferredPrefetches(): void {
   void getRelevantTips()
   void countFilesRoundedRg(getCwd(), AbortSignal.timeout(3000), [])
   void initializeAnalyticsGates()
-  void refreshModelCapabilities()
   void settingsChangeDetector.initialize()
   if (!isBareMode()) void skillChangeDetector.initialize()
 

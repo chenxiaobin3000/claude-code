@@ -130,7 +130,7 @@
 ### 模型配置
 
 配置文件 `models.example.json` 示例：
-- 默认：本地 llama.cpp（Qwen3.5-9B-Q6_K.gguf，localhost:8080）
+- 默认：本地 llama.cpp（Qwen3.5-9B-Q6_K，localhost:8080）
 - 可选：DeepSeek Chat API
 
 通过 `src/utils/model/modelRegistry.ts` 解析。

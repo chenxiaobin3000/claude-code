@@ -12,7 +12,6 @@ import type {
   Message,
   UserMessage,
 } from '../../../types/message.js'
-import { getModelMaxOutputTokens } from '../../../utils/context.js'
 import { collectSensitiveStrings } from '../../../utils/logRedaction.js'
 import { resolveModelTarget } from '../../../utils/model/modelRegistry.js'
 import { isDeferredToolsDeltaEnabled } from '../../../utils/searchExtraTools.js'
@@ -83,9 +82,8 @@ export const openAIProvider: ModelProvider = {
     }) as BetaToolUnion[]
     const tools = anthropicToolsToOpenAI(standardTools)
     const toolChoice = anthropicToolChoiceToOpenAI(request.options.toolChoice)
-    const { upperLimit } = getModelMaxOutputTokens(model)
     const maxOutputTokens = resolveOpenAIMaxTokens(
-      upperLimit,
+      model,
       request.options.maxOutputTokensOverride,
     )
     const stream = await getOpenAIClient({

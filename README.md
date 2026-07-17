@@ -58,15 +58,15 @@
 
 ```json
 {
-  "defaultModel": "Qwen3.5-9B-Q6_K.gguf",
+  "defaultModel": "Qwen3.5-9B-Q6_K",
   "models": [
     {
-      "model": "Qwen3.5-9B-Q6_K.gguf",
+      "model": "Qwen3.5-9B-Q6_K",
       "baseUrl": "http://127.0.0.1:8080/v1",
       "displayName": "Qwen 3.5 9B"
     },
     {
-      "model": "deepseek-chat",
+      "model": "deepseek-v4-flash",
       "baseUrl": "https://api.deepseek.com/v1",
       "apiKeyEnv": "DEEPSEEK_API_KEY"
     }
@@ -75,6 +75,8 @@
 ```
 
 `apiKeyEnv` 可选，默认读取 `OPENAI_API_KEY`。配置修改后重启 CLI 生效；`/model` 使用原有选择界面切换模型，并自动路由到该模型配置的地址。仓库根目录的 `models.example.json` 可作为多模型模板。
+
+模型能力不从 endpoint 探测，也不按名称猜测。`models.json` 中的每个模型 ID 必须与 `src/utils/model/modelProfiles.ts` 的静态条目精确匹配；Profile 统一声明上下文、输出上限、推理请求格式、Prompt Cache 行为和价格。增加模型时必须同时增加源码 Profile 和 `scripts/validation/model-profiles.ts` 验收样例，未登记模型会在配置加载阶段直接报错。
 
 Provider 固定使用 OpenAI-compatible 路径，不再通过 `CLAUDE_CODE_USE_*` 环境变量选择厂商。Gemini 与 Grok 的专用 Provider、环境变量和模型映射已经移除；通用 OpenAI-compatible 自定义接口仍然保留。`/login`、`/logout`、`claude auth` 和 `setup-token` 已移除；MCP Server 自己的 OAuth 不受影响。
 

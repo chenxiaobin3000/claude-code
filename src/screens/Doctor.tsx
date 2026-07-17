@@ -5,6 +5,7 @@ import { KeybindingWarnings } from 'src/components/KeybindingWarnings.js';
 import { McpParsingWarnings } from 'src/components/mcp/McpParsingWarnings.js';
 import { getModelMaxOutputTokens } from 'src/utils/context.js';
 import { getClaudeConfigHomeDir } from 'src/utils/envUtils.js';
+import { getDefaultConfiguredModel } from 'src/utils/model/modelRegistry.js';
 import type { SettingSource } from 'src/utils/settings/constants.js';
 import { getOriginalCwd } from '../bootstrap/state.js';
 import type { CommandResultDisplay } from '../commands.js';
@@ -73,8 +74,7 @@ export function Doctor({ onDone }: Props): React.ReactNode {
       },
       {
         name: 'CLAUDE_CODE_MAX_OUTPUT_TOKENS',
-        // Check for values against the latest supported model
-        ...getModelMaxOutputTokens('claude-opus-4-7'),
+        ...getModelMaxOutputTokens(getDefaultConfiguredModel()),
       },
     ];
     return envVars
@@ -123,7 +123,6 @@ export function Doctor({ onDone }: Props): React.ReactNode {
         async () => toolPermissionContext,
       );
       setContextWarnings(warnings);
-
     })();
   }, [toolPermissionContext, tools, agentDefinitions]);
 

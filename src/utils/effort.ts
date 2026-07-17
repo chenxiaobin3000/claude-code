@@ -1,18 +1,8 @@
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
-import { isUltrathinkEnabled } from './thinking.js'
 import { getInitialSettings } from './settings/settings.js'
-import { isProSubscriber, isMaxSubscriber, isTeamSubscriber } from './auth.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
-import { getAPIProvider } from './model/providers.js'
-import { get3PModelCapabilityOverride } from './model/modelSupportOverrides.js'
-import { isEnvTruthy } from './envUtils.js'
 import type { EffortLevel } from 'src/entrypoints/sdk/runtimeTypes.js'
-import { resolveAntModel } from './model/antModels.js'
-import { getAntModelOverrideConfig } from './model/antModels.js'
-import {
-  isChatGPTAuthMode,
-  isChatGPTCodexReasoningModel,
-} from './model/chatgptModels.js'
+import { getModelProfile } from './model/modelProfiles.js'
 
 export type { EffortLevel }
 
@@ -32,61 +22,20 @@ export type EffortValue = EffortLevel | number
 
 // @[MODEL LAUNCH]: Add the new model to the allowlist if it supports the effort parameter.
 export function modelSupportsEffort(model: string): boolean {
-  const m = model.toLowerCase()
-  if (isEnvTruthy(process.env.CLAUDE_CODE_ALWAYS_ENABLE_EFFORT)) {
-    return true
-  }
-  const supported3P = get3PModelCapabilityOverride(model, 'effort')
-  if (supported3P !== undefined) {
-    return supported3P
-  }
-  if (
-    getAPIProvider() === 'openai' &&
-    isChatGPTAuthMode() &&
-    isChatGPTCodexReasoningModel(model)
-  ) {
-    return true
-  }
-  // Supported by a subset of Claude 4 models
-  if (
-    m.includes('opus-4-7') ||
-    m.includes('opus-4-6') ||
-    m.includes('sonnet-4-6') ||
-    m.includes('deepseek-v4-pro')
-  ) {
-    return true
-  }
-  // Exclude any other known legacy models (haiku, older opus/sonnet variants)
-  if (m.includes('haiku') || m.includes('sonnet') || m.includes('opus')) {
-    return false
-  }
-
-  // IMPORTANT: Do not change the default effort support without notifying
-  // the model launch DRI and research. This is a sensitive setting that can
-  // greatly affect model quality and bashing.
-
-  // Default to true for unknown model strings on 1P.
-  // Do not default to true for 3P as they have different formats for their
-  // model strings (ex. anthropics/claude-code#30795)
-  return getAPIProvider() === 'firstParty'
+  getModelProfile(model)
+  return false
 }
 
 // Effort max/xhigh restrictions removed — all models that support effort
 // can now use these levels. API errors are the user's responsibility.
 export function modelSupportsMaxEffort(_model: string): boolean {
-  const supported3P = get3PModelCapabilityOverride(_model, 'max_effort')
-  if (supported3P !== undefined) {
-    return supported3P
-  }
-  return true
+  getModelProfile(_model)
+  return false
 }
 
 export function modelSupportsXhighEffort(_model: string): boolean {
-  const supported3P = get3PModelCapabilityOverride(_model, 'xhigh_effort')
-  if (supported3P !== undefined) {
-    return supported3P
-  }
-  return true
+  getModelProfile(_model)
+  return false
 }
 
 export function isEffortLevel(value: string): value is EffortLevel {
@@ -183,22 +132,13 @@ export function resolveAppliedEffort(
   model: string,
   appStateEffortValue: EffortValue | undefined,
 ): EffortValue | undefined {
+  if (!modelSupportsEffort(model)) return undefined
   const envOverride = getEffortEnvOverride()
   if (envOverride === null) {
     return undefined
   }
   const resolved =
     envOverride ?? appStateEffortValue ?? getDefaultEffortForModel(model)
-  // OpenAI Responses uses xhigh as its highest public reasoning effort.
-  // Keep /effort max usable as a familiar alias in ChatGPT subscription mode.
-  if (
-    resolved === 'max' &&
-    getAPIProvider() === 'openai' &&
-    isChatGPTAuthMode() &&
-    modelSupportsXhighEffort(model)
-  ) {
-    return 'xhigh'
-  }
   return resolved
 }
 
@@ -317,62 +257,6 @@ export function getOpusDefaultEffortConfig(): OpusDefaultEffortConfig {
 export function getDefaultEffortForModel(
   model: string,
 ): EffortValue | undefined {
-  if (process.env.USER_TYPE === 'ant') {
-    const config = getAntModelOverrideConfig()
-    const isDefaultModel =
-      config?.defaultModel !== undefined &&
-      model.toLowerCase() === (config.defaultModel as string).toLowerCase()
-    if (isDefaultModel && config?.defaultModelEffortLevel) {
-      return config.defaultModelEffortLevel as EffortValue
-    }
-    const antModel = resolveAntModel(model)
-    if (antModel) {
-      if (antModel.defaultEffortLevel) {
-        return antModel.defaultEffortLevel
-      }
-      if (antModel.defaultEffortValue !== undefined) {
-        return antModel.defaultEffortValue
-      }
-    }
-    // Always default ants to undefined/high
-    return undefined
-  }
-
-  // IMPORTANT: Do not change the default effort level without notifying
-  // the model launch DRI and research. Default effort is a sensitive setting
-  // that can greatly affect model quality and bashing.
-
-  if (
-    getAPIProvider() === 'openai' &&
-    isChatGPTAuthMode() &&
-    isChatGPTCodexReasoningModel(model)
-  ) {
-    return 'medium'
-  }
-
-  // Default effort on Opus 4.6 to medium for Pro.
-  // Max/Team also get medium when the tengu_grey_step2 config is enabled.
-  if (
-    model.toLowerCase().includes('opus-4-7') ||
-    model.toLowerCase().includes('opus-4-6')
-  ) {
-    if (isProSubscriber()) {
-      return 'high'
-    }
-    if (
-      getOpusDefaultEffortConfig().enabled &&
-      (isMaxSubscriber() || isTeamSubscriber())
-    ) {
-      return 'high'
-    }
-  }
-
-  // When ultrathink feature is on, default effort to medium (ultrathink bumps to high)
-  if (isUltrathinkEnabled() && modelSupportsEffort(model)) {
-    return 'medium'
-  }
-
-  // Fallback to undefined, which means we don't set an effort level. This
-  // should resolve to high effort level in the API.
+  getModelProfile(model)
   return undefined
 }

@@ -19,9 +19,9 @@ import {
 import {
   firstPartyNameToCanonical,
   getCanonicalName,
-  getDefaultMainLoopModelSetting,
   type ModelShortName,
 } from './model/model.js'
+import { findModelProfile } from './model/modelProfiles.js'
 
 // @see https://platform.claude.com/docs/en/about-claude/pricing
 export type ModelCosts = {
@@ -86,7 +86,13 @@ export const COST_HAIKU_45 = {
   webSearchRequests: 0.01,
 } as const satisfies ModelCosts
 
-const DEFAULT_UNKNOWN_MODEL_COST = COST_TIER_5_25
+const UNKNOWN_MODEL_COST = {
+  inputTokens: 0,
+  outputTokens: 0,
+  promptCacheWriteTokens: 0,
+  promptCacheReadTokens: 0,
+  webSearchRequests: 0,
+} as const satisfies ModelCosts
 
 /**
  * Get the cost tier for Opus 4.6 based on fast mode.
@@ -142,6 +148,30 @@ function tokensToUSDCost(modelCosts: ModelCosts, usage: Usage): number {
 }
 
 export function getModelCosts(model: string, usage: Usage): ModelCosts {
+  const profile = findModelProfile(model)
+  if (profile) {
+    const pricing = profile.pricing
+    if (!pricing) {
+      trackUnknownModelCost(model, model)
+      return UNKNOWN_MODEL_COST
+    }
+    if (
+      ((usage.cache_read_input_tokens ?? 0) > 0 &&
+        pricing.cacheRead === null) ||
+      ((usage.cache_creation_input_tokens ?? 0) > 0 &&
+        pricing.cacheWrite === null)
+    ) {
+      trackUnknownModelCost(model, model)
+    }
+    return {
+      inputTokens: pricing.input,
+      outputTokens: pricing.output,
+      promptCacheReadTokens: pricing.cacheRead ?? 0,
+      promptCacheWriteTokens: pricing.cacheWrite ?? 0,
+      webSearchRequests: 0,
+    }
+  }
+
   const shortName = getCanonicalName(model)
 
   // Check if this is an Opus 4.6 model with fast mode active.
@@ -155,10 +185,7 @@ export function getModelCosts(model: string, usage: Usage): ModelCosts {
   const costs = MODEL_COSTS[shortName]
   if (!costs) {
     trackUnknownModelCost(model, shortName)
-    return (
-      MODEL_COSTS[getCanonicalName(getDefaultMainLoopModelSetting())] ??
-      DEFAULT_UNKNOWN_MODEL_COST
-    )
+    return UNKNOWN_MODEL_COST
   }
   return costs
 }
@@ -224,6 +251,16 @@ export function formatModelPricing(costs: ModelCosts): string {
  * Returns undefined if model is not found
  */
 export function getModelPricingString(model: string): string | undefined {
+  const profilePricing = findModelProfile(model)?.pricing
+  if (profilePricing) {
+    return formatModelPricing({
+      inputTokens: profilePricing.input,
+      outputTokens: profilePricing.output,
+      promptCacheReadTokens: profilePricing.cacheRead ?? 0,
+      promptCacheWriteTokens: profilePricing.cacheWrite ?? 0,
+      webSearchRequests: 0,
+    })
+  }
   const shortName = getCanonicalName(model)
   const costs = MODEL_COSTS[shortName]
   if (!costs) return undefined
