@@ -100,7 +100,14 @@ try {
     'utf8',
   )
   writeFileSync(join(directory, 'broken.json'), '{', 'utf8')
-  const loaded = loadUserCustomThemes(directory)
+  const originalWarn = console.warn
+  console.warn = () => {}
+  let loaded: ReturnType<typeof loadUserCustomThemes>
+  try {
+    loaded = loadUserCustomThemes(directory)
+  } finally {
+    console.warn = originalWarn
+  }
   assert(loaded.length === 1, 'one valid theme must load beside invalid JSON')
   assert(getCustomThemes().length === 1, 'registry must contain loaded themes')
   assert(

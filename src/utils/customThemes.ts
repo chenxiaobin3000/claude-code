@@ -157,6 +157,7 @@ export function loadUserCustomThemes(
     }
     diagnostics = nextDiagnostics
     registerCustomThemes([])
+    for (const diagnostic of diagnostics) console.warn(`[theme] ${diagnostic}`)
     return loaded
   }
 
