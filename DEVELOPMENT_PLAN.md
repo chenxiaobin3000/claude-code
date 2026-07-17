@@ -58,6 +58,7 @@
 - 多模型注册表已于 2026-07-15 完成：重复模型 ID 和无效默认模型会在加载时失败；同地址模型复用 OpenAI Client，不同地址使用独立 Client；旧 `OPENAI_MODEL`、`OPENAI_BASE_URL`、角色模型环境变量、模型映射和 `providers.json` 注册表已从运行链移除。类型检查、Lint、Bun 构建、Vite 构建及 Bun/Node CLI 启动验证通过。
 - 第二模型验收已于 2026-07-16 完成：通过 `https://api.deepseek.com` 调用注册模型 `deepseek-v4-flash`，单轮流式响应和受权限约束的 `Read` 工具调用均通过；凭据只从配置指定的环境变量读取，未写入模型注册表、命令输出或诊断日志。结合本地 llama.cpp 的 Qwen3.5-9B-Q6_K 验证，至少两个 OpenAI-compatible 模型完成了流式响应和工具调用验收。
 - `bun run typecheck`、`bun run lint`、三条构建链的完整性检查、CLI 启动、模型请求和工具调用必须持续通过，不允许把已修复问题重新定义为长期允许失败的状态。
+- Feature Flag 已统一登记在 `scripts/feature-policy.ts`，按稳定、实验、内部/部署专用三组提供机器可读的默认值、验收目标、依赖和冲突关系。默认构建当前只启用 20 个具有验收覆盖标识的稳定能力；实验与内部能力分别要求显式授权，未知 Flag、非法值、缺失依赖和冲突组合在开发或构建启动时直接失败。Bun bundle、Vite/Node bundle、standalone EXE 与 `bun run dev` 共用同一解析器，规则说明见 `FEATURE_FLAGS.md`。
 
 ## 3. 与官方 v2.1.210 的主要差异
 
@@ -197,8 +198,8 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - [x] 拆分 `src/utils/messages.ts`、`src/utils/sessionStorage.ts` 和 `src/utils/hooks.ts`，优先抽出纯函数与协议转换层，并在 `scripts/validation` 中补充轻量验证脚本（2026-07-17 已完成首轮结构收口：三个旧入口均缩减为 4 行薄重导出；消息 ID/文本/谓词、Transcript Entry/Agent 投影/父链遍历、Hook matcher/blocking/output parser 已迁入聚焦模块；`attachments` 和 Session Storage 改为直接引用消息子模块以切断关键循环。新增 `message-utils`、`session-transcript`、`hook-protocol`、`utility-modules-boundary` 并接入唯一 `bun run verify`；遗留运行时文件设置只减不增上限，后续职责迁移不得重新扩大入口或运行时实现。`bun run verify -- --ci` 完整矩阵通过，耗时 134.3 秒）。
 - [x] 完成上述工具模块的第二轮职责迁移（2026-07-17）：消息侧新增 `factories`、`normalization`、`rejections`、`streamReducer`、`contentMerge`、`contentFilters` 和 `toolPairing`，会话侧新增 `firstPrompt`、`recovery`，Hook 侧新增 `selection`、`resultProcessor`、`elicitationParser`；对应轻量脚本增加多内容块标准化、流增量、snip 删除与父链重连、Elicitation 和 Hook 权限结果样例。三个遗留 Runtime 分别由 5791/5184/5018 行收缩到不超过 4000/4700/4550 行，子模块继续限制为 800 行且禁止反向依赖 Runtime；Runtime 仅允许继续收缩，后续 I/O 与生命周期编排按相同边界逐批迁移。`bun run verify -- --ci` 完整矩阵通过，耗时 148.7 秒。
 - [x] 为所有 workspace 统一最小脚本约定：`typecheck`、`build`、`test` 或明确的 `test:smoke`；不适用的子包需写明原因（2026-07-16 已完成：18/18 workspace 契约、独立类型检查和轻量冒烟通过；4 个独立产物构建通过，14 个源码直引包记录机器可读的不适用原因；统一并入 `bun run verify`，CI 模式全流程耗时 109.5 秒）。
-- [ ] 审计根包 `devDependencies` 中实际进入生产 Bundle 的依赖，明确运行时依赖与构建期依赖，减少发布和供应链审计范围。
-- [ ] 将 Feature Flag 分为稳定、实验、内部/部署专用三组，增加依赖关系和非法组合检查；默认构建只启用有验收覆盖的稳定能力。
+- [x] 审计根包 `devDependencies` 中实际进入生产 Bundle 的依赖，明确运行时依赖与构建期依赖，减少发布和供应链审计范围（2026-07-17 已完成：确认 Bun bundle、Vite/Node bundle 与 standalone EXE 默认全量打包，但产物审计识别并保留 `ws` 的动态运行时引用；发布安装依赖收口为 Chrome MCP bridge、`fflate`、`undici` 和 `ws`，ACP SDK、`highlight.js` 改为仅用于生成生产 Bundle 的开发依赖；补充根源码直接使用的 `workflow-engine` workspace 声明，移除 `@smithy/core`、`@types/sharp`、`@types/shell-quote`、Husky 和 lint-staged 等无直接职责依赖，锁定安装总包数由 1217 降至 1197；修正 `*.lock` 误排除 `bun.lock` 的问题，使冻结安装可由干净检出复现。新增 `DEPENDENCY_AUDIT.md` 与 `dependency-boundary` 并接入唯一 `bun run verify`；`bun run verify -- --ci` 完整矩阵通过，耗时 141.6 秒）。
+- [x] 将 Feature Flag 分为稳定、实验、内部/部署专用三组，增加依赖关系和非法组合检查；默认构建只启用有验收覆盖的稳定能力（2026-07-17 已完成：88 个源码 Flag 全部登记，默认集合收口为 20 个稳定项；实验和内部项增加独立授权门槛，支持依赖、冲突和稳定默认项显式关闭；三条构建链与开发入口统一使用策略解析器，新增 `FEATURE_FLAGS.md` 与独立 `feature-flags` 轻量验证并接入 `bun run verify`；Windows x64 `bun run verify -- --ci` 全矩阵通过，耗时 114.5 秒）。
 
 验收标准：
 

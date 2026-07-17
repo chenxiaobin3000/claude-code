@@ -164,7 +164,7 @@ async function main(): Promise<void> {
   if (args[0] === '--daemon-worker' || args[0]?.startsWith('--daemon-worker=')) {
     if (!feature('DAEMON')) {
       console.error(
-        'Error: --daemon-worker requires DAEMON feature to be enabled. Set FEATURE_DAEMON=1 or add DAEMON to DEFAULT_BUILD_FEATURES.',
+        'Error: --daemon-worker requires an internal build with ALLOW_INTERNAL_FEATURES=1 and FEATURE_DAEMON=1.',
       );
       process.exitCode = 1;
       return;

@@ -1,7 +1,7 @@
 import { readdir, readFile, writeFile, cp } from 'fs/promises'
 import { join } from 'path'
 import { getMacroDefines } from './scripts/defines.ts'
-import { DEFAULT_BUILD_FEATURES } from './scripts/defines.ts'
+import { resolveBuildFeatures } from './scripts/defines.ts'
 
 const outdir = 'dist'
 
@@ -9,11 +9,7 @@ const outdir = 'dist'
 const { rmSync } = await import('fs')
 rmSync(outdir, { recursive: true, force: true })
 
-// Collect FEATURE_* env vars → Bun.build features
-const envFeatures = Object.keys(process.env)
-  .filter(k => k.startsWith('FEATURE_'))
-  .map(k => k.replace('FEATURE_', ''))
-const features = [...new Set([...DEFAULT_BUILD_FEATURES, ...envFeatures])]
+const features = resolveBuildFeatures()
 
 // Step 2: Bundle with splitting
 const result = await Bun.build({

@@ -1,5 +1,5 @@
 import { mkdir, readFile, stat } from 'fs/promises'
-import { getMacroDefines, DEFAULT_BUILD_FEATURES } from './defines.ts'
+import { getMacroDefines, resolveBuildFeatures } from './defines.ts'
 
 const outfile = 'dist/claude-code.exe'
 const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
@@ -7,10 +7,7 @@ const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
 }
 const windowsVersion = `${packageJson.version}.0`
 
-const envFeatures = Object.keys(process.env)
-  .filter(key => key.startsWith('FEATURE_'))
-  .map(key => key.replace('FEATURE_', ''))
-const features = [...new Set([...DEFAULT_BUILD_FEATURES, ...envFeatures])]
+const features = resolveBuildFeatures()
 
 await mkdir('dist', { recursive: true })
 

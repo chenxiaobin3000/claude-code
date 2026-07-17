@@ -8,7 +8,7 @@
 - **语言**: TypeScript 6 + TSX（React JSX）
 - **UI 框架**: React 19 + Ink（终端 React 渲染器）
 - **构建工具**: Bun.build（主要）、Vite 8（次要/Node.js 构建）
-- **代码质量**: Biome 2（linter + formatter）、Husky + lint-staged
+- **代码质量**: Biome 2（linter + formatter），统一由 `bun run verify` 和 CI 执行
 - **包管理**: Bun workspace monorepo
 
 ## Windows Shell 约定

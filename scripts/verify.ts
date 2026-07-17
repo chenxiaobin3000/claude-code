@@ -22,6 +22,8 @@ const validationScripts = [
   'scripts/validation/provider-boundary.ts',
   'scripts/validation/main-boundary.ts',
   'scripts/validation/self-update-boundary.ts',
+  'scripts/validation/dependency-boundary.ts',
+  'scripts/validation/feature-flags.ts',
   'scripts/validation/utility-modules-boundary.ts',
   'scripts/validation/repl-boundary.ts',
   'scripts/validation/model-preparation.ts',
