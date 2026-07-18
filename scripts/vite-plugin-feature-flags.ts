@@ -16,8 +16,7 @@ const FEATURE_CALL_RE = /feature\s*\(\s*['"]([\w]+)['"]\s*\)/g
  * at the transform stage, BEFORE the bundler resolves imports.
  *
  * This approach is necessary because some feature-gated code blocks contain
- * require() calls to files that don't exist (e.g. hunter.js inside
- * feature('REVIEW_ARTIFACT')). The bundler must see these as dead code
+ * require() calls to optional modules. The bundler must see these as dead code
  * (`if (false) { ... }`) before attempting import resolution.
  *
  * Also resolves `import { feature } from 'bun:bundle'` as a virtual module

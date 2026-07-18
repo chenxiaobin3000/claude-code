@@ -62,7 +62,6 @@ import { TaskOutputTool } from '@claude-code-best/builtin-tools/tools/TaskOutput
 import { WebSearchTool } from '@claude-code-best/builtin-tools/tools/WebSearchTool/WebSearchTool.js'
 import { TodoWriteTool } from '@claude-code-best/builtin-tools/tools/TodoWriteTool/TodoWriteTool.js'
 import { ExitPlanModeV2Tool } from '@claude-code-best/builtin-tools/tools/ExitPlanModeTool/ExitPlanModeV2Tool.js'
-import { ArtifactTool } from '@claude-code-best/builtin-tools/tools/ArtifactTool/ArtifactTool.js'
 import { GrepTool } from '@claude-code-best/builtin-tools/tools/GrepTool/GrepTool.js'
 import { TungstenTool } from '@claude-code-best/builtin-tools/tools/TungstenTool/TungstenTool.js'
 // Lazy require to break circular dependency: tools.ts -> TeamCreateTool/TeamDeleteTool -> ... -> tools.ts
@@ -139,10 +138,6 @@ const SnipTool = feature('HISTORY_SNIP')
 const DiscoverSkillsTool = feature('EXPERIMENTAL_SKILL_SEARCH')
   ? require('@claude-code-best/builtin-tools/tools/DiscoverSkillsTool/DiscoverSkillsTool.js')
       .DiscoverSkillsTool
-  : null
-const ReviewArtifactTool = feature('REVIEW_ARTIFACT')
-  ? require('@claude-code-best/builtin-tools/tools/ReviewArtifactTool/ReviewArtifactTool.js')
-      .ReviewArtifactTool
   : null
 const ListPeersTool = feature('UDS_INBOX')
   ? require('@claude-code-best/builtin-tools/tools/ListPeersTool/ListPeersTool.js')
@@ -223,7 +218,6 @@ export function getAllBaseTools(): Tools {
     FileEditTool,
     FileWriteTool,
     NotebookEditTool,
-    ArtifactTool,
     WebFetchTool,
     TodoWriteTool,
     WebSearchTool,
@@ -260,7 +254,6 @@ export function getAllBaseTools(): Tools {
     ...(SendUserFileTool ? [SendUserFileTool] : []),
     ...(PushNotificationTool ? [PushNotificationTool] : []),
     ...(SubscribePRTool ? [SubscribePRTool] : []),
-    ...(ReviewArtifactTool ? [ReviewArtifactTool] : []),
     ...(getPowerShellTool() ? [getPowerShellTool()] : []),
     ...(SnipTool ? [SnipTool] : []),
     ...(DiscoverSkillsTool ? [DiscoverSkillsTool] : []),

@@ -7,7 +7,6 @@ import { registerKeybindingsSkill } from './keybindings.js'
 import { registerLoremIpsumSkill } from './loremIpsum.js'
 import { registerRememberSkill } from './remember.js'
 import { registerSimplifySkill } from './simplify.js'
-import { registerUseArtifactsSkill } from './useArtifacts.js'
 import { registerSkillifySkill } from './skillify.js'
 import { registerStuckSkill } from './stuck.js'
 import { registerUltracodeSkill } from './ultracode.js'
@@ -35,7 +34,6 @@ export function initBundledSkills(): void {
   registerSkillifySkill()
   registerRememberSkill()
   registerSimplifySkill()
-  registerUseArtifactsSkill()
   registerBatchSkill()
   registerStuckSkill()
   registerUltracodeSkill()
@@ -43,12 +41,6 @@ export function initBundledSkills(): void {
   registerCronListSkill()
   registerCronDeleteSkill()
   registerDreamSkill()
-  if (feature('REVIEW_ARTIFACT')) {
-    /* eslint-disable @typescript-eslint/no-require-imports */
-    const { registerHunterSkill } = require('./hunter.js')
-    /* eslint-enable @typescript-eslint/no-require-imports */
-    registerHunterSkill()
-  }
   if (feature('AGENT_TRIGGERS_REMOTE')) {
     /* eslint-disable @typescript-eslint/no-require-imports */
     const {

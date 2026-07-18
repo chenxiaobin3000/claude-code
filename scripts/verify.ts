@@ -21,6 +21,7 @@ const validationScripts = [
   'scripts/validation/sdk-compat-boundary.ts',
   'scripts/validation/provider-boundary.ts',
   'scripts/validation/main-boundary.ts',
+  'scripts/validation/artifact-boundary.ts',
   'scripts/validation/self-update-boundary.ts',
   'scripts/validation/dependency-boundary.ts',
   'scripts/validation/feature-flags.ts',

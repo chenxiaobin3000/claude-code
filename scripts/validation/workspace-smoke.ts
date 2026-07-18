@@ -63,29 +63,6 @@ async function smokeWorkflowEngine(): Promise<void> {
   await assertImport('dist/index.js')
 }
 
-async function smokeCloudArtifacts(): Promise<void> {
-  const workerPath = await assertFile('src/index.ts')
-  const worker = (await import(pathToFileURL(workerPath).href)) as {
-    default?: {
-      fetch?: (
-        request: Request,
-        env: Record<string, unknown>,
-      ) => Promise<Response>
-    }
-  }
-  assert(
-    typeof worker.default?.fetch === 'function',
-    'Worker fetch export missing',
-  )
-  const response = await worker.default.fetch(
-    new Request('https://artifacts.invalid/not-found', { method: 'POST' }),
-    {},
-  )
-  assert(response.status === 404, `expected 404, received ${response.status}`)
-  const body = (await response.json()) as { error?: string }
-  assert(body.error === 'not_found', 'unexpected not-found response body')
-}
-
 async function smokeRemoteControlServer(): Promise<void> {
   await assertFile('dist/server.js')
   await assertFile('web/dist/index.html')
@@ -135,9 +112,6 @@ switch (packageName) {
     break
   case '@claude-code-best/workflow-engine':
     await smokeWorkflowEngine()
-    break
-  case 'cloud-artifacts':
-    await smokeCloudArtifacts()
     break
   case '@anthropic/remote-control-server':
     await smokeRemoteControlServer()

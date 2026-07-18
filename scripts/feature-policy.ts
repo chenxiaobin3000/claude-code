@@ -94,7 +94,6 @@ export const FEATURE_POLICY: Record<string, FeatureDefinition> = {
   PROMPT_CACHE_BREAK_DETECTION: stable(['model-diagnostics']),
   QUICK_SEARCH: experimental(),
   REACTIVE_COMPACT: experimental(),
-  REVIEW_ARTIFACT: experimental(),
   RUN_SKILL_GENERATOR: experimental(),
   SHOT_STATS: internal(),
   SKILL_IMPROVEMENT: experimental(),

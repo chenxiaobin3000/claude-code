@@ -178,9 +178,9 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 ### 5.6 Workspace 验证契约
 
-`scripts/verify-workspaces.ts` 从根 `package.json.workspaces` 自动发现子包，不维护固定名单。每个 workspace 必须提供可独立运行的 `typecheck` 及 `test`/`test:smoke`；存在发布、服务或部署产物时还必须提供 `build`，否则必须通过 `workspaceValidation.build.applicable=false` 和非空 `reason` 明确说明由根 CLI 构建链统一打包。当前 14 个源码直引内部包明确标记为无需独立构建，`acp-link`、`workflow-engine`、`remote-control-server` 和 `cloud-artifacts` 分别执行实际构建。
+`scripts/verify-workspaces.ts` 从根 `package.json.workspaces` 自动发现子包，不维护固定名单。每个 workspace 必须提供可独立运行的 `typecheck` 及 `test`/`test:smoke`；存在发布、服务或部署产物时还必须提供 `build`，否则必须通过 `workspaceValidation.build.applicable=false` 和非空 `reason` 明确说明由根 CLI 构建链统一打包。源码直引内部包明确标记为无需独立构建，`acp-link`、`workflow-engine` 和 `remote-control-server` 分别执行实际构建。
 
-轻量冒烟统一调用 `scripts/validation/workspace-smoke.ts`，不引入 `*.test.ts` 或测试框架：源码包导入公开入口；发布包检查并导入构建产物；`acp-link` 验证 CLI 帮助；Cloudflare Worker 使用固定请求验证本地响应；Remote Control Server 使用临时本机端口验证 `/health`。验证器支持 `contract`、`typecheck`、`build`、`smoke` 和默认全流程模式，便于定位失败，但不形成第二个总验收层级。
+轻量冒烟统一调用 `scripts/validation/workspace-smoke.ts`，不引入 `*.test.ts` 或测试框架：源码包导入公开入口；发布包检查并导入构建产物；`acp-link` 验证 CLI 帮助；Remote Control Server 使用临时本机端口验证 `/health`。验证器支持 `contract`、`typecheck`、`build`、`smoke` 和默认全流程模式，便于定位失败，但不形成第二个总验收层级。
 
 2026-07-16 Windows x64 实测：18/18 workspace 契约、独立 TypeScript 和轻量冒烟全部通过，4/4 适用构建通过；`bun run verify -- --ci` 随后完成锁定安装、Biome、源码验证、workspace 全流程、Bun bundle、Vite/Node bundle 和 Windows standalone EXE 验证，总耗时 109.5 秒。普通模式同次执行到 Bun CLI 模型请求前的全部项目均通过，模型请求因本地 llama.cpp 的 `127.0.0.1:33350` 未监听而未在本次复验；此前记录的本地模型验收结论不变。
 
@@ -201,7 +201,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 目标：移除不属于独立 OpenAI-compatible CLI 核心能力的公共托管、远程市场、遥测和 Anthropic 云依赖，缩小发布包网络面、凭据面及供应链审计范围。
 
-- [ ] 完整移除 Artifact 能力及 Cloud Artifacts 客户端和服务端实现，包括 Artifact Tool、相关命令/UI/权限/Prompt、`packages/cloud-artifacts`、`cloud-artifacts.claude-code-best.win` 默认地址、内置共享 Token、TTL/公开页面逻辑，以及 Artifact HTML 对 unpkg Mermaid/Highlight.js 的远程加载；不保留本地生成、上传、分享或公开 URL 的替代分支。
+- [x] 完整移除 Artifact 能力及 Cloud Artifacts 客户端和服务端实现（2026-07-18 已删除 Artifact/ReviewArtifact Tool、`/artifacts`、`use-artifacts`、权限 UI、Prompt、客户端、Cloudflare Worker/R2 服务端、默认域名和共享 Token、TTL/公开页面及远程 Mermaid/Highlight.js 加载；未保留本地生成、上传、分享或公开 URL 替代分支。新增 `artifact-boundary.ts` 和构建产物标记扫描，防止能力、域名、环境变量和 CDN 加载被恢复；17 个 workspace 全流程及 `bun run verify --ci` 均通过，完整验证用时 113.0 秒）。
 - [ ] 移除远程 Plugin Marketplace 能力，包括官方 Marketplace CDN、GitHub 安装量统计、远程 Marketplace 浏览/添加、Git/HTTPS Marketplace 克隆、MCPB 远程下载和插件自动更新；保留本地目录 Plugin、Skill、Hook、内置 Plugin 及其加载/校验能力，不把 Plugin 清理扩大为 MCP 或本地扩展体系删除。
 - [ ] 移除全部遥测和可观测性上报：Anthropic 1P Event Logging、BigQuery Metrics、GrowthBook 远程配置、Sentry、Datadog、Langfuse、OpenTelemetry OTLP 和 Beta Tracing；先把影响运行行为的远程 Feature Flag 固化到 `scripts/feature-policy.ts` 或本地显式配置，再删除 SDK、初始化、刷新、缓存、失败队列、环境变量和关闭/flush 路径。
 - [ ] 清理 `~/.claude/telemetry` 中只服务于已移除上报链的失败队列与缓存读取逻辑；不得自动删除用户已有文件，迁移只停止读取和新增写入，并在发布说明中说明可由用户自行清理。

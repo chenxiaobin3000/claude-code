@@ -239,7 +239,7 @@ export const ExecuteTool = buildTool({
   // Output shape: { result: <inner tool output>, tool_name: string }.
   // Delegate rendering to the inner tool when it defines its own
   // renderToolResultMessage so deferred tools can show their own UI
-  // (e.g. ArtifactTool displays its uploaded URL). Without this, the
+  // (for example, a tool may display a result summary). Without this, the
   // ExecuteExtraTool tool_result row renders nothing below the tool_use
   // line. The inner tool expects its own input shape, so unwrap params.
   //

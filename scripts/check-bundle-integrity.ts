@@ -157,6 +157,15 @@ async function main() {
       'ANTHROPIC_FOUNDRY_BASE_URL',
       'ANTHROPIC_FOUNDRY_RESOURCE',
       'CLAUDE_CODE_SKIP_FOUNDRY_AUTH',
+      'cloud-artifacts.claude-code-best.win',
+      'CLAUDE_ARTIFACTS_TOKEN',
+      'CLAUDE_ARTIFACTS_URL',
+      'ArtifactTool',
+      'ReviewArtifact',
+      'REVIEW_ARTIFACT',
+      'use-artifacts',
+      'unpkg.com/mermaid',
+      'unpkg.com/@highlightjs/cdn-assets',
     ]) {
       if (content.includes(marker)) {
         findings.push({

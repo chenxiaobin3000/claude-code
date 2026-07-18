@@ -1570,7 +1570,6 @@ export const SDKPostTurnSummaryMessageSchema = lazySchema(() =>
       description: z.string(),
       recent_action: z.string(),
       needs_action: z.string(),
-      artifact_urls: z.array(z.string()),
       uuid: UUIDPlaceholder(),
       session_id: z.string(),
     })

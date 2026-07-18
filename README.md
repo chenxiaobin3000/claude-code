@@ -173,7 +173,6 @@ CLI 入口
 |   |-- workflow-engine/   # 确定性工作流引擎
 |   |-- remote-control-server/
 |   |-- weixin/            # 微信集成
-|   |-- cloud-artifacts/   # 云端制品服务
 |   `-- @ant/              # Ink、模型供应商和 Computer Use 等包
 |-- scripts/               # 构建、开发、检查与发布脚本
 |-- spec/                  # 功能设计和实施规格
