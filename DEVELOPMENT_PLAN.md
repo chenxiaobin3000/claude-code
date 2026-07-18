@@ -52,7 +52,7 @@
 - Provider 调度、共享请求预处理、OpenAI 请求、流事件适配和 Usage 统计已分层到 `src/services/model`；`src/services/api/claude.ts` 仅保留兼容重导出。模型主路径固定为 OpenAI-compatible，Anthropic SDK 仅承担内部消息、工具、流事件和 Usage 类型兼容，保留范围及删除规则见 `ANTHROPIC_SDK_COMPATIBILITY.md`。Anthropic 账号及官方直连、Bedrock、Vertex 和 Foundry 专用传输与鉴权不得恢复。
 - `src/main.tsx` 已收口为薄入口，启动阶段、参数注册、运行模式和服务初始化分别由 `src/cli/startup`、`arguments`、`modes`、`initialization` 承担。`src/screens/REPL.tsx` 同样为稳定入口，会话、输入、Agent、查询、运行时、视图和交互职责分布在 `src/screens/repl` 对应子层；入口和遗留 Runtime 均受只减不增的结构边界约束。
 - `src/utils/messages.ts`、`sessionStorage.ts`、`hooks.ts` 已收口为稳定薄入口；纯消息处理、Transcript 链与投影、Hook 匹配和输出协议分别迁入 `utils/messages/`、`utils/sessionStorage/`、`utils/hooks/`。遗留运行时编排由同目录 `*Runtime.ts` 承接并设置只减不增的行数上限，新代码必须直接引用聚焦模块。
-- 根包依赖按“发布后外部解析”与“构建时嵌入 Bundle”划分：生产依赖仅保留 Chrome MCP bridge、`fflate`、`undici` 和 `ws`，其余源码及 workspace 输入归入 `devDependencies`；完整职责与审计规则见 `DEPENDENCY_AUDIT.md`。`bun.lock` 必须纳入版本控制，并由冻结安装检查保证干净检出可复现。
+- 根包依赖按“发布后外部解析”与“构建时嵌入 Bundle”划分：生产依赖仅保留 `fflate`、`undici` 和 `ws`，其余源码及 workspace 输入归入 `devDependencies`；第三方 Chrome MCP bridge、默认服务配置和安装脚本已移除。完整职责与审计规则见 `DEPENDENCY_AUDIT.md`。`bun.lock` 必须纳入版本控制，并由冻结安装检查保证干净检出可复现。
 
 ### 2.4 当前工程与验证基线
 
@@ -147,7 +147,7 @@
 | `ubuntu-latest` | `bun install --frozen-lockfile`、TypeScript、Biome | 构建、完整性、版本、启动 | 构建、完整性、版本、启动 | 平台不适用，明确跳过 | 跳过，不要求模型配置或凭据 |
 | `windows-latest` | `bun install --frozen-lockfile`、TypeScript、Biome | 构建、完整性、版本、启动 | 构建、完整性、版本、启动 | 构建、版本、启动 | 跳过，不要求模型配置或凭据 |
 
-GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，使用 Node.js 22 与 Bun 1.3.14；安装阶段关闭只适用于用户机器的 Chrome MCP 注册。CI 与本地共用 `scripts/verify.ts`：普通 `bun run verify` 保留本地 llama.cpp 的单轮模型请求和 `Read` 工具调用；`bun run verify -- --ci` 仅跳过这两项环境相关检查，不读取 `models.json`，其余步骤完全一致。2026-07-16 在 Windows x64 本地执行 CI 模式，三类适用产物全部通过，耗时 45.7 秒；GitHub 托管环境结果以首次 push 或 pull request 的实际运行记录为准。
+GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，使用 Node.js 22 与 Bun 1.3.14。CI 与本地共用 `scripts/verify.ts`：普通 `bun run verify` 保留本地 llama.cpp 的单轮模型请求和 `Read` 工具调用；`bun run verify -- --ci` 仅跳过这两项环境相关检查，不读取 `models.json`，其余步骤完全一致。2026-07-16 在 Windows x64 本地执行 CI 模式，三类适用产物全部通过，耗时 45.7 秒；GitHub 托管环境结果以首次 push 或 pull request 的实际运行记录为准。
 
 ### 5.4 模型诊断安全边界
 
@@ -206,6 +206,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - [x] 移除全部遥测和可观测性上报（2026-07-18 已移除 Anthropic 1P Event Logging、BigQuery Metrics、GrowthBook 远程配置、Sentry、Datadog、Langfuse、OpenTelemetry OTLP、Beta Tracing 与本地 Perfetto 上报链；运行 Feature Flag 固化到 `scripts/feature-policy.ts`，支持 `CLAUDE_LOCAL_FEATURE_OVERRIDES` 和 `localFeatureOverrides` 显式本地覆盖。已删除相关 SDK、初始化/刷新、Provider 状态、缓存、失败队列、环境变量、退出 flush 和纯遥测启动扫描，并新增 `observability-boundary.ts` 防止依赖、环境变量和实现入口恢复；17 个 workspace、三类构建产物及 `bun run verify --ci` 全部通过，最终完整验证用时 126.6 秒）。
 - [x] 停止读取和写入 `~/.claude/telemetry` 中只服务于旧上报链的失败队列与缓存（2026-07-18 已随 exporter、instrumentation 和事件 logger 删除完成；未自动删除用户已有文件，用户可自行清理历史目录）。
 - [x] 移除全部 Anthropic 云服务接口（2026-07-18 已删除事件日志、指标与组织开关、Feedback/Transcript Share、Public Files API、Claude Remote Control/Bridge、Remote Trigger、Trusted Device、Claude OAuth/API Key/角色接口，以及依赖 Claude 账号的推送、附件、SSH 凭据转发和桌面云端交接链路；同时移除会话分享专用的完整请求与分类器快照保留）。本地 Chrome 仅保留 Native Messaging，自托管 RCS 改为显式 `CLAUDE_CODE_RCS_AUTH_TOKEN`，ACP 使用部署方提供的 RCS URL/Token 与本地 OpenAI-compatible Provider 配置，三者均不读取 Anthropic 域名、Claude OAuth 或服务端下发凭据。新增并接入 `anthropic-boundary.ts`，分别扫描主源码和自托管 RCS/ACP 边界；Chrome 本地注册改为显式执行，不再由依赖安装修改或校验用户注册表。17 个 workspace、全部源码边界、Bun/Node 构建、bundle 完整性和 Windows standalone EXE 均通过，最终 `bun run verify --ci` 用时 110.8 秒。
+- [x] 移除第三方 `mcp-chrome`（2026-07-19 已删除普通启动时硬编码的 `127.0.0.1:12306/mcp` 服务、固定 Bearer Token、默认禁用名单、`@claude-code-best/mcp-chrome-bridge` 生产依赖、发布安装脚本和 CI 遗留开关）。通用 MCP 客户端、用户显式配置的浏览器 MCP 以及条件启用的本地 `claude-in-chrome` 保持不变；`dependency-boundary.ts` 防止默认服务、依赖和发布脚本恢复。17 个 workspace、全部轻量边界、Bun bundle、Vite/Node bundle、Windows standalone EXE、版本和启动冒烟均通过，最终 `bun run verify -- --ci` 用时 113.9 秒。
 - [ ] 保留 `@anthropic-ai/sdk` 作为本地消息、工具、流事件和 Usage 类型兼容层，禁止清理工作把 SDK 类型引用误判为 Anthropic 网络 Provider；继续执行 `ANTHROPIC_SDK_COMPATIBILITY.md` 的边界规则。
 - [ ] 删除无调用入口或已失效的接口实现：ChatGPT `auth.openai.com`/`chatgpt.com/backend-api/codex/responses`、Anthropic 官方 MCP Registry 预取、旧国内模型供应商引导表、内部 GitHub Webhook/KAIROS 分支，以及与已移除云接口绑定的常量、设置项、Feature Flag、UI、命令和依赖。
 - [ ] 增加第三方接口边界验证，扫描禁止域名、禁止 SDK、禁止环境变量和孤立网络调用；默认构建中出现 `api.anthropic.com`、`claude.ai` 云 API、`cloud-artifacts.claude-code-best.win`、Sentry/Datadog/Langfuse/OTLP 或远程 Marketplace 调用时直接失败。文档链接若确需保留，必须与运行时网络请求白名单分开维护。

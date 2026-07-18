@@ -1,10 +1,10 @@
 # Root dependency audit
 
-Audit date: 2026-07-17
+Audit date: 2026-07-19
 
 ## Packaging model
 
-The root package publishes `dist/` plus three installation scripts. All three supported production build chains bundle the CLI dependency graph:
+The root package publishes `dist/` plus two runtime scripts. All three supported production build chains bundle the CLI dependency graph:
 
 - `build.ts`: `Bun.build` with no `external` packages.
 - `vite.config.ts`: SSR build with `ssr.noExternal: true`.
@@ -18,12 +18,11 @@ Only packages directly resolved by scripts shipped outside the bundle remain in 
 
 | Package | Published consumer | Reason |
 | --- | --- | --- |
-| `@claude-code-best/mcp-chrome-bridge` | `scripts/setup-chrome-mcp.mjs` | Resolves and executes the native messaging setup CLI during installation. |
 | `fflate` | `scripts/postinstall.cjs` | Extracts the Windows ripgrep archive without relying solely on an external unzip executable. |
 | `undici` | `scripts/postinstall.cjs` | Supplies proxy-aware fetch during ripgrep download; it is also bundled into the CLI for proxy and mTLS support. |
 | `ws` | Bun and Vite bundle chunks | Dynamic WebSocket transport imports remain as runtime module references and are verified by artifact inspection. |
 
-`@agentclientprotocol/sdk` and `highlight.js` were moved out of `dependencies`: they enter the production bundles and are not external runtime requirements. `ws` was intentionally retained after the Bun artifact audit found residual dynamic imports. The production list remains four direct packages, but two large source-only dependencies no longer expand the installed runtime closure and the two postinstall requirements are now declared explicitly.
+`@agentclientprotocol/sdk` and `highlight.js` were moved out of `dependencies`: they enter the production bundles and are not external runtime requirements. `ws` was intentionally retained after the Bun artifact audit found residual dynamic imports. The third-party `@claude-code-best/mcp-chrome-bridge`, its published setup script, and the hard-coded `mcp-chrome` server were removed on 2026-07-19; browser integration can still be supplied explicitly through user MCP configuration or the separately gated local `claude-in-chrome` implementation. The production list is now three direct packages.
 
 ## Development and bundle inputs
 

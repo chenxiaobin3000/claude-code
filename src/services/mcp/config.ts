@@ -1407,7 +1407,6 @@ export function areMcpConfigsAllowedWithEnterpriseMcpConfig(
  */
 /* eslint-disable @typescript-eslint/no-require-imports */
 const DEFAULT_DISABLED_BUILTINS: Set<string> = new Set([
-  'mcp-chrome',
   ...(feature('CHICAGO_MCP')
     ? [
         (

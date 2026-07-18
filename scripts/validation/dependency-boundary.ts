@@ -21,7 +21,7 @@ assert(
 const productionDependencies = Object.keys(pkg.dependencies).sort()
 assertDeepEqual(
   productionDependencies,
-  ['@claude-code-best/mcp-chrome-bridge', 'fflate', 'undici', 'ws'],
+  ['fflate', 'undici', 'ws'],
   'production dependency allowlist',
 )
 
@@ -42,6 +42,7 @@ assert(
 )
 
 for (const removed of [
+  '@claude-code-best/mcp-chrome-bridge',
   '@smithy/core',
   '@types/sharp',
   '@types/shell-quote',
@@ -66,6 +67,8 @@ assert(
 const bunBuild = await source('build.ts')
 const exeBuild = await source('scripts/build-exe.ts')
 const viteBuild = await source('vite.config.ts')
+const defaultMode = await source('src/cli/modes/defaultMode.tsx')
+const mcpConfig = await source('src/services/mcp/config.ts')
 assert(
   !/\bexternal\s*:/.test(bunBuild),
   'Bun bundle must not externalize packages',
@@ -79,15 +82,18 @@ assert(
   'Vite Node bundle must include dependencies',
 )
 
-const setupScript = await source('scripts/setup-chrome-mcp.mjs')
 const postinstall = await source('scripts/postinstall.cjs')
 assert(
   pkg.scripts.postinstall === 'node scripts/postinstall.cjs',
   'dependency install must not mutate or validate the user Chrome registration',
 )
 assert(
-  setupScript.includes("'@claude-code-best/mcp-chrome-bridge/dist/cli.js'"),
-  'explicit local Chrome MCP setup consumer must remain available',
+  !pkg.files.includes('scripts/setup-chrome-mcp.mjs'),
+  'removed third-party Chrome MCP setup script must not be published',
+)
+assert(
+  !defaultMode.includes('mcp-chrome') && !mcpConfig.includes('mcp-chrome'),
+  'removed mcp-chrome server must not return to default MCP configuration',
 )
 for (const dependency of ['fflate', 'undici']) {
   assert(

@@ -19,8 +19,6 @@ jobs:
     name: Verify (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
-    env:
-      CLAUDE_CODE_SKIP_CHROME_MCP_SETUP: "1"
     strategy:
       fail-fast: false
       matrix:

@@ -37,8 +37,7 @@
     "dist",
     "models.example.json",
     "scripts/postinstall.cjs",
-    "scripts/run-parallel.mjs",
-    "scripts/setup-chrome-mcp.mjs"
+    "scripts/run-parallel.mjs"
   ],
   "scripts": {
     "build": "bun run build.ts",
@@ -65,7 +64,6 @@
     "rcs": "bun run scripts/rcs.ts"
   },
   "dependencies": {
-    "@claude-code-best/mcp-chrome-bridge": "^3.0.1",
     "fflate": "^0.8.2",
     "undici": "^7.25.0",
     "ws": "^8.20.0"
