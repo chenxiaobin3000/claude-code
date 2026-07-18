@@ -21,7 +21,6 @@
 - Agent、后台 Session、Coordinator 和 Agent Team 相关实现。
 - `/monitor`、`/autofix-pr`、`/ultraplan`、`/ultrareview`、`/recap`、`/goal`。
 - 动态 Workflow 和 `ultracode`。
-- Artifact 工具。
 - `/usage` 及成本、Token 统计。
 - PowerShell、Bash、工作树和远程控制相关能力。
 
@@ -48,7 +47,7 @@
 - 官方大型测试体系和源码目录内的 `*.test.ts` 已按项目精简要求移除；回归统一使用 `scripts/validation` 独立轻量验证、workspace 冒烟、类型检查、Biome、三类构建和 CLI/模型/工具调用验收，不引入第二层总入口。
 - 语音模式、录音、音频 NAPI Workspace 和相关二进制依赖已经移除。
 - 本地版本号与 CLI 版本已统一为 `2.1.116`，构建版本以根目录 `package.json` 为唯一来源，源码直跑入口使用相同兜底值；该版本号不代表对应的官方版本。
-- CLI 不具备自安装或自更新能力：根级 `install`、`update`、`rollback`（包括 `ccb update`）以及 native/local installer、自动更新器、版本锁和更新频道配置均已移除。版本升级只能由外部分发渠道替换产物；插件安装、插件自动更新、SSH 远端部署和 standalone EXE 构建不受影响。包管理器来源检测已迁为只读 Doctor 能力；2026-07-16 执行 `bun run verify -- --ci` 全矩阵通过，耗时 120.3 秒，最终 EXE 帮助中不存在上述三个根命令。
+- CLI 不具备自安装或自更新能力：根级 `install`、`update`、`rollback`（包括 `ccb update`）以及 native/local installer、自动更新器、版本锁和更新频道配置均已移除。版本升级只能由外部分发渠道替换产物。远程插件安装和自动更新同样已移除：本地目录插件仅通过 `--plugin-dir` 按会话加载，由用户替换文件后重启或执行 `/reload-plugins`；内置插件只能随新版 CLI 产物更新。SSH 远端部署和 standalone EXE 构建不受影响。包管理器来源检测已迁为只读 Doctor 能力；2026-07-16 执行 `bun run verify -- --ci` 全矩阵通过，耗时 120.3 秒，最终 EXE 帮助中不存在上述三个根命令。
 - Provider 调度、共享请求预处理、OpenAI 请求、流事件适配和 Usage 统计已分层到 `src/services/model`；`src/services/api/claude.ts` 仅保留兼容重导出。模型主路径固定为 OpenAI-compatible，Anthropic SDK 仅承担内部消息、工具、流事件和 Usage 类型兼容，保留范围及删除规则见 `ANTHROPIC_SDK_COMPATIBILITY.md`。Anthropic 账号及官方直连、Bedrock、Vertex 和 Foundry 专用传输与鉴权不得恢复。
 - `src/main.tsx` 已收口为薄入口，启动阶段、参数注册、运行模式和服务初始化分别由 `src/cli/startup`、`arguments`、`modes`、`initialization` 承担。`src/screens/REPL.tsx` 同样为稳定入口，会话、输入、Agent、查询、运行时、视图和交互职责分布在 `src/screens/repl` 对应子层；入口和遗留 Runtime 均受只减不增的结构边界约束。
 - `src/utils/messages.ts`、`sessionStorage.ts`、`hooks.ts` 已收口为稳定薄入口；纯消息处理、Transcript 链与投影、Hook 匹配和输出协议分别迁入 `utils/messages/`、`utils/sessionStorage/`、`utils/hooks/`。遗留运行时编排由同目录 `*Runtime.ts` 承接并设置只减不增的行数上限，新代码必须直接引用聚焦模块。
@@ -95,7 +94,6 @@
 | MCP | CLI OAuth 登录、启动重试、审批状态和会话重连 | 部分 | 基础能力存在，需按最新协议逐项核对 |
 | Doctor | 完整配置检查和修复建议 | 部分 | 本地有 Doctor 页面，但检查项较旧 |
 | 浏览器 | Claude in Chrome GA、Desktop 内置浏览器 | 外部依赖 | 本地工具不能等同于官方浏览器集成和登录态共享 |
-| Artifact | 官方托管、实时更新和分享页面 | 部分/外部依赖 | 本地有 Artifact 工具，托管能力依赖服务端 |
 | Desktop | Windows、macOS、Linux Desktop | 外部依赖 | 不属于当前 CLI 仓库的直接开发目标 |
 | 性能稳定性 | 持续优化 CPU、内存、网络重试、后台服务 | 部分 | 本地混合多个逆向版本，缺少完整回归保障 |
 | 语音 | 官方仍保留语音相关能力 | 主动移除 | 本项目明确不再维护语音功能 |
@@ -110,9 +108,9 @@
 5. 新模型必须同时补齐模型 ID、上下文、推理参数、价格、显示名称和兼容能力判断。
 6. 保持语音功能移除状态，除非后续单独立项恢复。
 7. 不在源码目录引入 `*.test.ts` 或测试框架；轻量逻辑验证统一写入 `scripts/validation`，并由现有 `bun run verify` 执行，不形成第二层验证。
-8. CLI 永远不得安装、升级、降级或替换自身；版本变更由包管理、发布系统或人工替换产物完成。插件更新属于独立能力，不得复用为 CLI 更新通道。
+8. CLI 永远不得安装、升级、降级或替换自身；版本变更由包管理、发布系统或人工替换产物完成。项目不提供远程插件安装或自动更新；本地目录插件由用户维护文件并在重启后加载，或在当前会话显式执行 `/reload-plugins`，内置插件随 CLI 产物更新。
 9. 模型能力必须在源码中显式硬编码；禁止启动时能力探测、运行时试探和名称模糊匹配。未知模型只能使用固定默认 Profile 并明确警告，不得动态猜测能力。
-10. 项目不再维护 Artifact、公共制品托管、远程 Plugin Marketplace、遥测/可观测性上报或 Anthropic 云服务接口；第三方网络能力只保留模型、微信、GitHub、搜索以及用户显式配置的 MCP、WebFetch 和 HTTP Hook 等独立功能。
+10. 项目不再维护远程 Plugin Marketplace、遥测/可观测性上报或 Anthropic 云服务接口；第三方网络能力只保留模型、微信、GitHub、搜索以及用户显式配置的 MCP、WebFetch 和 HTTP Hook 等独立功能。
 
 ## 5. 当前验证与构建基线
 
@@ -166,7 +164,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 | `shell-parsers.ts` | Bash 纯 TypeScript AST 解析与 PowerShell JSON AST 转换 | 管道、控制符、命令替换、转义分号、heredoc、cmdlet/路径/模块前缀、参数、变量、重定向 |
 | `model-diagnostics.ts` | 日志脱敏和摘要纯函数 | API Key、OAuth/JWT、URL 凭据、Prompt、截断和安全诊断字段 |
 | `themes.ts` | 本地主题解析、Palette 合并和注册表 | Dracula 固定样例、颜色格式、非法字段隔离、损坏 JSON、配置 ID、单一 Palette 来源和 base 回退 |
-| `self-update-boundary.ts` | CLI 自更新禁用边界 | 禁止根级 install/update/rollback、安装器与更新器实现及配置字段；保留插件安装/更新和 standalone 构建 |
+| `self-update-boundary.ts` | CLI 自更新禁用边界 | 禁止根级 install/update/rollback、安装器与更新器实现及配置字段，同时禁止恢复远程插件安装和自动更新；保留本地目录插件加载、手动重载和 standalone 构建 |
 | `message-utils.ts` | 消息 ID、文本协议和谓词 | 稳定 UUID、XML Tag、文本块、Thinking、Tool Call 和 Compact Boundary |
 | `session-transcript.ts` | Transcript 纯转换 | Entry/Chain 守卫、序列化字段清理、父链顺序与环检测、Agent/Teammate 投影 |
 | `hook-protocol.ts` | Hook 输出协议和匹配 | exact/pipe/regex、非法正则、去重命名空间、Shell/HTTP JSON、blocking 聚合 |
@@ -199,9 +197,8 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 状态：进行中。已完成的条目按实际验证结果标记，其余条目仍描述目标状态。
 
-目标：移除不属于独立 OpenAI-compatible CLI 核心能力的公共托管、远程市场、遥测和 Anthropic 云依赖，缩小发布包网络面、凭据面及供应链审计范围。
+目标：移除不属于独立 OpenAI-compatible CLI 核心能力的远程市场、遥测和 Anthropic 云依赖，缩小发布包网络面、凭据面及供应链审计范围。
 
-- [x] 完整移除 Artifact 能力及 Cloud Artifacts 客户端和服务端实现（2026-07-18 已删除 Artifact/ReviewArtifact Tool、`/artifacts`、`use-artifacts`、权限 UI、Prompt、客户端、Cloudflare Worker/R2 服务端、默认域名和共享 Token、TTL/公开页面及远程 Mermaid/Highlight.js 加载；未保留本地生成、上传、分享或公开 URL 替代分支。新增 `artifact-boundary.ts` 和构建产物标记扫描，防止能力、域名、环境变量和 CDN 加载被恢复；17 个 workspace 全流程及 `bun run verify --ci` 均通过，完整验证用时 113.0 秒）。
 - [x] 移除远程 Plugin Marketplace 能力（2026-07-18 已删除官方 Marketplace CDN、GitHub 安装量统计、远程浏览/添加/安装命令与 UI、Git/HTTPS 克隆和缓存、启动安装、插件推荐、自动更新及旧 Marketplace 设置 Schema；MCPB 收敛为仅加载本地 `.mcpb`/`.dxt` 文件）。`/plugin` 现仅列出本地目录和内置 Plugin，并保留本地清单校验；`--plugin-dir`、Skill、Hook、插件 MCP/LSP 配置及内置 Plugin 加载链继续保留。新增 `plugin-distribution-boundary.ts` 与构建产物标记扫描，防止远程入口、域名和下载函数恢复；17 个 workspace 全流程及 `bun run verify --ci` 全部通过，最终完整验证用时 109.5 秒。
 - [x] 移除全部遥测和可观测性上报（2026-07-18 已移除 Anthropic 1P Event Logging、BigQuery Metrics、GrowthBook 远程配置、Sentry、Datadog、Langfuse、OpenTelemetry OTLP、Beta Tracing 与本地 Perfetto 上报链；运行 Feature Flag 固化到 `scripts/feature-policy.ts`，支持 `CLAUDE_LOCAL_FEATURE_OVERRIDES` 和 `localFeatureOverrides` 显式本地覆盖。已删除相关 SDK、初始化/刷新、Provider 状态、缓存、失败队列、环境变量、退出 flush 和纯遥测启动扫描，并新增 `observability-boundary.ts` 防止依赖、环境变量和实现入口恢复；17 个 workspace、三类构建产物及 `bun run verify --ci` 全部通过，最终完整验证用时 126.6 秒）。
 - [x] 停止读取和写入 `~/.claude/telemetry` 中只服务于旧上报链的失败队列与缓存（2026-07-18 已随 exporter、instrumentation 和事件 logger 删除完成；未自动删除用户已有文件，用户可自行清理历史目录）。
@@ -209,24 +206,28 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - [x] 移除第三方 `mcp-chrome`（2026-07-19 已删除普通启动时硬编码的 `127.0.0.1:12306/mcp` 服务、固定 Bearer Token、默认禁用名单、`@claude-code-best/mcp-chrome-bridge` 生产依赖、发布安装脚本和 CI 遗留开关）。通用 MCP 客户端、用户显式配置的浏览器 MCP 以及条件启用的本地 `claude-in-chrome` 保持不变；`dependency-boundary.ts` 防止默认服务、依赖和发布脚本恢复。17 个 workspace、全部轻量边界、Bun bundle、Vite/Node bundle、Windows standalone EXE、版本和启动冒烟均通过，最终 `bun run verify -- --ci` 用时 113.9 秒。
 - [ ] 保留 `@anthropic-ai/sdk` 作为本地消息、工具、流事件和 Usage 类型兼容层，禁止清理工作把 SDK 类型引用误判为 Anthropic 网络 Provider；继续执行 `ANTHROPIC_SDK_COMPATIBILITY.md` 的边界规则。
 - [ ] 删除无调用入口或已失效的接口实现：ChatGPT `auth.openai.com`/`chatgpt.com/backend-api/codex/responses`、Anthropic 官方 MCP Registry 预取、旧国内模型供应商引导表、内部 GitHub Webhook/KAIROS 分支，以及与已移除云接口绑定的常量、设置项、Feature Flag、UI、命令和依赖。
-- [ ] 增加第三方接口边界验证，扫描禁止域名、禁止 SDK、禁止环境变量和孤立网络调用；默认构建中出现 `api.anthropic.com`、`claude.ai` 云 API、`cloud-artifacts.claude-code-best.win`、Sentry/Datadog/Langfuse/OTLP 或远程 Marketplace 调用时直接失败。文档链接若确需保留，必须与运行时网络请求白名单分开维护。
+- [ ] 增加第三方接口边界验证，扫描禁止域名、禁止 SDK、禁止环境变量和孤立网络调用；默认构建中出现 `api.anthropic.com`、`claude.ai` 云 API、Sentry/Datadog/Langfuse/OTLP 或远程 Marketplace 调用时直接失败。文档链接若确需保留，必须与运行时网络请求白名单分开维护。
 - [ ] 更新 README、依赖审计、Feature Policy、帮助文本、配置 Schema、环境变量说明和三类构建完整性检查，确保删除后的产物不再宣传或暗示上述云能力。
 
 验收标准：
 
-- `bun run verify -- --ci` 和普通 `bun run verify` 全部通过，OpenAI-compatible 模型、微信、GitHub、搜索、本地 Plugin、用户配置 MCP/WebFetch/HTTP Hook 及保留的自托管 RCS/ACP 能力不回归；CLI 帮助、工具注册表和构建产物中不存在 Artifact 能力。
+- `bun run verify -- --ci` 和普通 `bun run verify` 全部通过，OpenAI-compatible 模型、微信、GitHub、搜索、本地 Plugin、用户配置 MCP/WebFetch/HTTP Hook 及保留的自托管 RCS/ACP 能力不回归。
 - 三类构建产物不包含已禁止的域名、接口路径、客户端初始化代码或仅服务于这些能力的生产依赖；启动和退出阶段不产生遥测、Feature Flag 拉取、远程 Marketplace 或 Anthropic 云请求。
 - 未设置任何环境变量时，除显式模型请求和用户主动调用的保留工具外，CLI 不主动连接第三方服务。
-- 删除 Cloud Artifact、远程 Marketplace、遥测或 Anthropic 账号配置后，旧设置必须被安全忽略并给出一次性迁移说明，不得导致启动失败或泄露旧 Token。
+- 删除远程 Marketplace、遥测或 Anthropic 账号配置后，旧设置必须被安全忽略并给出一次性迁移说明，不得导致启动失败或泄露旧 Token。
 
 ### P0：权限、Sandbox 和 Worktree 安全
 
 目标：优先补齐最新版最重要的安全差异。
 
-- [ ] 审计 Bash、PowerShell 命令解析与权限分类。
+- [x] 审计 Bash、PowerShell 命令解析与权限分类（2026-07-19 完成源码级审计）。两条主链均遵循显式 deny 优先、无法解析时转人工审批、复杂结构不自动放行的总体方向；PowerShell 使用原生 AST，并对解析失败、动态命令名、别名/模块前缀、Unicode 参数前缀、脚本块、子表达式、Splatting、`--%`、Provider/UNC、嵌套 PowerShell、`Start-Process`、WMI/CIM、模块加载和路径变化做了专项处理。Bash 已有 Tree-sitter AST、语义检查、子命令 fanout 上限和遗留正则防线，但默认构建中 `TREE_SITTER_BASH` 仍属实验能力，实际权威路径仍是 `shell-quote`、字符串拆分和正则组合；`CLAUDE_CODE_DISABLE_COMMAND_INJECTION_CHECK` 还能关闭关键误解析检查。现有 `shell-parsers.ts` 与 `tool-permissions.ts` 只验证解析片段和规则匹配，没有调用完整 `bashToolHasPermission`/`powershellToolHasPermission` 决策链。危险 Git、文件删除、数据库和基础设施命令的多数识别当前只生成审批 UI 警告，不构成独立于 allow 规则和模式的权限约束。
+- [ ] 将 Bash Tree-sitter 权威解析路径升为稳定默认能力：先补齐与真实 Bash/Git Bash 的差分样例，覆盖解析不可用、超长、超时、节点预算、未知 AST 节点和语义拒绝；任何无法证明为简单命令的输入必须返回 `ask`，不得回落到更宽松的自动允许路径。升为稳定后删除仅用于 Shadow/GrowthBook 的分支和重复遗留解析层，保留最小故障兜底。
+- [ ] 收紧 `CLAUDE_CODE_DISABLE_COMMAND_INJECTION_CHECK`：默认和发布构建不得允许普通环境变量关闭命令注入防线；若保留诊断开关，只能让命令统一降级为 `ask`，不得跳过 AST、误解析、路径、重定向或子命令 deny 检查。
+- [ ] 将危险操作从“UI 提示”提升为权限分类约束。至少覆盖 `git reset --hard`、`git clean -f/-fd/-fdx`、`git checkout/restore -- .`、`git stash drop/clear`、`git branch -D`、强制 push、危险 `rm`/`Remove-Item`、`Clear-Disk`、`Format-Volume`、`terraform destroy`、`kubectl delete` 和无条件数据库删除；规则必须基于解析后的命令与参数，而不是仅靠展示层正则。涉及用户未明确授权的数据丢失、远端历史覆盖或系统级破坏时，即使存在宽泛 allow 规则也必须重新审批；系统根目录、用户主目录和关键配置路径继续保持硬拒绝或不可持久化审批。
+- [ ] 统一 Bash 与 PowerShell 的决策优先级为：硬安全拒绝 > 显式 deny > 不可绕过安全审批 > 显式 ask > 精确 allow > 受约束的模式/只读自动允许 > 默认 ask。复核整条命令、每个管道段、控制流/嵌套命令、包装器解包、别名/模块限定名、路径型可执行文件和解析失败降级分支，确保前序 `ask`/`allow` 不会遮蔽后续 deny，工具级 `Bash(*)`/`PowerShell(*)` 不会覆盖硬安全结果。
+- [ ] 在 `scripts/validation` 增加完整权限决策脚本，直接调用 `bashToolHasPermission` 和 `powershellToolHasPermission`，使用固定 `ToolUseContext`、规则集合、cwd 和预期 `allow`/`ask`/`deny` 判定，不引入测试框架。Bash 样例覆盖包装器、管道/控制符、命令/进程替换、变量、`eval`/`source`/嵌套 shell、heredoc、重定向、控制字符、Unicode、超过 50 个子命令、cwd 变化和符号链接；PowerShell 样例覆盖别名和模块前缀、动态调用、EncodedCommand、`Invoke-Expression`、`Start-Process`、脚本块、Splatting、Provider/UNC、Unicode dash、`--%`、变量路径、cwd 变化和链接创建。Linux 无 PowerShell 时必须验证解析失败安全降级，Windows CI 额外执行真实 PowerShell 5.1/7 AST 判定。
 - [ ] 增加 `sandbox.credentials`：阻止读取常见凭据文件和秘密环境变量。
 - [ ] 支持 `Tool(param:value)` 权限规则及通配符。
-- [ ] 对 `git reset --hard`、`git clean -fd`、`git stash drop`、`terraform destroy` 等增加上下文约束。
 - [ ] 验证 Worktree Agent 无法修改主工作区。
 - [ ] 验证符号链接、目录切换、后台命令不会绕过写入边界。
 - [ ] 跨 Session 消息默认不继承用户权限。
@@ -234,6 +235,8 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 验收标准：
 
+- 默认构建的 Bash 权限判定使用已验收的 AST 路径；解析器不可用、被攻击性输入耗尽预算或遇到未知结构时只能拒绝自动允许，不存在关闭注入检查后扩大权限的环境变量路径。
+- Bash 与 PowerShell 的固定恶意样例矩阵逐项证明 deny 优先、危险操作不可被宽泛规则静默放行、路径/重定向/嵌套命令无法绕过分类；Windows 同时验证 PowerShell 5.1 和 PowerShell 7 的真实 AST，跨平台 CI 验证无 PowerShell 时的安全降级。
 - 隔离 Agent 的 Git 写操作只能影响自己的工作树。
 - 未经明确授权，模型不能读取凭据或执行破坏性命令。
 - Bash 和 PowerShell 对相同危险操作给出一致决策。
@@ -313,14 +316,14 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 以下能力应单独评估，不作为核心兼容阻塞项：
 
-- [ ] 浏览器控制：优先采用公开 MCP/浏览器协议，不绑定官方 Chrome 私有服务。
+- [ ] 验收内置 `claude-in-chrome`：确认 `--chrome`、`CLAUDE_CODE_ENABLE_CFC=true` 和 `claudeInChromeDefaultEnabled` 三种显式入口能够在重启后加载同一套进程内 MCP；Chrome Native Messaging Host 与扩展连接成功，`/mcp` 正确显示 `claude-in-chrome` 状态，并至少完成标签页上下文读取、页面导航、点击、输入、截图和控制台日志读取。扩展未安装、Native Host 注册失败或连接断开时必须给出可定位错误并安全退出或降级，未启用时不得注册 Host、启动 MCP 或产生浏览器副作用。Bun bundle、Vite/Node bundle 和 Windows standalone EXE 均需通过启用/禁用启动冒烟；不得恢复已移除的第三方 `mcp-chrome`、固定本地 HTTP 地址或 Bridge 依赖。
 - [ ] VS Code 插件：提供会话交互、代码上下文传递、Diff 预览与权限确认，并通过稳定的公开协议连接 CLI，避免与编辑器进程内实现强耦合。
 
 ## 7. 推荐实施顺序
 
 建议按照以下顺序推进，每一阶段完成验收后再进入下一阶段：
 
-1. 第三方云接口收敛：先固化远程 Feature Flag，再移除 Artifact、远程 Marketplace、遥测、Anthropic 云接口和无调用入口残留。
+1. 第三方云接口收敛：先固化远程 Feature Flag，再移除远程 Marketplace、遥测、Anthropic 云接口和无调用入口残留。
 2. Provider 接口收敛及 Anthropic SDK 本地兼容边界复核。
 3. 核心巨石文件和 workspace 工程结构治理。
 4. 权限、Sandbox、Worktree 安全。
