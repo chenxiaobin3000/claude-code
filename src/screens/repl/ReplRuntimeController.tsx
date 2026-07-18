@@ -378,7 +378,6 @@ import { useMemorySurvey } from 'src/components/FeedbackSurvey/useMemorySurvey.j
 import { usePostCompactSurvey } from 'src/components/FeedbackSurvey/usePostCompactSurvey.js';
 import { FeedbackSurvey } from 'src/components/FeedbackSurvey/FeedbackSurvey.js';
 import { useChromeExtensionNotification } from 'src/hooks/useChromeExtensionNotification.js';
-import { useOfficialMarketplaceNotification } from 'src/hooks/useOfficialMarketplaceNotification.js';
 import { usePromptsFromClaudeInChrome } from 'src/hooks/usePromptsFromClaudeInChrome.js';
 import { getTipToShowOnSpinner, recordShownTip } from 'src/services/tips/tipScheduler.js';
 import type { Theme } from 'src/utils/theme.js';
@@ -395,10 +394,6 @@ import { useSettingsErrors } from 'src/hooks/notifs/useSettingsErrors.js';
 import { useMcpConnectivityStatus } from 'src/hooks/notifs/useMcpConnectivityStatus.js';
 import { AUTO_MODE_DESCRIPTION } from 'src/components/AutoModeOptInDialog.js';
 import { useLspInitializationNotification } from 'src/hooks/notifs/useLspInitializationNotification.js';
-import { useLspPluginRecommendation } from 'src/hooks/useLspPluginRecommendation.js';
-import { LspRecommendationMenu } from 'src/components/LspRecommendation/LspRecommendationMenu.js';
-import { useClaudeCodeHintRecommendation } from 'src/hooks/useClaudeCodeHintRecommendation.js';
-import { PluginHintMenu } from 'src/components/ClaudeCodeHint/PluginHintMenu.js';
 import { SearchExtraToolsHint } from 'src/components/SearchExtraToolsHint.js';
 import { useSearchExtraToolsHint } from 'src/hooks/useSearchExtraToolsHint.js';
 import {
@@ -406,8 +401,6 @@ import {
   shouldShowDesktopUpsellStartup,
 } from 'src/components/DesktopUpsell/DesktopUpsellStartup.js';
 import { usePluginInstallationStatus } from 'src/hooks/notifs/usePluginInstallationStatus.js';
-import { usePluginAutoupdateNotification } from 'src/hooks/notifs/usePluginAutoupdateNotification.js';
-import { performStartupChecks } from 'src/utils/plugins/performStartupChecks.js';
 import { UserTextMessage } from 'src/components/messages/UserTextMessage.js';
 import { AwsAuthStatusBox } from '../../components/AwsAuthStatusBox.js';
 import { useRateLimitWarningNotification } from 'src/hooks/notifs/useRateLimitWarningNotification.js';
@@ -679,18 +672,14 @@ export function REPL({
   useIDEStatusIndicator({ ideSelection, mcpClients, ideInstallationStatus });
   useMcpConnectivityStatus({ mcpClients });
   usePluginInstallationStatus();
-  usePluginAutoupdateNotification();
   useSettingsErrors();
   useRateLimitWarningNotification(mainLoopModel);
   useFastModeNotification();
   useDeprecationWarningNotification(mainLoopModel);
   useAntOrgWarningNotification();
   useChromeExtensionNotification();
-  useOfficialMarketplaceNotification();
   useLspInitializationNotification();
   useTeammateLifecycleNotification();
-  const { recommendation: lspRecommendation, handleResponse: handleLspResponse } = useLspPluginRecommendation();
-  const { recommendation: hintRecommendation, handleResponse: handleHintResponse } = useClaudeCodeHintRecommendation();
   const searchExtraToolsHint = useSearchExtraToolsHint();
 
   // Memoize the combined initial tools array to prevent reference changes
@@ -703,18 +692,6 @@ export function REPL({
 
   const tasksV2 = useTasksV2WithCollapseEffect();
 
-  // Start background plugin installations
-
-  // SECURITY: This code is guaranteed to run ONLY after the "trust this folder" dialog
-  // has been confirmed by the user. The trust dialog is shown in cli.tsx (line ~387)
-  // before the REPL component is rendered. The dialog blocks execution until the user
-  // accepts, and only then is the REPL component mounted and this effect runs.
-  // This ensures that plugin installations from repository and user settings only
-  // happen after explicit user consent to trust the current working directory.
-  useEffect(() => {
-    if (isRemoteSession) return;
-    void performStartupChecks(setAppState);
-  }, [setAppState, isRemoteSession]);
 
   // Allow Claude in Chrome MCP to send prompts through MCP notifications
   // and sync permission mode changes to the Chrome extension
@@ -1617,8 +1594,6 @@ export function REPL({
     undercoverCallout: showUndercoverCallout,
     effortCallout: showEffortCallout,
     remoteCallout: showRemoteCallout,
-    lspRecommendation: !!lspRecommendation,
-    pluginHint: !!hintRecommendation,
     searchExtraToolsHint: searchExtraToolsHint.visible,
     desktopUpsell: showDesktopUpsellStartup,
   });
@@ -3222,8 +3197,6 @@ export function REPL({
         handleBackgroundSession,
         handleCancelAutoRunIssue,
         handleExit,
-        handleHintResponse,
-        handleLspResponse,
         handleOpenRateLimitOptions,
         handleQueuedCommandOnCancel,
         handleRestoreMessage,
@@ -3231,7 +3204,6 @@ export function REPL({
         handleSurveyRequestFeedback,
         hasRunningTeammates,
         hasSuppressedDialogs,
-        hintRecommendation,
         ideInstallationStatus,
         ideSelection,
         idleReturnPending,
@@ -3249,7 +3221,6 @@ export function REPL({
         jumpToNew,
         loadedNestedMemoryPathsRef,
         loadingStartTimeRef,
-        lspRecommendation,
         mainLoopModel,
         mcpClients,
         memorySurvey,

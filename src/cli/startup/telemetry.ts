@@ -39,7 +39,6 @@ import {
   parseUserSpecifiedModel,
 } from '../../utils/model/model.js'
 import { getManagedPluginNames } from '../../utils/plugins/managedPlugins.js'
-import { getPluginSeedDirs } from '../../utils/plugins/pluginDirectories.js'
 import {
   getInitialSettings,
   getManagedSettingsKeysForLogging,
@@ -129,7 +128,7 @@ export function logSessionTelemetry(): void {
   void loadAllPluginsCacheOnly()
     .then(({ enabled, errors }) => {
       const managedNames = getManagedPluginNames()
-      logPluginsEnabledForSession(enabled, managedNames, getPluginSeedDirs())
+      logPluginsEnabledForSession(enabled, managedNames, [])
       logPluginLoadErrors(errors, managedNames)
     })
     .catch(err => logError(err))

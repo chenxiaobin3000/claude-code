@@ -542,7 +542,7 @@ export class QueryEngine {
     headlessProfilerCheckpoint('before_skills_plugins')
     // Cache-only: headless/SDK/CCR startup must not block on network for
     // ref-tracked plugins. CCR populates the cache via CLAUDE_CODE_SYNC_PLUGIN_INSTALL
-    // (headlessPluginInstall) or CLAUDE_CODE_PLUGIN_SEED_DIR before this runs;
+    // before this runs;
     // SDK callers that need fresh source can call /reload-plugins.
     const [skills, { enabled: enabledPlugins }] = await Promise.all([
       getSlashCommandToolSkills(getCwd()),

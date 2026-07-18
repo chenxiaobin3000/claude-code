@@ -55,8 +55,8 @@ for (const pattern of [
     )
   }
 }
-if (!/\.command\(['"]install <plugin>['"]\)/.test(subcommands)) {
-  throw new Error('[self-update-boundary] plugin install command was removed')
+if (/\.command\(['"]install <plugin>['"]\)/.test(subcommands)) {
+  throw new Error('[self-update-boundary] remote plugin install command was restored')
 }
 
 const forbiddenSourceTokens = [
@@ -80,8 +80,8 @@ for (const path of await collectFiles('src')) {
   }
 }
 
-if (!(await exists('src/utils/plugins/pluginAutoupdate.ts'))) {
-  throw new Error('[self-update-boundary] plugin autoupdate must remain available')
+if (await exists('src/utils/plugins/pluginAutoupdate.ts')) {
+  throw new Error('[self-update-boundary] remote plugin autoupdate was restored')
 }
 if (!(await exists('scripts/build-exe.ts'))) {
   throw new Error('[self-update-boundary] standalone EXE build must remain available')

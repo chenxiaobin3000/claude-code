@@ -197,12 +197,12 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 ### P0：第三方云接口收敛与遗留清理
 
-状态：已立项，尚未开发。本节描述目标状态，不代表相关源码、依赖或配置当前已经移除。
+状态：进行中。已完成的条目按实际验证结果标记，其余条目仍描述目标状态。
 
 目标：移除不属于独立 OpenAI-compatible CLI 核心能力的公共托管、远程市场、遥测和 Anthropic 云依赖，缩小发布包网络面、凭据面及供应链审计范围。
 
 - [x] 完整移除 Artifact 能力及 Cloud Artifacts 客户端和服务端实现（2026-07-18 已删除 Artifact/ReviewArtifact Tool、`/artifacts`、`use-artifacts`、权限 UI、Prompt、客户端、Cloudflare Worker/R2 服务端、默认域名和共享 Token、TTL/公开页面及远程 Mermaid/Highlight.js 加载；未保留本地生成、上传、分享或公开 URL 替代分支。新增 `artifact-boundary.ts` 和构建产物标记扫描，防止能力、域名、环境变量和 CDN 加载被恢复；17 个 workspace 全流程及 `bun run verify --ci` 均通过，完整验证用时 113.0 秒）。
-- [ ] 移除远程 Plugin Marketplace 能力，包括官方 Marketplace CDN、GitHub 安装量统计、远程 Marketplace 浏览/添加、Git/HTTPS Marketplace 克隆、MCPB 远程下载和插件自动更新；保留本地目录 Plugin、Skill、Hook、内置 Plugin 及其加载/校验能力，不把 Plugin 清理扩大为 MCP 或本地扩展体系删除。
+- [x] 移除远程 Plugin Marketplace 能力（2026-07-18 已删除官方 Marketplace CDN、GitHub 安装量统计、远程浏览/添加/安装命令与 UI、Git/HTTPS 克隆和缓存、启动安装、插件推荐、自动更新及旧 Marketplace 设置 Schema；MCPB 收敛为仅加载本地 `.mcpb`/`.dxt` 文件）。`/plugin` 现仅列出本地目录和内置 Plugin，并保留本地清单校验；`--plugin-dir`、Skill、Hook、插件 MCP/LSP 配置及内置 Plugin 加载链继续保留。新增 `plugin-distribution-boundary.ts` 与构建产物标记扫描，防止远程入口、域名和下载函数恢复；17 个 workspace 全流程及 `bun run verify --ci` 全部通过，最终完整验证用时 109.5 秒。
 - [ ] 移除全部遥测和可观测性上报：Anthropic 1P Event Logging、BigQuery Metrics、GrowthBook 远程配置、Sentry、Datadog、Langfuse、OpenTelemetry OTLP 和 Beta Tracing；先把影响运行行为的远程 Feature Flag 固化到 `scripts/feature-policy.ts` 或本地显式配置，再删除 SDK、初始化、刷新、缓存、失败队列、环境变量和关闭/flush 路径。
 - [ ] 清理 `~/.claude/telemetry` 中只服务于已移除上报链的失败队列与缓存读取逻辑；不得自动删除用户已有文件，迁移只停止读取和新增写入，并在发布说明中说明可由用户自行清理。
 - [ ] 移除全部 Anthropic 云服务接口，包括事件日志、指标与组织开关、Feedback/Transcript Share、Public Files API、Claude Remote Control/Bridge、Remote Trigger、Trusted Device、Claude OAuth/API Key/角色接口和依赖 Claude 账号的推送/附件链路；自托管 RCS/ACP 若不依赖 Anthropic 域名、Claude OAuth 或服务端下发凭据，可作为独立能力保留并单独验证。

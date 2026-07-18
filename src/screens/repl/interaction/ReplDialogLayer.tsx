@@ -60,8 +60,6 @@ import { RemoteCallout } from '../../../components/RemoteCallout.js';
 import { createAbortController } from '../../../utils/abortController.js';
 import { SandboxManager } from 'src/utils/sandbox/sandbox-adapter.js';
 import { SandboxPermissionRequest } from 'src/components/permissions/SandboxPermissionRequest.js';
-import { LspRecommendationMenu } from 'src/components/LspRecommendation/LspRecommendationMenu.js';
-import { PluginHintMenu } from 'src/components/ClaudeCodeHint/PluginHintMenu.js';
 import { SearchExtraToolsHint } from 'src/components/SearchExtraToolsHint.js';
 import {
   DesktopUpsellStartup,
@@ -83,13 +81,9 @@ export function ReplDialogLayer({ state }: { state: ReplViewState }): ReactNode 
     exitFlow,
     focusedInputDialog,
     haikuTitleAttemptedRef,
-    handleHintResponse,
-    handleLspResponse,
-    hintRecommendation,
     ideInstallationStatus,
     idleReturnPending,
     loadedNestedMemoryPathsRef,
-    lspRecommendation,
     mainLoopModel,
     messagesRef,
     onSubmitRef,
@@ -428,30 +422,11 @@ export function ReplDialogLayer({ state }: { state: ReplViewState }): ReactNode 
 
       {exitFlow}
 
-      {focusedInputDialog === 'plugin-hint' && hintRecommendation && (
-        <PluginHintMenu
-          pluginName={hintRecommendation.pluginName}
-          pluginDescription={hintRecommendation.pluginDescription}
-          marketplaceName={hintRecommendation.marketplaceName}
-          sourceCommand={hintRecommendation.sourceCommand}
-          onResponse={handleHintResponse}
-        />
-      )}
-
       {focusedInputDialog === 'search-extra-tools-hint' && searchExtraToolsHint.visible && (
         <SearchExtraToolsHint
           tools={searchExtraToolsHint.tools}
           onSelect={searchExtraToolsHint.handleSelect}
           onDismiss={searchExtraToolsHint.handleDismiss}
-        />
-      )}
-
-      {focusedInputDialog === 'lsp-recommendation' && lspRecommendation && (
-        <LspRecommendationMenu
-          pluginName={lspRecommendation.pluginName}
-          pluginDescription={lspRecommendation.pluginDescription}
-          fileExtension={lspRecommendation.fileExtension}
-          onResponse={handleLspResponse}
         />
       )}
 

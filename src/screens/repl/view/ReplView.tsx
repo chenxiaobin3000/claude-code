@@ -113,8 +113,6 @@ import { MCPConnectionManager } from 'src/services/mcp/MCPConnectionManager.js';
 import { FeedbackSurvey } from 'src/components/FeedbackSurvey/FeedbackSurvey.js';
 import { SandboxManager } from 'src/utils/sandbox/sandbox-adapter.js';
 import { SandboxPermissionRequest } from 'src/components/permissions/SandboxPermissionRequest.js';
-import { LspRecommendationMenu } from 'src/components/LspRecommendation/LspRecommendationMenu.js';
-import { PluginHintMenu } from 'src/components/ClaudeCodeHint/PluginHintMenu.js';
 import { SearchExtraToolsHint } from 'src/components/SearchExtraToolsHint.js';
 import {
   DesktopUpsellStartup,
@@ -192,8 +190,6 @@ export function ReplView({ state }: { state: ReplViewState }): React.ReactNode {
     handleBackgroundSession,
     handleCancelAutoRunIssue,
     handleExit,
-    handleHintResponse,
-    handleLspResponse,
     handleOpenRateLimitOptions,
     handleQueuedCommandOnCancel,
     handleRestoreMessage,
@@ -201,7 +197,6 @@ export function ReplView({ state }: { state: ReplViewState }): React.ReactNode {
     handleSurveyRequestFeedback,
     hasRunningTeammates,
     hasSuppressedDialogs,
-    hintRecommendation,
     ideInstallationStatus,
     ideSelection,
     idleReturnPending,
@@ -219,7 +214,6 @@ export function ReplView({ state }: { state: ReplViewState }): React.ReactNode {
     jumpToNew,
     loadedNestedMemoryPathsRef,
     loadingStartTimeRef,
-    lspRecommendation,
     mainLoopModel,
     mcpClients,
     memorySurvey,

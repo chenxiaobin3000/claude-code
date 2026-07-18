@@ -1,5 +1,4 @@
 import type { McpbManifestAny as McpbManifest } from '@anthropic-ai/mcpb'
-import axios from 'axios'
 import { createHash } from 'crypto'
 import { chmod, writeFile } from 'fs/promises'
 import { dirname, join } from 'path'
@@ -17,7 +16,6 @@ import {
 } from '../settings/settings.js'
 import { jsonParse, jsonStringify } from '../slowOperations.js'
 import { getSystemDirectories } from '../systemDirectories.js'
-import { classifyFetchError, logPluginFetch } from './fetchTelemetry.js'
 
 /** DXT / MCPB `user_config` 中单字段的 JSON Schema 式描述（校验见 `validateUserConfig`）。 */
 export type McpbUserConfigurationOption = {
@@ -93,10 +91,6 @@ export function isMcpbSource(source: string): boolean {
 /**
  * Check if a source is a URL
  */
-function isUrl(source: string): boolean {
-  return source.startsWith('http://') || source.startsWith('https://')
-}
-
 /**
  * Generate content hash for an MCPB file
  */
@@ -487,71 +481,6 @@ async function saveCacheMetadata(
 }
 
 /**
- * Download MCPB file from URL
- */
-async function downloadMcpb(
-  url: string,
-  destPath: string,
-  onProgress?: ProgressCallback,
-): Promise<Uint8Array> {
-  logForDebugging(`Downloading MCPB from ${url}`)
-  if (onProgress) {
-    onProgress(`Downloading ${url}...`)
-  }
-
-  const started = performance.now()
-  let fetchTelemetryFired = false
-  try {
-    const response = await axios.get(url, {
-      timeout: 120000, // 2 minute timeout
-      responseType: 'arraybuffer',
-      maxRedirects: 5, // Follow redirects (like curl -L)
-      onDownloadProgress: progressEvent => {
-        if (progressEvent.total && onProgress) {
-          const percent = Math.round(
-            (progressEvent.loaded / progressEvent.total) * 100,
-          )
-          onProgress(`Downloading... ${percent}%`)
-        }
-      },
-    })
-
-    const data = new Uint8Array(response.data)
-    // Fire telemetry before writeFile — the event measures the network
-    // fetch, not disk I/O. A writeFile EACCES would otherwise match
-    // classifyFetchError's /permission denied/ → misreport as auth.
-    logPluginFetch('mcpb', url, 'success', performance.now() - started)
-    fetchTelemetryFired = true
-
-    // Save to disk (binary data)
-    await writeFile(destPath, Buffer.from(data))
-
-    logForDebugging(`Downloaded ${data.length} bytes to ${destPath}`)
-    if (onProgress) {
-      onProgress('Download complete')
-    }
-
-    return data
-  } catch (error) {
-    if (!fetchTelemetryFired) {
-      logPluginFetch(
-        'mcpb',
-        url,
-        'failure',
-        performance.now() - started,
-        classifyFetchError(error),
-      )
-    }
-    const errorMsg = errorMessage(error)
-    const fullError = new Error(
-      `Failed to download MCPB file from ${url}: ${errorMsg}`,
-    )
-    logError(fullError)
-    throw fullError
-  }
-}
-
-/**
  * Extract MCPB file and write contents to extraction directory.
  *
  * @param modes - name→mode map from `parseZipModes`. MCPB bundles can ship
@@ -658,47 +587,27 @@ export async function checkMcpbChanged(
     return true
   }
 
-  // For local files, check mtime
-  if (!isUrl(source)) {
-    const localPath = join(pluginPath, source)
-    let stats
-    try {
-      stats = await fs.stat(localPath)
-    } catch (error) {
-      const code = getErrnoCode(error)
-      if (code === 'ENOENT') {
-        logForDebugging(`MCPB source file missing: ${localPath}`)
-      } else {
-        logForDebugging(
-          `MCPB source file inaccessible: ${localPath}: ${error}`,
-          { level: 'error' },
-        )
-      }
-      return true
-    }
-
-    const cachedTime = new Date(metadata.cachedAt).getTime()
-    // Floor to match the ms precision of cachedAt (ISO string). Sub-ms
-    // precision on mtimeMs would make a freshly-cached file appear "newer"
-    // than its own cache timestamp when both happen in the same millisecond.
-    const fileTime = Math.floor(stats.mtimeMs)
-
-    if (fileTime > cachedTime) {
-      logForDebugging(
-        `MCPB file modified: ${new Date(fileTime)} > ${new Date(cachedTime)}`,
-      )
-      return true
-    }
+  const localPath = join(pluginPath, source)
+  let stats
+  try {
+    stats = await fs.stat(localPath)
+  } catch (error) {
+    const code = getErrnoCode(error)
+    logForDebugging(
+      code === 'ENOENT'
+        ? `MCPB source file missing: ${localPath}`
+        : `MCPB source file inaccessible: ${localPath}: ${error}`,
+      { level: code === 'ENOENT' ? 'warn' : 'error' },
+    )
+    return true
   }
-
-  // For URLs, we'll re-check on explicit update (handled elsewhere)
-  return false
+  return Math.floor(stats.mtimeMs) > new Date(metadata.cachedAt).getTime()
 }
 
 /**
  * Load and extract an MCPB file, with caching and user configuration support
  *
- * @param source - MCPB file path or URL
+ * @param source - Local MCPB file path, relative to the plugin directory
  * @param pluginPath - Plugin directory path
  * @param pluginId - Plugin identifier in "plugin@marketplace" format (for config storage)
  * @param onProgress - Progress callback
@@ -808,16 +717,11 @@ export async function loadMcpbFile(
   let mcpbData: Uint8Array
   let mcpbFilePath: string
 
-  if (isUrl(source)) {
-    // Download from URL
-    const sourceHash = createHash('md5')
-      .update(source)
-      .digest('hex')
-      .substring(0, 8)
-    mcpbFilePath = join(cacheDir, `${sourceHash}.mcpb`)
-    mcpbData = await downloadMcpb(source, mcpbFilePath, onProgress)
-  } else {
-    // Load from local path
+  if (/^https?:\/\//i.test(source)) {
+    throw new Error('Remote MCPB downloads are disabled; use a local .mcpb or .dxt file')
+  }
+  {
+    // Load from a local path only.
     const localPath = join(pluginPath, source)
 
     if (onProgress) {

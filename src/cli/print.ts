@@ -6,7 +6,6 @@ import {
   downloadUserSettings,
   redownloadUserSettings,
 } from 'src/services/settingsSync/index.js'
-import { waitForRemoteManagedSettingsToLoad } from 'src/services/remoteManagedSettings/index.js'
 import { StructuredIO } from 'src/cli/structuredIO.js'
 import { RemoteIO } from 'src/cli/remoteIO.js'
 import {
@@ -335,7 +334,6 @@ import {
   isEnvTruthy,
   isEnvDefinedFalsy,
 } from '../utils/envUtils.js'
-import { installPluginsForHeadless } from '../utils/plugins/headlessPluginInstall.js'
 import { refreshActivePlugins } from '../utils/plugins/refresh.js'
 import { loadAllPluginsCacheOnly } from '../utils/plugins/pluginLoader.js'
 import {
@@ -1730,49 +1728,6 @@ function runHeadlessStreaming(
     }) as McpServerStatus[]
   }
 
-  // NOTE: Nested function required - needs closure access to applyMcpServerChanges and updateSdkMcp
-  async function installPluginsAndApplyMcpInBackground(): Promise<void> {
-    try {
-      // Join point for user settings (fired at runHeadless entry) and managed
-      // settings (fired in main.tsx preAction). downloadUserSettings() caches
-      // its promise so this awaits the same in-flight request.
-      await Promise.all([
-        feature('DOWNLOAD_USER_SETTINGS') &&
-        (isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) || getIsRemoteMode())
-          ? withDiagnosticsTiming('headless_user_settings_download', () =>
-              downloadUserSettings(),
-            )
-          : Promise.resolve(),
-        withDiagnosticsTiming('headless_managed_settings_wait', () =>
-          waitForRemoteManagedSettingsToLoad(),
-        ),
-      ])
-
-      const pluginsInstalled = await installPluginsForHeadless()
-
-      if (pluginsInstalled) {
-        await applyPluginMcpDiff()
-      }
-    } catch (error) {
-      logError(error)
-    }
-  }
-
-  // Background plugin installation for all headless users
-  // Installs marketplaces from extraKnownMarketplaces and missing enabled plugins
-  // CLAUDE_CODE_SYNC_PLUGIN_INSTALL=true: resolved in run() before the first
-  // query so plugins are guaranteed available on the first ask().
-  let pluginInstallPromise: Promise<void> | null = null
-  // --bare / SIMPLE: skip plugin install. Scripted calls don't add plugins
-  // mid-session; the next interactive run reconciles.
-  if (!isBareMode()) {
-    if (isEnvTruthy(process.env.CLAUDE_CODE_SYNC_PLUGIN_INSTALL)) {
-      pluginInstallPromise = installPluginsAndApplyMcpInBackground()
-    } else {
-      void installPluginsAndApplyMcpInBackground()
-    }
-  }
-
   // Idle timeout management
   const idleTimeout = createIdleTimeoutManager(() => !running)
 
@@ -1926,44 +1881,6 @@ function runHeadlessStreaming(
     await updateSdkMcp()
     headlessProfilerCheckpoint('after_updateSdkMcp')
 
-    // Resolve deferred plugin installation (CLAUDE_CODE_SYNC_PLUGIN_INSTALL).
-    // The promise was started eagerly so installation overlaps with other init.
-    // Awaiting here guarantees plugins are available before the first ask().
-    // If CLAUDE_CODE_SYNC_PLUGIN_INSTALL_TIMEOUT_MS is set, races against that
-    // deadline and proceeds without plugins on timeout (logging an error).
-    if (pluginInstallPromise) {
-      const timeoutMs = parseInt(
-        process.env.CLAUDE_CODE_SYNC_PLUGIN_INSTALL_TIMEOUT_MS || '',
-        10,
-      )
-      if (timeoutMs > 0) {
-        const timeout = sleep(timeoutMs).then(() => 'timeout' as const)
-        const result = await Promise.race([pluginInstallPromise, timeout])
-        if (result === 'timeout') {
-          logError(
-            new Error(
-              `CLAUDE_CODE_SYNC_PLUGIN_INSTALL: plugin installation timed out after ${timeoutMs}ms`,
-            ),
-          )
-          logEvent('tengu_sync_plugin_install_timeout', {
-            timeout_ms: timeoutMs,
-          })
-        }
-      } else {
-        await pluginInstallPromise
-      }
-      pluginInstallPromise = null
-
-      // Refresh commands, agents, and hooks now that plugins are installed
-      await refreshPluginState()
-
-      // Set up hot-reload for plugin hooks now that the initial install is done.
-      // In sync-install mode, setup.ts skips this to avoid racing with the install.
-      const { setupPluginHookHotReload } = await import(
-        '../utils/plugins/loadPluginHooks.js'
-      )
-      setupPluginHookHotReload()
-    }
 
     // Only main-thread commands (agentId===undefined) — subagent
     // notifications are drained by the subagent's mid-turn gate in query.ts.

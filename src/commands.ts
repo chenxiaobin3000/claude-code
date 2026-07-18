@@ -148,8 +148,6 @@ const goalCmd = feature('GOAL')
     ).default
   : null
 /* eslint-enable @typescript-eslint/no-require-imports */
-import thinkback from './commands/thinkback/index.js'
-import thinkbackPlay from './commands/thinkback-play/index.js'
 import permissions from './commands/permissions/index.js'
 import plan from './commands/plan/index.js'
 import passes from './commands/passes/index.js'
@@ -328,8 +326,6 @@ const COMMANDS = memoize((): Command[] => [
   ...(assistantCommand ? [assistantCommand] : []),
   ...(bridge ? [bridge] : []),
   ...(remoteControlServerCommand ? [remoteControlServerCommand] : []),
-  thinkback,
-  thinkbackPlay,
   permissions,
   plan,
   privacySettings,

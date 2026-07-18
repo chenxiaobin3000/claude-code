@@ -91,7 +91,7 @@ Set \`commit\` or \`pr\` to empty string \`""\` to hide that attribution.
   }
 }
 \`\`\`
-Plugin syntax: \`plugin-name@source\` where source is \`claude-code-marketplace\`, \`claude-plugins-official\`, or \`builtin\`.
+Only built-in plugins may be enabled in settings. Load directory plugins explicitly with \`--plugin-dir <path>\`.
 
 ### Other Settings
 - \`language\`: Preferred response language (e.g., "japanese")

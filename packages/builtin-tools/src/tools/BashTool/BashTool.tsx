@@ -25,7 +25,6 @@ import type { AgentId } from 'src/types/ids.js';
 import type { AssistantMessage } from 'src/types/message.js';
 import { parseForSecurity } from 'src/utils/bash/ast.js';
 import { splitCommand_DEPRECATED, splitCommandWithOperators } from 'src/utils/bash/commands.js';
-import { extractClaudeCodeHints } from 'src/utils/claudeCodeHints.js';
 import { detectCodeIndexingFromCommand } from 'src/utils/codeIndexing.js';
 import { isEnvTruthy } from 'src/utils/envUtils.js';
 import { isENOENT, ShellError } from 'src/utils/errors.js';
@@ -36,7 +35,6 @@ import { getFsImplementation } from 'src/utils/fsOperations.js';
 import { lazySchema } from 'src/utils/lazySchema.js';
 import { expandPath } from 'src/utils/path.js';
 import type { PermissionResult } from 'src/utils/permissions/PermissionResult.js';
-import { maybeRecordPluginHint } from 'src/utils/plugins/hintRecommendation.js';
 import { exec } from 'src/utils/Shell.js';
 import type { ExecResult } from 'src/utils/ShellCommand.js';
 import { SandboxManager } from 'src/utils/sandbox/sandbox-adapter.js';
@@ -921,14 +919,6 @@ export const BashTool = buildTool({
     // `<claude-code-hint />` tag to stderr (merged into stdout here). Scan,
     // record for useClaudeCodeHintRecommendation to surface, then strip
     // so the model never sees the tag — a zero-token side channel.
-    // Stripping runs unconditionally (subagent output must stay clean too);
-    // only the dialog recording is main-thread-only.
-    const extracted = extractClaudeCodeHints(strippedStdout, input.command);
-    strippedStdout = extracted.stripped;
-    if (isMainThread && extracted.hints.length > 0) {
-      for (const hint of extracted.hints) maybeRecordPluginHint(hint);
-    }
-
     let isImage = isImageOutput(strippedStdout);
 
     // Cap image dimensions + size if present (CC-304 — see

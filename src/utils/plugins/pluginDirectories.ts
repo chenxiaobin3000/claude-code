@@ -11,7 +11,7 @@
 
 import { mkdirSync } from 'fs'
 import { readdir, rm, stat } from 'fs/promises'
-import { delimiter, join } from 'path'
+import { join } from 'path'
 import { getUseCoworkPlugins } from '../../bootstrap/state.js'
 import { logForDebugging } from '../debug.js'
 import { getClaudeConfigHomeDir, isEnvTruthy } from '../envUtils.js'
@@ -60,33 +60,6 @@ export function getPluginsDirectory(): string {
     return expandTilde(envOverride)
   }
   return join(getClaudeConfigHomeDir(), getPluginsDirectoryName())
-}
-
-/**
- * Get the read-only plugin seed directories, if configured.
- *
- * Customers can pre-bake a populated plugins directory into their container
- * image and point CLAUDE_CODE_PLUGIN_SEED_DIR at it. CC will use it as a
- * read-only fallback layer under the primary plugins directory — marketplaces
- * and plugin caches found in the seed are used in place without re-cloning.
- *
- * Multiple seed directories can be layered using the platform path delimiter
- * (':' on Unix, ';' on Windows), in PATH-like precedence order — the first
- * seed that contains a given marketplace or plugin cache wins.
- *
- * Seed structure mirrors the primary plugins directory:
- *   $CLAUDE_CODE_PLUGIN_SEED_DIR/
- *     known_marketplaces.json
- *     marketplaces/<name>/...
- *     cache/<marketplace>/<plugin>/<version>/...
- *
- * @returns Absolute paths to seed dirs in precedence order (empty if unset)
- */
-export function getPluginSeedDirs(): string[] {
-  // Same tilde-expansion rationale as getPluginsDirectory (gh-30794).
-  const raw = process.env.CLAUDE_CODE_PLUGIN_SEED_DIR
-  if (!raw) return []
-  return raw.split(delimiter).filter(Boolean).map(expandTilde)
 }
 
 function sanitizePluginId(pluginId: string): string {

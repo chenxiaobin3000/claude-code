@@ -18,8 +18,6 @@ import { getPluginCommands } from '../utils/plugins/loadPluginCommands.js'
 import { loadPluginHooks } from '../utils/plugins/loadPluginHooks.js'
 import { loadPluginLspServers } from '../utils/plugins/lspPluginIntegration.js'
 import { loadPluginMcpServers } from '../utils/plugins/mcpPluginIntegration.js'
-import { detectAndUninstallDelistedPlugins } from '../utils/plugins/pluginBlocklist.js'
-import { getFlaggedPlugins } from '../utils/plugins/pluginFlagging.js'
 import { loadAllPlugins } from '../utils/plugins/pluginLoader.js'
 import type { PluginLoadResult } from '../types/plugin.js'
 
@@ -54,20 +52,6 @@ export function useManagePlugins({
       // Load all plugins - capture errors array
       const { enabled, disabled, errors }: PluginLoadResult =
         await loadAllPlugins()
-
-      // Detect delisted plugins, auto-uninstall them, and record as flagged.
-      await detectAndUninstallDelistedPlugins()
-
-      // Notify if there are flagged plugins pending dismissal
-      const flagged = getFlaggedPlugins()
-      if (Object.keys(flagged).length > 0) {
-        addNotification({
-          key: 'plugin-delisted-flagged',
-          text: 'Plugins flagged. Check /plugins',
-          color: 'warning',
-          priority: 'high',
-        })
-      }
 
       // Load commands, agents, and hooks with individual error handling
       // Errors are added to the errors array for user visibility in Doctor UI

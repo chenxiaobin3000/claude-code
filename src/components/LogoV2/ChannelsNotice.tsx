@@ -10,7 +10,7 @@ import { type ChannelEntry, getAllowedChannels, getHasDevChannels } from '../../
 import { getBuiltinPlugins } from '../../plugins/builtinPlugins.js';
 import { Box, Text } from '@anthropic/ink';
 import { getMcpConfigsByScope } from '../../services/mcp/config.js';
-import { loadInstalledPluginsV2 } from '../../utils/plugins/installedPluginsManager.js';
+import { getInlinePlugins } from '../../bootstrap/state.js';
 
 export function ChannelsNotice(): React.ReactNode {
   // Snapshot all reads at mount. This notice enters scrollback immediately
@@ -90,12 +90,11 @@ export function findUnmatched(entries: readonly ChannelEntry[], deps?: FindUnmat
       return names;
     })();
 
-  // Plugin-kind installed check: installed_plugins.json keys are
-  // `name@marketplace`. loadInstalledPluginsV2 is cached.
+  // Plugin-kind checks are limited to built-ins and explicitly supplied local directories.
   const installedPluginIds =
     deps?.installedPluginIds ??
     (() => {
-      const ids = new Set(Object.keys(loadInstalledPluginsV2().plugins));
+      const ids = new Set(getInlinePlugins().map(path => `${path}@inline`));
       const builtinPlugins = getBuiltinPlugins();
       for (const plugin of [...builtinPlugins.enabled, ...builtinPlugins.disabled]) {
         ids.add(plugin.source);

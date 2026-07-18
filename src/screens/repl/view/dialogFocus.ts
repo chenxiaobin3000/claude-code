@@ -14,8 +14,6 @@ export type FocusedInputDialog =
   | 'undercover-callout'
   | 'effort-callout'
   | 'remote-callout'
-  | 'lsp-recommendation'
-  | 'plugin-hint'
   | 'search-extra-tools-hint'
   | 'desktop-upsell'
   | 'ultraplan-choice'
@@ -42,8 +40,6 @@ type DialogAvailability = {
   undercoverCallout: boolean
   effortCallout: boolean
   remoteCallout: boolean
-  lspRecommendation: boolean
-  pluginHint: boolean
   searchExtraToolsHint: boolean
   desktopUpsell: boolean
 }
@@ -73,8 +69,6 @@ export function selectFocusedInputDialog(
     return 'undercover-callout'
   if (state.effortCallout) return 'effort-callout'
   if (state.remoteCallout) return 'remote-callout'
-  if (state.lspRecommendation) return 'lsp-recommendation'
-  if (state.pluginHint) return 'plugin-hint'
   if (state.searchExtraToolsHint) return 'search-extra-tools-hint'
   if (state.desktopUpsell) return 'desktop-upsell'
   return undefined

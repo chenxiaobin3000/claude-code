@@ -32,7 +32,6 @@ import { getPluginCommands } from './loadPluginCommands.js'
 import { loadPluginHooks } from './loadPluginHooks.js'
 import { loadPluginLspServers } from './lspPluginIntegration.js'
 import { loadPluginMcpServers } from './mcpPluginIntegration.js'
-import { clearPluginCacheExclusions } from './orphanedPluginFilter.js'
 import { loadAllPlugins } from './pluginLoader.js'
 
 type SetAppState = (updater: (prev: AppState) => AppState) => void
@@ -74,9 +73,6 @@ export async function refreshActivePlugins(
 ): Promise<RefreshActivePluginsResult> {
   logForDebugging('refreshActivePlugins: clearing all plugin caches')
   clearAllCaches()
-  // Orphan exclusions are session-frozen by default, but /reload-plugins is
-  // an explicit "disk changed, re-read it" signal — recompute them too.
-  clearPluginCacheExclusions()
 
   // Sequence the full load before cache-only consumers. Before #23693 all
   // three shared loadAllPlugins()'s memoize promise so Promise.all was a

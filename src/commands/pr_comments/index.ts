@@ -4,8 +4,6 @@ export default createMovedToPluginCommand({
   name: 'pr-comments',
   description: 'Get comments from a GitHub pull request',
   progressMessage: 'fetching PR comments',
-  pluginName: 'pr-comments',
-  pluginCommand: 'pr-comments',
   async getPromptWhileMarketplaceIsPrivate(args) {
     return [
       {

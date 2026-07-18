@@ -167,9 +167,6 @@ import {
   stripDangerousPermissionsForAutoMode,
   verifyAutoModeGateAccess,
 } from '../../utils/permissions/permissionSetup.js';
-import { cleanupOrphanedPluginVersionsInBackground } from '../../utils/plugins/cacheUtils.js';
-import { initializeVersionedPlugins } from '../../utils/plugins/installedPluginsManager.js';
-import { getGlobExclusionsForPluginCache } from '../../utils/plugins/orphanedPluginFilter.js';
 import { processSessionStartHooks, processSetupHooks } from '../../utils/sessionStart.js';
 import {
   cacheSessionTitle,
@@ -1933,33 +1930,6 @@ export async function runDefaultMode(
   });
 
   // Initialize versioned plugins system (triggers V1→V2 migration if
-  // needed). Then run orphan GC, THEN warm the Grep/Glob exclusion cache.
-  // Sequencing matters: the warmup scans disk for .orphaned_at markers,
-  // so it must see the GC's Pass 1 (remove markers from reinstalled
-  // versions) and Pass 2 (stamp unmarked orphans) already applied. The
-  // warm also lands before autoupdate (fires on first submit in REPL)
-  // can orphan this session's active version underneath us.
-  // --bare / SIMPLE: skip plugin version sync + orphan cleanup. These
-  // are install/upgrade bookkeeping that scripted calls don't need —
-  // the next interactive session will reconcile. The await here was
-  // blocking -p on a marketplace round-trip.
-  if (isBareMode()) {
-    // skip — no-op
-  } else if (isNonInteractiveSession) {
-    // In headless mode, await to ensure plugin sync completes before CLI exits
-    await initializeVersionedPlugins();
-    profileCheckpoint('action_after_plugins_init');
-    void cleanupOrphanedPluginVersionsInBackground().then(() => getGlobExclusionsForPluginCache());
-  } else {
-    // In interactive mode, fire-and-forget — this is purely bookkeeping
-    // that doesn't affect runtime behavior of the current session
-    void initializeVersionedPlugins().then(async () => {
-      profileCheckpoint('action_after_plugins_init');
-      await cleanupOrphanedPluginVersionsInBackground();
-      void getGlobExclusionsForPluginCache();
-    });
-  }
-
   const setupTrigger = initOnly || init ? 'init' : maintenance ? 'maintenance' : null;
   if (initOnly) {
     applyConfigEnvironmentVariables();

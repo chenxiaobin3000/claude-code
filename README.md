@@ -44,10 +44,9 @@
 ### 扩展与集成
 
 - MCP 客户端、资源读取、工具调用与 OAuth
-- 插件、Skill、Marketplace 和动态加载
+- 本地目录 Plugin、内置 Plugin、Skill、Hook 和动态加载
 - Remote Control、WebSocket、SSE 与 SSH
 - Chrome/Computer Use 和微信扩展
-- HTML 制品上传与远程访问
 
 ### 模型供应商
 

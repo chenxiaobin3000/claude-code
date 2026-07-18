@@ -4,7 +4,6 @@ import { SandboxSettingsSchema } from '../../entrypoints/sandboxTypes.js'
 import { isEnvTruthy } from '../envUtils.js'
 import { lazySchema } from '../lazySchema.js'
 import { PERMISSION_MODES } from '../permissions/PermissionMode.js'
-import { MarketplaceSourceSchema } from '../plugins/schemas.js'
 import { CLAUDE_CODE_SETTINGS_SCHEMA_URL } from './constants.js'
 import { PermissionRuleSchema } from './permissionValidation.js'
 
@@ -75,30 +74,6 @@ export const PermissionsSchema = lazySchema(() =>
         .describe('Additional directories to include in the permission scope'),
     })
     .passthrough(),
-)
-
-/**
- * Schema for extra marketplaces defined in repository settings
- * Same as KnownMarketplace but without lastUpdated (which is managed automatically)
- */
-export const ExtraKnownMarketplaceSchema = lazySchema(() =>
-  z.object({
-    source: MarketplaceSourceSchema().describe(
-      'Where to fetch the marketplace from',
-    ),
-    installLocation: z
-      .string()
-      .optional()
-      .describe(
-        'Local cache path where marketplace manifest is stored (auto-generated if not provided)',
-      ),
-    autoUpdate: z
-      .boolean()
-      .optional()
-      .describe(
-        'Whether to automatically update this marketplace and its installed plugins on startup',
-      ),
-  }),
 )
 
 /**
@@ -515,8 +490,7 @@ export const SettingsSchema = lazySchema(() =>
             'Array form locks specific surfaces (e.g. ["skills", "hooks"]); `true` locks all four; `false` is an explicit no-op. ' +
             'Blocked: ~/.claude/{surface}/, .claude/{surface}/ (project), settings.json hooks, .mcp.json. ' +
             'NOT blocked: managed (policySettings) sources, plugin-provided customizations. ' +
-            'Composes with strictKnownMarketplaces for end-to-end admin control — plugins gated by ' +
-            'marketplace allowlist, everything else blocked here.',
+            'Plugin-provided customizations remain subject to the local plugin loading boundary.',
         ),
       // Status line for custom status line display
       statusLine: z
@@ -545,61 +519,6 @@ export const SettingsSchema = lazySchema(() =>
         .optional()
         .describe(
           'Enabled plugins using plugin-id@marketplace-id format. Example: { "formatter@anthropic-tools": true }. Also supports extended format with version constraints.',
-        ),
-      // Extra marketplaces for this repository (usually for project settings)
-      extraKnownMarketplaces: z
-        .record(z.string(), ExtraKnownMarketplaceSchema())
-        .check(ctx => {
-          // For settings sources, key must equal source.name. diffMarketplaces
-          // looks up materialized state by dict key; addMarketplaceSource stores
-          // under marketplace.name (= source.name for settings). A mismatch means
-          // the reconciler never converges — every session: key-lookup misses →
-          // 'missing' → source-idempotency returns alreadyMaterialized but
-          // installed++ anyway → pointless cache clears. For github/git/url the
-          // name comes from a fetched marketplace.json (mismatch is expected and
-          // benign); for settings, both key and name are user-authored in the
-          // same JSON object.
-          for (const [key, entry] of Object.entries(ctx.value)) {
-            if (
-              entry.source.source === 'settings' &&
-              entry.source.name !== key
-            ) {
-              ctx.issues.push({
-                code: 'custom',
-                input: entry.source.name,
-                path: [key, 'source', 'name'],
-                message:
-                  `Settings-sourced marketplace name must match its extraKnownMarketplaces key ` +
-                  `(got key "${key}" but source.name "${entry.source.name}")`,
-              })
-            }
-          }
-        })
-        .optional()
-        .describe(
-          'Additional marketplaces to make available for this repository. Typically used in repository .claude/settings.json to ensure team members have required plugin sources.',
-        ),
-      // Enterprise strict list of allowed marketplace sources (policy settings only)
-      // When set, ONLY these exact sources can be added. Check happens BEFORE download.
-      strictKnownMarketplaces: z
-        .array(MarketplaceSourceSchema())
-        .optional()
-        .describe(
-          'Enterprise strict list of allowed marketplace sources. When set in managed settings, ' +
-            'ONLY these exact sources can be added as marketplaces. The check happens BEFORE ' +
-            'downloading, so blocked sources never touch the filesystem. ' +
-            'Note: this is a policy gate only — it does NOT register marketplaces. ' +
-            'To pre-register allowed marketplaces for users, also set extraKnownMarketplaces.',
-        ),
-      // Enterprise blocklist of marketplace sources (policy settings only)
-      // When set, these exact sources are blocked. Check happens BEFORE download.
-      blockedMarketplaces: z
-        .array(MarketplaceSourceSchema())
-        .optional()
-        .describe(
-          'Enterprise blocklist of marketplace sources. When set in managed settings, ' +
-            'these exact sources are blocked from being added as marketplaces. The check happens BEFORE ' +
-            'downloading, so blocked sources never touch the filesystem.',
         ),
       // Force a specific login method: 'claudeai' for Claude Pro/Max, 'console' for Console billing
       forceLoginMethod: z

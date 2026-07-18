@@ -166,6 +166,13 @@ async function main() {
       'use-artifacts',
       'unpkg.com/mermaid',
       'unpkg.com/@highlightjs/cdn-assets',
+      'downloads.claude.ai/claude-code-releases/plugins',
+      'plugin-installs.json',
+      'anthropics/claude-plugins-official',
+      'CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS',
+      'CLAUDE_CODE_PLUGIN_SEED_DIR',
+      'autoUpdateMarketplacesAndPluginsInBackground',
+      'installPluginsForHeadless',
     ]) {
       if (content.includes(marker)) {
         findings.push({

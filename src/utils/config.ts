@@ -476,18 +476,6 @@ export type GlobalConfig = {
 
   // Skill usage tracking for autocomplete ranking
   skillUsage?: Record<string, { usageCount: number; lastUsedAt: number }>
-  // Official marketplace auto-install tracking
-  officialMarketplaceAutoInstallAttempted?: boolean // Whether auto-install was attempted
-  officialMarketplaceAutoInstalled?: boolean // Whether auto-install succeeded
-  officialMarketplaceAutoInstallFailReason?:
-    | 'policy_blocked'
-    | 'git_unavailable'
-    | 'gcs_unavailable'
-    | 'unknown' // Reason for failure if applicable
-  officialMarketplaceAutoInstallRetryCount?: number // Number of retry attempts
-  officialMarketplaceAutoInstallLastAttemptTime?: number // Timestamp of last attempt
-  officialMarketplaceAutoInstallNextRetryTime?: number // Earliest time to retry again
-
   // Claude in Chrome settings
   hasCompletedClaudeInChromeOnboarding?: boolean // Whether Claude in Chrome onboarding has been shown
   claudeInChromeDefaultEnabled?: boolean // Whether Claude in Chrome is enabled by default (undefined means platform default)
@@ -499,22 +487,6 @@ export type GlobalConfig = {
     pairedDeviceName?: string
   }
 
-  // LSP plugin recommendation preferences
-  lspRecommendationDisabled?: boolean // Disable all LSP plugin recommendations
-  lspRecommendationNeverPlugins?: string[] // Plugin IDs to never suggest
-  lspRecommendationIgnoredCount?: number // Track ignored recommendations (stops after 5)
-
-  // Claude Code hint protocol state (<claude-code-hint /> tags from CLIs/SDKs).
-  // Nested by hint type so future types (docs, mcp, ...) slot in without new
-  // top-level keys.
-  claudeCodeHints?: {
-    // Plugin IDs the user has already been prompted for. Show-once semantics:
-    // recorded regardless of yes/no response, never re-prompted. Capped at
-    // 100 entries to bound config growth — past that, hints stop entirely.
-    plugin?: string[]
-    // User chose "don't show plugin installation hints again" from the dialog.
-    disabled?: boolean
-  }
 
   // Permission explainer configuration
   permissionExplainerEnabled?: boolean // Enable Haiku-generated explanations for permission requests (default: true)
@@ -645,9 +617,6 @@ export const GLOBAL_CONFIG_KEYS = [
   'respectGitignore',
   'claudeInChromeDefaultEnabled',
   'hasCompletedClaudeInChromeOnboarding',
-  'lspRecommendationDisabled',
-  'lspRecommendationNeverPlugins',
-  'lspRecommendationIgnoredCount',
   'copyFullResponse',
   'copyOnSelect',
   'permissionExplainerEnabled',

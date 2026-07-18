@@ -16,16 +16,7 @@ import { lazySchema } from '../lazySchema.js'
  * Official marketplace names that are reserved for Anthropic/Claude official use.
  * These names are allowed ONLY for official marketplaces and blocked for third parties.
  */
-export const ALLOWED_OFFICIAL_MARKETPLACE_NAMES = new Set([
-  'claude-code-marketplace',
-  'claude-code-plugins',
-  'claude-plugins-official',
-  'anthropic-marketplace',
-  'anthropic-plugins',
-  'agent-skills',
-  'life-sciences',
-  'knowledge-work-plugins',
-])
+export const ALLOWED_OFFICIAL_MARKETPLACE_NAMES = new Set(['builtin'])
 
 /**
  * Official marketplaces that should NOT auto-update by default.
@@ -168,23 +159,14 @@ const RelativeJSONPath = lazySchema(() => RelativePath().endsWith('.json'))
 
 /**
  * Schema for MCPB (MCP Bundle) file paths
- * Supports both local relative paths and remote URLs
+ * Only local paths relative to the plugin root are accepted.
  */
 const McpbPath = lazySchema(() =>
-  z.union([
-    RelativePath()
-      .refine(path => path.endsWith('.mcpb') || path.endsWith('.dxt'), {
-        message: 'MCPB file path must end with .mcpb or .dxt',
-      })
-      .describe('Path to MCPB file relative to plugin root'),
-    z
-      .string()
-      .url()
-      .refine(url => url.endsWith('.mcpb') || url.endsWith('.dxt'), {
-        message: 'MCPB URL must end with .mcpb or .dxt',
-      })
-      .describe('URL to MCPB file'),
-  ]),
+  RelativePath()
+    .refine(path => path.endsWith('.mcpb') || path.endsWith('.dxt'), {
+      message: 'MCPB file path must end with .mcpb or .dxt',
+    })
+    .describe('Path to MCPB file relative to plugin root'),
 )
 
 /**
@@ -546,9 +528,7 @@ const PluginManifestMcpServerSchema = lazySchema(() =>
       RelativeJSONPath().describe(
         'MCP servers to include in the plugin (in addition to those in the .mcp.json file, if it exists)',
       ),
-      McpbPath().describe(
-        'Path or URL to MCPB file containing MCP server configuration',
-      ),
+      McpbPath().describe('Local MCPB file containing MCP server configuration'),
       z
         .record(z.string(), McpServerConfigSchema())
         .describe('MCP server configurations keyed by server name'),
@@ -558,7 +538,7 @@ const PluginManifestMcpServerSchema = lazySchema(() =>
             RelativeJSONPath().describe(
               'Path to MCP servers configuration file',
             ),
-            McpbPath().describe('Path or URL to MCPB file'),
+            McpbPath().describe('Local MCPB file'),
             z
               .record(z.string(), McpServerConfigSchema())
               .describe('Inline MCP server configurations'),

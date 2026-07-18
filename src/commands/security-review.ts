@@ -200,8 +200,6 @@ export default createMovedToPluginCommand({
   description:
     'Complete a security review of the pending changes on the current branch',
   progressMessage: 'analyzing code changes for security risks',
-  pluginName: 'security-review',
-  pluginCommand: 'security-review',
   async getPromptWhileMarketplaceIsPrivate(_args, context) {
     // Parse frontmatter from the markdown
     const parsed = parseFrontmatter(SECURITY_REVIEW_MARKDOWN)

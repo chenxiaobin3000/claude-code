@@ -219,30 +219,18 @@ export function resetHotReloadState(): void {
  * `loadAllPluginsCacheOnly()` for change detection. Sorts keys so comparison is
  * deterministic regardless of insertion order.
  *
- * Hashes FOUR fields — not just enabledPlugins — because the memoized
- * loadAllPluginsCacheOnly() also reads strictKnownMarketplaces, blockedMarketplaces
- * (pluginLoader.ts:1933 via getBlockedMarketplaces), and
- * extraKnownMarketplaces. If remote managed settings set only one of
- * these (no enabledPlugins), a snapshot keyed only on enabledPlugins
- * would never diff, the listener would skip, and the memoized result
- * would retain the pre-remote marketplace allow/blocklist.
- * See #23085 / #23152 poisoned-cache discussion (Slack C09N89L3VNJ).
+ * Only enabledPlugins can affect built-in plugin state. Directory plugins are
+ * explicitly supplied for the current process with --plugin-dir.
  */
 // Exported for testing — the listener at setupPluginHookHotReload uses this
 // for change detection; tests verify it diffs on the fields that matter.
 export function getPluginAffectingSettingsSnapshot(): string {
   const merged = getSettings_DEPRECATED()
-  const policy = getSettingsForSource('policySettings')
-  // Key-sort the two Record fields so insertion order doesn't flap the hash.
-  // Array fields (strictKnownMarketplaces, blockedMarketplaces) have
-  // schema-stable order.
+  // Key-sort the record so insertion order doesn't flap the hash.
   const sortKeys = <T extends Record<string, unknown>>(o: T | undefined) =>
     o ? Object.fromEntries(Object.entries(o).sort()) : {}
   return jsonStringify({
     enabledPlugins: sortKeys(merged.enabledPlugins),
-    extraKnownMarketplaces: sortKeys(merged.extraKnownMarketplaces),
-    strictKnownMarketplaces: policy?.strictKnownMarketplaces ?? [],
-    blockedMarketplaces: policy?.blockedMarketplaces ?? [],
   })
 }
 
