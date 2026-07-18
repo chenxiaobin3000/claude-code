@@ -1,7 +1,10 @@
-import { readFile } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { readdir, readFile } from 'node:fs/promises'
+import { extname, join, relative, resolve } from 'node:path'
+import ts from 'typescript'
 
 const root = resolve(import.meta.dir, '../..')
+const sourceExtensions = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs'])
+const sdkVersion = '0.81.0'
 
 async function source(path: string): Promise<string> {
   return readFile(join(root, path), 'utf8')
@@ -11,17 +14,110 @@ function fail(message: string): never {
   throw new Error(`[sdk-compat-boundary] ${message}`)
 }
 
+async function sourceFiles(dir: string): Promise<string[]> {
+  const result: string[] = []
+  async function visit(absolute: string): Promise<void> {
+    for (const entry of await readdir(absolute, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name === 'dist') continue
+      const path = join(absolute, entry.name)
+      if (entry.isDirectory()) await visit(path)
+      else if (sourceExtensions.has(extname(entry.name))) {
+        result.push(relative(root, path).replaceAll('\\', '/'))
+      }
+    }
+  }
+  await visit(join(root, dir))
+  return result
+}
+
 const packageJson = JSON.parse(await source('package.json')) as {
   dependencies?: Record<string, string>
   devDependencies?: Record<string, string>
 }
-const sdkVersion =
+const rootSdkVersion =
   packageJson.dependencies?.['@anthropic-ai/sdk'] ??
   packageJson.devDependencies?.['@anthropic-ai/sdk']
-if (!sdkVersion) {
+if (rootSdkVersion !== sdkVersion) {
   fail(
-    '@anthropic-ai/sdk must remain available for internal compatibility types',
+    `root @anthropic-ai/sdk must be pinned to ${sdkVersion}, received ${rootSdkVersion ?? 'missing'}`,
   )
+}
+
+for (const path of [
+  'packages/@ant/model-provider/package.json',
+  'packages/workflow-engine/package.json',
+]) {
+  const manifest = JSON.parse(await source(path)) as {
+    dependencies?: Record<string, string>
+    devDependencies?: Record<string, string>
+  }
+  const version =
+    manifest.dependencies?.['@anthropic-ai/sdk'] ??
+    manifest.devDependencies?.['@anthropic-ai/sdk']
+  if (version !== sdkVersion) {
+    fail(`${path} must pin @anthropic-ai/sdk to ${sdkVersion}, received ${version ?? 'missing'}`)
+  }
+}
+
+// The SDK is a local protocol/type compatibility dependency, not a model
+// client. Most imports must be type-only. Only the explicit error-class
+// allowlist is retained for local cancellation, normalization, and retry.
+const allowedRuntimeImports = new Set([
+  'APIConnectionError',
+  'APIConnectionTimeoutError',
+  'APIError',
+  'APIUserAbortError',
+])
+const unexpectedRuntimeImports: string[] = []
+for (const path of [...(await sourceFiles('src')), ...(await sourceFiles('packages'))]) {
+  const text = await source(path)
+  const sourceFile = ts.createSourceFile(
+    path,
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  )
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      !statement.moduleSpecifier.text.startsWith('@anthropic-ai/sdk')
+    ) {
+      continue
+    }
+    const clause = statement.importClause
+    if (!clause) fail(`${path} contains a side-effect SDK import`)
+    if (clause.isTypeOnly) continue
+    const runtimeNames: string[] = []
+    if (clause.name) runtimeNames.push(`default:${clause.name.text}`)
+    if (clause.namedBindings) {
+      if (ts.isNamespaceImport(clause.namedBindings)) {
+        runtimeNames.push(`namespace:${clause.namedBindings.name.text}`)
+      } else {
+        for (const element of clause.namedBindings.elements) {
+          if (!element.isTypeOnly) {
+            runtimeNames.push(element.propertyName?.text ?? element.name.text)
+          }
+        }
+      }
+    }
+    for (const name of runtimeNames) {
+      if (!allowedRuntimeImports.has(name)) {
+        unexpectedRuntimeImports.push(`${path}:${name}`)
+      }
+    }
+  }
+  for (const pattern of [
+    /require\s*\(\s*['"]@anthropic-ai\/sdk/,
+    /await\s+import\s*\(\s*['"]@anthropic-ai\/sdk/,
+    /new\s+Anthropic\s*\(/,
+  ]) {
+    if (pattern.test(text)) fail(`${path} restores an Anthropic SDK client path: ${pattern}`)
+  }
+}
+if (unexpectedRuntimeImports.length > 0) {
+  fail(`non-whitelisted SDK runtime values: ${unexpectedRuntimeImports.join(', ')}`)
 }
 
 const requiredExports: Record<string, RegExp[]> = {

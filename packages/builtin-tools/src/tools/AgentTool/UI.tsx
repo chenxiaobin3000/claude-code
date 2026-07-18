@@ -29,7 +29,7 @@ import type { outputSchema, Progress } from './AgentTool.js';
 import { inputSchema } from './AgentTool.js';
 import { getAgentColor } from './agentColorManager.js';
 import { GENERAL_PURPOSE_AGENT } from './built-in/generalPurposeAgent.js';
-import { BetaUsage } from '@anthropic-ai/sdk/resources/beta.mjs';
+import type { BetaUsage } from '@anthropic-ai/sdk/resources/beta.mjs';
 
 const MAX_PROGRESS_MESSAGES_TO_SHOW = 3;
 

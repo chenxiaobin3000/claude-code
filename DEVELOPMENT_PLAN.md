@@ -48,7 +48,7 @@
 - 语音模式、录音、音频 NAPI Workspace 和相关二进制依赖已经移除。
 - 本地版本号与 CLI 版本已统一为 `2.1.116`，构建版本以根目录 `package.json` 为唯一来源，源码直跑入口使用相同兜底值；该版本号不代表对应的官方版本。
 - CLI 不具备自安装或自更新能力：根级 `install`、`update`、`rollback`（包括 `ccb update`）以及 native/local installer、自动更新器、版本锁和更新频道配置均已移除。版本升级只能由外部分发渠道替换产物。远程插件安装和自动更新同样已移除：本地目录插件仅通过 `--plugin-dir` 按会话加载，由用户替换文件后重启或执行 `/reload-plugins`；内置插件只能随新版 CLI 产物更新。SSH 远端部署和 standalone EXE 构建不受影响。包管理器来源检测已迁为只读 Doctor 能力；2026-07-16 执行 `bun run verify -- --ci` 全矩阵通过，耗时 120.3 秒，最终 EXE 帮助中不存在上述三个根命令。
-- Provider 调度、共享请求预处理、OpenAI 请求、流事件适配和 Usage 统计已分层到 `src/services/model`；`src/services/api/claude.ts` 仅保留兼容重导出。模型主路径固定为 OpenAI-compatible，Anthropic SDK 仅承担内部消息、工具、流事件和 Usage 类型兼容，保留范围及删除规则见 `ANTHROPIC_SDK_COMPATIBILITY.md`。Anthropic 账号及官方直连、Bedrock、Vertex 和 Foundry 专用传输与鉴权不得恢复。
+- Provider 调度、共享请求预处理、OpenAI 请求、流事件适配和 Usage 统计已分层到 `src/services/model`；`src/services/api/claude.ts` 仅保留兼容重导出。模型主路径固定为 OpenAI-compatible，Anthropic SDK 仅承担内部消息、工具、流事件和 Usage 类型兼容，保留范围及删除规则见 `ANTHROPIC_SDK_COMPATIBILITY.md`。SDK 在根包、model-provider 和 workflow-engine 中统一精确锁定为 `0.81.0`，默认只允许类型导入；运行时值仅白名单保留 `APIUserAbortError`、`APIConnectionError`、`APIConnectionTimeoutError` 和 `APIError` 四个本地错误类。`sdk-compat-boundary.ts` 使用 TypeScript AST 检查版本、关键适配器、OpenAI 调用链及运行时导入，`anthropic-boundary.ts` 独立禁止账号、凭据、域名和模型 Client，防止把 SDK 类型误判为网络 Provider。2026-07-19 `bun run verify -- --ci` 全矩阵通过（108.5 秒）；普通 `bun run verify` 使用本地 llama.cpp 的 `Qwen3.5-9B-Q6_K` 对 Bun bundle、Vite/Node bundle 和 Windows standalone EXE 完成真实单轮请求及 `Read` 工具调用（120.0 秒）。Anthropic 账号及官方直连、Bedrock、Vertex 和 Foundry 专用传输与鉴权不得恢复。
 - `src/main.tsx` 已收口为薄入口，启动阶段、参数注册、运行模式和服务初始化分别由 `src/cli/startup`、`arguments`、`modes`、`initialization` 承担。`src/screens/REPL.tsx` 同样为稳定入口，会话、输入、Agent、查询、运行时、视图和交互职责分布在 `src/screens/repl` 对应子层；入口和遗留 Runtime 均受只减不增的结构边界约束。
 - `src/utils/messages.ts`、`sessionStorage.ts`、`hooks.ts` 已收口为稳定薄入口；纯消息处理、Transcript 链与投影、Hook 匹配和输出协议分别迁入 `utils/messages/`、`utils/sessionStorage/`、`utils/hooks/`。遗留运行时编排由同目录 `*Runtime.ts` 承接并设置只减不增的行数上限，新代码必须直接引用聚焦模块。
 - 根包依赖按“发布后外部解析”与“构建时嵌入 Bundle”划分：生产依赖仅保留 `fflate`、`undici` 和 `ws`，其余源码及 workspace 输入归入 `devDependencies`；第三方 Chrome MCP bridge、默认服务配置和安装脚本已移除。完整职责与审计规则见 `DEPENDENCY_AUDIT.md`。`bun.lock` 必须纳入版本控制，并由冻结安装检查保证干净检出可复现。
@@ -204,7 +204,6 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - [x] 停止读取和写入 `~/.claude/telemetry` 中只服务于旧上报链的失败队列与缓存（2026-07-18 已随 exporter、instrumentation 和事件 logger 删除完成；未自动删除用户已有文件，用户可自行清理历史目录）。
 - [x] 移除全部 Anthropic 云服务接口（2026-07-18 已删除事件日志、指标与组织开关、Feedback/Transcript Share、Public Files API、Claude Remote Control/Bridge、Remote Trigger、Trusted Device、Claude OAuth/API Key/角色接口，以及依赖 Claude 账号的推送、附件、SSH 凭据转发和桌面云端交接链路；同时移除会话分享专用的完整请求与分类器快照保留）。本地 Chrome 仅保留 Native Messaging，自托管 RCS 改为显式 `CLAUDE_CODE_RCS_AUTH_TOKEN`，ACP 使用部署方提供的 RCS URL/Token 与本地 OpenAI-compatible Provider 配置，三者均不读取 Anthropic 域名、Claude OAuth 或服务端下发凭据。新增并接入 `anthropic-boundary.ts`，分别扫描主源码和自托管 RCS/ACP 边界；Chrome 本地注册改为显式执行，不再由依赖安装修改或校验用户注册表。17 个 workspace、全部源码边界、Bun/Node 构建、bundle 完整性和 Windows standalone EXE 均通过，最终 `bun run verify --ci` 用时 110.8 秒。
 - [x] 移除第三方 `mcp-chrome`（2026-07-19 已删除普通启动时硬编码的 `127.0.0.1:12306/mcp` 服务、固定 Bearer Token、默认禁用名单、`@claude-code-best/mcp-chrome-bridge` 生产依赖、发布安装脚本和 CI 遗留开关）。通用 MCP 客户端、用户显式配置的浏览器 MCP 以及条件启用的本地 `claude-in-chrome` 保持不变；`dependency-boundary.ts` 防止默认服务、依赖和发布脚本恢复。17 个 workspace、全部轻量边界、Bun bundle、Vite/Node bundle、Windows standalone EXE、版本和启动冒烟均通过，最终 `bun run verify -- --ci` 用时 113.9 秒。
-- [ ] 保留 `@anthropic-ai/sdk` 作为本地消息、工具、流事件和 Usage 类型兼容层，禁止清理工作把 SDK 类型引用误判为 Anthropic 网络 Provider；继续执行 `ANTHROPIC_SDK_COMPATIBILITY.md` 的边界规则。
 - [ ] 删除无调用入口或已失效的接口实现：ChatGPT `auth.openai.com`/`chatgpt.com/backend-api/codex/responses`、Anthropic 官方 MCP Registry 预取、旧国内模型供应商引导表、内部 GitHub Webhook/KAIROS 分支，以及与已移除云接口绑定的常量、设置项、Feature Flag、UI、命令和依赖。
 - [ ] 增加第三方接口边界验证，扫描禁止域名、禁止 SDK、禁止环境变量和孤立网络调用；默认构建中出现 `api.anthropic.com`、`claude.ai` 云 API、Sentry/Datadog/Langfuse/OTLP 或远程 Marketplace 调用时直接失败。文档链接若确需保留，必须与运行时网络请求白名单分开维护。
 - [ ] 更新 README、依赖审计、Feature Policy、帮助文本、配置 Schema、环境变量说明和三类构建完整性检查，确保删除后的产物不再宣传或暗示上述云能力。
@@ -324,13 +323,12 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 建议按照以下顺序推进，每一阶段完成验收后再进入下一阶段：
 
 1. 第三方云接口收敛：先固化远程 Feature Flag，再移除远程 Marketplace、遥测、Anthropic 云接口和无调用入口残留。
-2. Provider 接口收敛及 Anthropic SDK 本地兼容边界复核。
-3. 核心巨石文件和 workspace 工程结构治理。
-4. 权限、Sandbox、Worktree 安全。
-5. Safe Mode、Doctor、会话迁移。
-6. Agent 和后台任务状态统一。
-7. Hook、Plugin、Skill、MCP 本地扩展协议。
-8. 性能优化及可选产品能力。
+2. 核心巨石文件和 workspace 工程结构治理。
+3. 权限、Sandbox、Worktree 安全。
+4. Safe Mode、Doctor、会话迁移。
+5. Agent 和后台任务状态统一。
+6. Hook、Plugin、Skill、MCP 本地扩展协议。
+7. 性能优化及可选产品能力。
 
 不建议首先重写为官方原生二进制架构。该改造投入大、风险高，且不会直接解决模型协议、安全和稳定性问题。应先把当前 TypeScript 架构维护到可靠状态，再通过独立调研决定是否迁移 Rust、Go 或其他原生运行时。
 

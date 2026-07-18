@@ -79,7 +79,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.2.114",
     "@anthropic-ai/mcpb": "^2.1.2",
     "@anthropic-ai/sandbox-runtime": "^0.0.44",
-    "@anthropic-ai/sdk": "^0.81.0",
+    "@anthropic-ai/sdk": "0.81.0",
     "@anthropic/ink": "workspace:*",
     "@aws-sdk/credential-provider-node": "^3.972.36",
     "@biomejs/biome": "2.5.4",
