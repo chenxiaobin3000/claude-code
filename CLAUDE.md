@@ -29,9 +29,11 @@
 @claude-code-best/weixin:        微信集成
 @claude-code-best/workflow-engine: 工作流编排引擎
 
-# 外部包（在 packages/ 下，依赖关系见 package.json overrides）
-@ant/*:          Ant 相关工具
-@anthropic-ai/*: Anthropic SDK 和工具
+# Ant 包（在 packages/@ant/ 下）
+@ant/*:          Ant 相关工具（Chrome MCP、Computer Use 等）
+
+# Anthropic 包（外部 npm 依赖）
+@anthropic-ai/*: Anthropic SDK 和工具（外部 npm 依赖，非本地包）
 ```
 
 ## 构建系统
@@ -49,6 +51,11 @@
   - `autonomy`：自治状态查询
   - `--bg` / `--background`：后台会话快捷方式
   - `job`：模板任务
+  - `--claude-in-chrome-mcp` / `--chrome-native-host`：Chrome 集成
+  - `--computer-use-mcp`：Computer Use MCP 服务
+  - `--worktree --tmux`：工作区 tmux 模式
+  - `--update` / `--upgrade`：更新子命令
+  - `--bare`：简约模式
   - 普通路径 → `src/main.tsx`（完整 CLI 启动）
 
 ### 构建产物
@@ -74,36 +81,47 @@
 `MACRO.*` 在构建时通过 `-d` 标志注入，运行时不可变。定义在 `scripts/defines.ts` 中：
 - `MACRO.VERSION` — 来自 package.json
 - `MACRO.BUILD_TIME` — 构建时间戳
-- `MACRO.FEEDBACK_CHANNEL`、`MACRO.ISSUES_EXPLAINER` 等
+- `MACRO.ISSUES_EXPLAINER`、`MACRO.PACKAGE_URL` 等
 
 ### Feature Flags（编译时条件编译）
 
-使用 `bun:bundle` 的 `feature()` 函数实现构建时死代码消除。默认启用的功能定义在 `scripts/defines.ts` 的 `DEFAULT_BUILD_FEATURES` 中：
+使用 `bun:bundle` 的 `feature()` 函数实现构建时死代码消除。Flag 定义在 `scripts/feature-policy.ts` 的 `FEATURE_POLICY` 中，按层级（tier）分为三类：
 
-**P0 核心功能：**
-- `AGENT_TRIGGERS` — 本地 Agent 触发器（工具调用时启动子代理）
-- `ULTRATHINK` — 超深度思考模式
-- `BUILTIN_EXPLORE_PLAN_AGENTS` — 内置 Explore/Plan 子代理
-- `VERIFICATION_AGENT` — 任务完成后自动验证
-- `EXTRACT_MEMORIES` — 每次 turn 提取记忆
-- `ULTRAPLAN` — 超级规划模式
-- `WORKFLOW_SCRIPTS` — 工作流脚本
-- `COORDINATOR_MODE` — 多 worker 编排
-- `GOAL` — 持久化线程目标系统
+- **`stable`**：默认启用。可在环境变量 `FEATURE_<NAME>=0` 时关闭。
+- **`experimental`**：默认关闭。需 `FEATURE_<NAME>=1` + `ALLOW_EXPERIMENTAL_FEATURES=1` 启用。
+- **`internal`**：内部功能。需 `FEATURE_<NAME>=1` + `ALLOW_INTERNAL_FEATURES=1` 启用。
 
-**其他功能：**
-- `BUDDY` — 陪伴宠物（Squirtle Waddles）
-- `BRIDGE_MODE` / `SSH_REMOTE` — 远程控制
-- `DAEMON` / `BG_SESSIONS` — 守护进程和后台会话
+**Stable（默认启用）：**
 - `ACP` — Agent Client Protocol
-- `KAIROS` — 定时任务系统
-- `POOR` — "穷鬼模式"（减少 API 消耗）
+- `AGENT_TRIGGERS` — 本地 Agent 触发器
 - `AUTOFIX_PR` — 自动修复 PR
-- `DIRECT_CONNECT` — 直连模式（claude server / open）
+- `AWAY_SUMMARY` — 离开摘要
+- `BG_SESSIONS` — 后台会话
+- `BUDDY` — 陪伴宠物
+- `BUILTIN_EXPLORE_PLAN_AGENTS` — 内置 Explore/Plan 子代理
 - `COMMIT_ATTRIBUTION` — Git 提交归属追踪
-- `EXPERIMENTAL_SKILL_SEARCH` — 技能搜索
+- `CONNECTOR_TEXT` — 消息转换
+- `DIRECT_CONNECT` — 直连模式
+- `GOAL` — 持久化线程目标系统
+- `MONITOR_TOOL` — Monitor 工具
+- `PROMPT_CACHE_BREAK_DETECTION` — 提示缓存断裂检测
+- `SSH_REMOTE` — SSH 远程控制
+- `TEMPLATES` — 模板任务
+- `TOKEN_BUDGET` — Token 预算
+- `TRANSCRIPT_CLASSIFIER` — 转录分类
+- `ULTRATHINK` — 超深度思考模式
+- `WORKFLOW_SCRIPTS` — 工作流脚本
 
-额外功能可通过环境变量 `FEATURE_<NAME>=1` 启用。
+**Stable（默认关闭）：**
+- `AUTO_THEME` — 自动主题
+
+**Experimental：**
+- `ABLATION_BASELINE`, `AGENT_MEMORY_SNAPSHOT`, `BASH_CLASSIFIER`, `BREAK_CACHE_COMMAND`, `CACHED_MICROCOMPACT`, `COMPACTION_REMINDERS`, `CONTEXT_COLLAPSE`, `ENHANCED_TELEMETRY_BETA`, `EXPERIMENTAL_SEARCH_EXTRA_TOOLS`, `EXPERIMENTAL_SKILL_SEARCH`, `EXTRACT_MEMORIES`, `FORK_SUBAGENT`, `HISTORY_PICKER`, `HISTORY_SNIP`, `HOOK_PROMPTS`, `LODESTONE`, `MCP_RICH_OUTPUT`, `MCP_SKILLS`, `MESSAGE_ACTIONS`, `NATIVE_CLIPBOARD_IMAGE`, `NEW_INIT`, `POOR`, `POWERSHELL_AUTO_MODE`, `PROACTIVE`, `QUICK_SEARCH`, `REACTIVE_COMPACT`, `RUN_SKILL_GENERATOR`, `SKILL_IMPROVEMENT`, `SKILL_LEARNING`, `STREAMLINED_OUTPUT`, `TEAMMEM`, `TERMINAL_PANEL`, `TORCH`, `TREE_SITTER_BASH`, `ULTRAPLAN`, `UNATTENDED_RETRY`, `VERIFICATION_AGENT`, `WEB_BROWSER_TOOL`
+
+**Internal（需特殊标记）：**
+- `CHICAGO_MCP`, `COORDINATOR_MODE`, `COWORKER_TYPE_TELEMETRY`, `DAEMON`, `DUMP_SYSTEM_PROMPT`, `HARD_FAIL`, `IS_LIBC_GLIBC`, `IS_LIBC_MUSL`, `KAIROS`, `KAIROS_BRIEF`, `KAIROS_CHANNELS`, `KAIROS_GITHUB_WEBHOOKS`, `LAN_PIPES`, `MEMORY_SHAPE_TELEMETRY`, `PERFETTO_TRACING`, `PIPE_IPC`, `SHOT_STATS`, `SLOW_OPERATION_LOGGING`, `UDS_INBOX` 等
+
+额外功能可通过环境变量 `FEATURE_<NAME>=1` 启用，同时需设置对应的 `ALLOW_EXPERIMENTAL_FEATURES=1` 或 `ALLOW_INTERNAL_FEATURES=1`。
 
 ### 命令行模式
 
@@ -171,12 +189,15 @@ claude-code/
 │   ├── cli/                  # CLI 处理器
 │   ├── constants/            # 常量（提示、OAuth 等）
 │   ├── daemon/               # 守护进程
-│   ├── services/             # 服务层（API、MCP、分析等）
+│   ├── services/             # 服务层（API、MCP 等）
 │   ├── utils/                # 工具函数
 │   └── ...
 ├── packages/                 # 工作空间包
+│   ├── @claude-code-best/    # 自定义包
+│   └── @ant/                 # Ant 工具包
 ├── scripts/                  # 构建/开发/验证脚本
-│   ├── defines.ts            # MACRO 定义和功能标志
+│   ├── defines.ts            # MACRO 定义
+│   ├── feature-policy.ts     # Feature Flag 策略
 │   ├── dev.ts                # 开发服务器
 │   ├── build.ts              # 构建脚本
 │   ├── verify.ts             # 验证管道
