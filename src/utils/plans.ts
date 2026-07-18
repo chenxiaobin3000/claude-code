@@ -20,7 +20,6 @@ import { getCwd } from './cwd.js'
 import { logForDebugging } from './debug.js'
 import { getClaudeConfigHomeDir } from './envUtils.js'
 import { isENOENT } from './errors.js'
-import { getEnvironmentKind } from './filePersistence/outputsScanner.js'
 import { getFsImplementation } from './fsOperations.js'
 import { logError } from './log.js'
 import { getInitialSettings } from './settings/settings.js'
@@ -189,11 +188,6 @@ export async function copyPlanForResume(
       logError(e)
       return false
     }
-    // Only attempt recovery in remote sessions (CCR) where files don't persist
-    if (getEnvironmentKind() === null) {
-      return false
-    }
-
     logForDebugging(
       `Plan file missing during resume: ${planPath}. Attempting recovery.`,
     )
@@ -356,46 +350,3 @@ function findFileSnapshotEntry(
   return undefined
 }
 
-/**
- * Persist a snapshot of session files (plan, todos) to the transcript.
- * Called incrementally whenever these files change. Only active in remote
- * sessions (CCR) where local files don't persist between sessions.
- */
-export async function persistFileSnapshotIfRemote(): Promise<void> {
-  if (getEnvironmentKind() === null) {
-    return
-  }
-  try {
-    const snapshotFiles: { key: string; path: string; content: string }[] = []
-
-    // Snapshot plan file
-    const plan = getPlan()
-    if (plan) {
-      snapshotFiles.push({
-        key: 'plan',
-        path: getPlanFilePath(),
-        content: plan,
-      })
-    }
-
-    if (snapshotFiles.length === 0) {
-      return
-    }
-
-    const message: SystemFileSnapshotMessage = {
-      type: 'system',
-      subtype: 'file_snapshot',
-      content: 'File snapshot',
-      level: 'info',
-      isMeta: true,
-      timestamp: new Date().toISOString(),
-      uuid: randomUUID(),
-      snapshotFiles,
-    }
-
-    const { recordTranscript } = await import('./sessionStorage.js')
-    await recordTranscript([message])
-  } catch (error) {
-    logError(error)
-  }
-}

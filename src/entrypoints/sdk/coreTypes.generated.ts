@@ -483,10 +483,6 @@ export type McpHttpServerConfig = {
   [key: string]: unknown
 }
 export type McpSdkServerConfig = { type: 'sdk'; [key: string]: unknown }
-export type McpClaudeAIProxyServerConfig = {
-  type: 'claudeai-proxy'
-  [key: string]: unknown
-}
 export type McpServerStatusConfig = { [key: string]: unknown }
 export type McpSetServersResult = { [key: string]: unknown }
 export type PermissionUpdateDestination = string

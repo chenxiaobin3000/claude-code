@@ -1,5 +1,4 @@
 import { setMainLoopModelOverride } from '../bootstrap/state.js'
-import { clearApiKeyHelperCache } from '../utils/auth.js'
 import { getGlobalConfig, saveGlobalConfig } from '../utils/config.js'
 import { toError } from '../utils/errors.js'
 import { logError } from '../utils/log.js'
@@ -28,9 +27,6 @@ export function externalMetadataToAppState(
             mode: permissionModeFromString(metadata.permission_mode),
           },
         }
-      : {}),
-    ...(typeof metadata.is_ultraplan_mode === 'boolean'
-      ? { isUltraplanMode: metadata.is_ultraplan_mode }
       : {}),
   })
 }
@@ -69,18 +65,8 @@ export function onChangeAppState({
     const prevExternal = toExternalPermissionMode(prevMode)
     const newExternal = toExternalPermissionMode(newMode)
     if (prevExternal !== newExternal) {
-      // Ultraplan = first plan cycle only. The initial control_request
-      // sets mode and isUltraplanMode atomically, so the flag's
-      // transition gates it. null per RFC 7396 (removes the key).
-      const isUltraplan =
-        newExternal === 'plan' &&
-        newState.isUltraplanMode &&
-        !oldState.isUltraplanMode
-          ? true
-          : null
       notifySessionMetadataChanged({
         permission_mode: newExternal,
-        is_ultraplan_mode: isUltraplan,
       })
     }
     notifyPermissionModeChanged(newMode)
@@ -137,8 +123,6 @@ export function onChangeAppState({
   // Clear the remaining helper cache when settings change.
   if (newState.settings !== oldState.settings) {
     try {
-      clearApiKeyHelperCache()
-
       // Re-apply environment variables when settings.env changes
       // This is additive-only: new vars are added, existing may be overwritten, nothing is deleted
       if (newState.settings.env !== oldState.settings.env) {

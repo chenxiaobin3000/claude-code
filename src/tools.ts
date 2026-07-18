@@ -36,23 +36,10 @@ const cronTools = [
   require('@claude-code-best/builtin-tools/tools/ScheduleCronTool/CronListTool.js')
     .CronListTool,
 ]
-const RemoteTriggerTool = feature('AGENT_TRIGGERS_REMOTE')
-  ? require('@claude-code-best/builtin-tools/tools/RemoteTriggerTool/RemoteTriggerTool.js')
-      .RemoteTriggerTool
-  : null
 const MonitorTool = feature('MONITOR_TOOL')
   ? require('@claude-code-best/builtin-tools/tools/MonitorTool/MonitorTool.js')
       .MonitorTool
   : null
-const SendUserFileTool = feature('KAIROS')
-  ? require('@claude-code-best/builtin-tools/tools/SendUserFileTool/SendUserFileTool.js')
-      .SendUserFileTool
-  : null
-const PushNotificationTool =
-  feature('KAIROS') || feature('KAIROS_PUSH_NOTIFICATION')
-    ? require('@claude-code-best/builtin-tools/tools/PushNotificationTool/PushNotificationTool.js')
-        .PushNotificationTool
-    : null
 const SubscribePRTool = feature('KAIROS_GITHUB_WEBHOOKS')
   ? require('@claude-code-best/builtin-tools/tools/SubscribePRTool/SubscribePRTool.js')
       .SubscribePRTool
@@ -248,11 +235,8 @@ export function getAllBaseTools(): Tools {
     ...(WorkflowTool ? [WorkflowTool] : []),
     ...(SleepTool ? [SleepTool] : []),
     ...cronTools,
-    ...(RemoteTriggerTool ? [RemoteTriggerTool] : []),
     ...(MonitorTool ? [MonitorTool] : []),
     BriefTool,
-    ...(SendUserFileTool ? [SendUserFileTool] : []),
-    ...(PushNotificationTool ? [PushNotificationTool] : []),
     ...(SubscribePRTool ? [SubscribePRTool] : []),
     ...(getPowerShellTool() ? [getPowerShellTool()] : []),
     ...(SnipTool ? [SnipTool] : []),

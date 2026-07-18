@@ -9,13 +9,6 @@ import { useEffect, useState, type RefObject } from 'react';
 import { useShortcutDisplay } from '../../../keybindings/useShortcutDisplay.js';
 // Dead code elimination: conditional imports
 /* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
-// Frustration detection is ant-only (dogfooding). Conditional require so external
-// builds eliminate the module entirely (including its two O(n) useMemos that run
-// on every messages change, plus the GrowthBook fetch).
-const useFrustrationDetection: typeof import('../../../components/FeedbackSurvey/useFrustrationDetection.js').useFrustrationDetection =
-  process.env.USER_TYPE === 'ant'
-    ? require('../../../components/FeedbackSurvey/useFrustrationDetection.js').useFrustrationDetection
-    : () => ({ state: 'closed', handleTranscriptSelect: () => {} });
 // Ant-only org warning. Conditional require so the org UUID list is
 // eliminated from external builds (one UUID is on excluded-strings).
 const useAntOrgWarningNotification: typeof import('../../../hooks/notifs/useAntOrgWarningNotification.js').useAntOrgWarningNotification =

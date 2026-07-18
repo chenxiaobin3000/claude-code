@@ -18,7 +18,6 @@ import stripAnsi from 'strip-ansi';
 import { companionReservedColumns } from '../../buddy/CompanionSprite.js';
 import { findBuddyTriggerPositions, useBuddyNotification } from '../../buddy/useBuddyNotification.js';
 import { FastModePicker } from '../../commands/fast/fast.js';
-import { isUltrareviewEnabled } from '../../commands/review/ultrareviewEnabled.js';
 import { getNativeCSIuTerminalDisplayName } from '../../commands/terminalSetup/terminalSetup.js';
 import { type Command, hasCommand } from '../../commands.js';
 import { useIsModalOverlayActive } from '../../context/overlayContext.js';
@@ -105,9 +104,7 @@ import type { TextHighlight } from '../../utils/textHighlighting.js';
 import type { Theme } from '../../utils/theme.js';
 import { findThinkingTriggerPositions, getRainbowColor, isUltrathinkEnabled } from '../../utils/thinking.js';
 import { findTokenBudgetPositions } from '../../utils/tokenBudget.js';
-import { findUltraplanTriggerPositions, findUltrareviewTriggerPositions } from '../../utils/ultraplan/keyword.js';
 // AutoModeOptInDialog removed — auto mode is available to all users
-import { BridgeDialog } from '../BridgeDialog.js';
 import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js';
 import { getVisibleAgentTasks, useCoordinatorTaskCount } from '../CoordinatorAgentStatus.js';
 import { getEffortNotificationText } from '../EffortIndicator.js';
@@ -284,13 +281,6 @@ function PromptInput({
   const store = useAppStateStore();
   const setAppState = useSetAppState();
   const tasks = useAppState(s => s.tasks);
-  const replBridgeConnected = useAppState(s => s.replBridgeConnected);
-  const replBridgeExplicit = useAppState(s => s.replBridgeExplicit);
-  const replBridgeReconnecting = useAppState(s => s.replBridgeReconnecting);
-  // Must match BridgeStatusIndicator's render condition (PromptInputFooter.tsx) —
-  // the pill returns null for implicit-and-not-reconnecting, so nav must too,
-  // otherwise bridge becomes an invisible selection stop.
-  const bridgeFooterVisible = replBridgeConnected && (replBridgeExplicit || replBridgeReconnecting);
   // Tmux pill (ant-only) — visible when there's an active tungsten session
   const hasTungstenSession = useAppState(s => process.env.USER_TYPE === 'ant' && s.tungstenActiveSession !== undefined);
   const tmuxFooterVisible = process.env.USER_TYPE === 'ant' && hasTungstenSession;
@@ -376,7 +366,6 @@ function PromptInput({
   const pendingSpaceAfterPillRef = useRef(false);
 
   const [showTeamsDialog, setShowTeamsDialog] = useState(false);
-  const [showBridgeDialog, setShowBridgeDialog] = useState(false);
   const [teammateFooterIndex, setTeammateFooterIndex] = useState(0);
   // -1 sentinel: tasks pill is selected but no specific agent row is selected yet.
   // First ↓ selects the pill, second ↓ moves to row 0. Prevents double-select
@@ -489,7 +478,6 @@ function PromptInput({
         tmuxFooterVisible && 'tmux',
         bagelFooterVisible && 'bagel',
         teamsFooterVisible && 'teams',
-        bridgeFooterVisible && 'bridge',
         companionFooterVisible && 'companion',
       ].filter(Boolean) as FooterItem[],
     [
@@ -498,7 +486,6 @@ function PromptInput({
       tmuxFooterVisible,
       bagelFooterVisible,
       teamsFooterVisible,
-      bridgeFooterVisible,
       companionFooterVisible,
     ],
   );
@@ -520,7 +507,6 @@ function PromptInput({
   const tmuxSelected = footerItemSelected === 'tmux';
   const _bagelSelected = footerItemSelected === 'bagel';
   const teamsSelected = footerItemSelected === 'teams';
-  const bridgeSelected = footerItemSelected === 'bridge';
   const bgAgentSelected = footerItemSelected === 'bg_agent';
 
   function selectFooterItem(item: FooterItem | null): void {
@@ -570,21 +556,6 @@ function PromptInput({
   );
 
   const thinkTriggers = useMemo(() => findThinkingTriggerPositions(displayedValue), [displayedValue]);
-
-  const ultraplanSessionUrl = useAppState(s => s.ultraplanSessionUrl);
-  const ultraplanLaunching = useAppState(s => s.ultraplanLaunching);
-  const ultraplanTriggers = useMemo(
-    () =>
-      feature('ULTRAPLAN') && !ultraplanSessionUrl && !ultraplanLaunching
-        ? findUltraplanTriggerPositions(displayedValue)
-        : [],
-    [displayedValue, ultraplanSessionUrl, ultraplanLaunching],
-  );
-
-  const ultrareviewTriggers = useMemo(
-    () => (isUltrareviewEnabled() ? findUltrareviewTriggerPositions(displayedValue) : []),
-    [displayedValue],
-  );
 
   const btwTriggers = useMemo(() => findBtwTriggerPositions(displayedValue), [displayedValue]);
 
@@ -768,34 +739,6 @@ function PromptInput({
       }
     }
 
-    // Same rainbow treatment for the ultraplan keyword
-    if (feature('ULTRAPLAN')) {
-      for (const trigger of ultraplanTriggers) {
-        for (let i = trigger.start; i < trigger.end; i++) {
-          highlights.push({
-            start: i,
-            end: i + 1,
-            color: getRainbowColor(i - trigger.start),
-            shimmerColor: getRainbowColor(i - trigger.start, true),
-            priority: 10,
-          });
-        }
-      }
-    }
-
-    // Same rainbow treatment for the ultrareview keyword
-    for (const trigger of ultrareviewTriggers) {
-      for (let i = trigger.start; i < trigger.end; i++) {
-        highlights.push({
-          start: i,
-          end: i + 1,
-          color: getRainbowColor(i - trigger.start),
-          shimmerColor: getRainbowColor(i - trigger.start, true),
-          priority: 10,
-        });
-      }
-    }
-
     // Rainbow for /buddy
     for (const trigger of buddyTriggers) {
       for (let i = trigger.start; i < trigger.end; i++) {
@@ -824,8 +767,6 @@ function PromptInput({
     slackChannelTriggers,
     displayedValue,
     thinkTriggers,
-    ultraplanTriggers,
-    ultrareviewTriggers,
     buddyTriggers,
   ]);
 
@@ -844,30 +785,6 @@ function PromptInput({
       removeNotification('ultrathink-active');
     }
   }, [addNotification, removeNotification, thinkTriggers.length]);
-
-  useEffect(() => {
-    if (feature('ULTRAPLAN') && ultraplanTriggers.length) {
-      addNotification({
-        key: 'ultraplan-active',
-        text: 'This prompt will launch an ultraplan session in Claude Code on the web',
-        priority: 'immediate',
-        timeoutMs: 5000,
-      });
-    } else {
-      removeNotification('ultraplan-active');
-    }
-  }, [addNotification, removeNotification, ultraplanTriggers.length]);
-
-  useEffect(() => {
-    if (isUltrareviewEnabled() && ultrareviewTriggers.length) {
-      addNotification({
-        key: 'ultrareview-active',
-        text: 'Run /ultrareview after Claude finishes to review these changes in the cloud',
-        priority: 'immediate',
-        timeoutMs: 5000,
-      });
-    }
-  }, [addNotification, ultrareviewTriggers.length]);
 
   // Track input length for stash hint
   const prevInputLengthRef = useRef(input.length);
@@ -1891,10 +1808,6 @@ function PromptInput({
             setShowTeamsDialog(true);
             selectFooterItem(null);
             break;
-          case 'bridge':
-            setShowBridgeDialog(true);
-            selectFooterItem(null);
-            break;
           case 'bg_agent':
             if (selectedBgAgentIndex === -1) {
               exitTeammateView(setAppState);
@@ -2306,17 +2219,6 @@ function PromptInput({
     return thinkingToggleElement;
   }
 
-  if (showBridgeDialog) {
-    return (
-      <BridgeDialog
-        onDone={() => {
-          setShowBridgeDialog(false);
-          selectFooterItem(null);
-        }}
-      />
-    );
-  }
-
   const baseProps: BaseTextInputProps = {
     multiline: true,
     onSubmit,
@@ -2489,7 +2391,6 @@ function PromptInput({
         isLoading={isLoading}
         tasksSelected={tasksSelected}
         teamsSelected={teamsSelected}
-        bridgeSelected={bridgeSelected}
         tmuxSelected={tmuxSelected}
         teammateFooterIndex={teammateFooterIndex}
         ideSelection={ideSelection}

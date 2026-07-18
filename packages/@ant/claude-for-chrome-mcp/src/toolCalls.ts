@@ -21,11 +21,6 @@ export const handleToolCall = async (
     return handleSetPermissionMode(socketClient, args)
   }
 
-  // Handle switch_browser outside the normal tool call flow (manages its own connection)
-  if (name === 'switch_browser') {
-    return handleSwitchBrowser(context, socketClient)
-  }
-
   try {
     const isConnected = await socketClient.ensureConnected()
 
@@ -218,64 +213,6 @@ async function handleSetPermissionMode(
     content: [
       { type: 'text', text: `Permission mode set to: ${permissionMode}` },
     ],
-  }
-}
-
-/**
- * Handle switch_browser tool call. Broadcasts a pairing request and blocks
- * until a browser responds or timeout.
- */
-async function handleSwitchBrowser(
-  context: ClaudeForChromeContext,
-  socketClient: SocketClient,
-): Promise<CallToolResult> {
-  if (!context.bridgeConfig) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'Browser switching is only available with bridge connections.',
-        },
-      ],
-      isError: true,
-    }
-  }
-
-  const isConnected = await socketClient.ensureConnected()
-  if (!isConnected) {
-    return handleToolCallDisconnected(context)
-  }
-
-  const result = (await socketClient.switchBrowser?.()) ?? null
-
-  if (result === 'no_other_browsers') {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: 'No other browsers available to switch to. Open Chrome with the Claude extension in another browser to switch.',
-        },
-      ],
-      isError: true,
-    }
-  }
-
-  if (result) {
-    return {
-      content: [
-        { type: 'text', text: `Connected to browser "${result.name}".` },
-      ],
-    }
-  }
-
-  return {
-    content: [
-      {
-        type: 'text',
-        text: 'No browser responded within the timeout. Make sure Chrome is open with the Claude extension installed, then try again.',
-      },
-    ],
-    isError: true,
   }
 }
 

@@ -32,8 +32,6 @@ export type ChromeToolName =
   | 'shortcuts_list'
   | 'shortcuts_execute';
 
-const CHROME_EXTENSION_FOCUS_TAB_URL_BASE = 'https://clau.de/chrome/tab/';
-
 function renderChromeToolUseMessage(
   input: Record<string, unknown>,
   toolName: ChromeToolName,
@@ -173,15 +171,7 @@ function renderChromeViewTabLink(input: unknown): React.ReactNode {
   if (isNaN(tabId)) {
     return null;
   }
-  const linkUrl = `${CHROME_EXTENSION_FOCUS_TAB_URL_BASE}${tabId}`;
-  return (
-    <Text>
-      {' '}
-      <Link url={linkUrl}>
-        <Text color="subtle">[View Tab]</Text>
-      </Link>
-    </Text>
-  );
+  return null;
 }
 
 /**

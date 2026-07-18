@@ -17,8 +17,6 @@ import {
   TOKEN_EFFICIENT_TOOLS_BETA_HEADER,
   SEARCH_EXTRA_TOOLS_BETA_HEADER_1P,
 } from '../constants/betas.js'
-import { OAUTH_BETA_HEADER } from '../constants/oauth.js'
-import { isClaudeAISubscriber } from './auth.js'
 import { has1mContext } from './context.js'
 import { isEnvTruthy } from './envUtils.js'
 import { getCanonicalName } from './model/model.js'
@@ -64,13 +62,6 @@ export function filterAllowedSdkBetas(
   sdkBetas: string[] | undefined,
 ): string[] | undefined {
   if (!sdkBetas || sdkBetas.length === 0) {
-    return undefined
-  }
-
-  if (isClaudeAISubscriber()) {
-    console.warn(
-      'Warning: Custom betas are only available for API key users. Ignoring provided betas.',
-    )
     return undefined
   }
 
@@ -183,9 +174,6 @@ export const getAllModelBetas = memoize((model: string): string[] => {
         betaHeaders.push(CLI_INTERNAL_BETA_HEADER)
       }
     }
-  }
-  if (isClaudeAISubscriber()) {
-    betaHeaders.push(OAUTH_BETA_HEADER)
   }
   if (has1mContext(model)) {
     betaHeaders.push(CONTEXT_1M_BETA_HEADER)

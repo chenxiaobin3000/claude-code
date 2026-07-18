@@ -10,7 +10,6 @@ import { logEvent } from 'src/services/analytics/index.js'
 import { getContentText } from 'src/utils/messages.js'
 import {
   findCommand,
-  getBridgeCommandSafety,
   getCommandName,
   type LocalJSXCommandContext,
 } from '../../commands.js'
@@ -55,10 +54,6 @@ import {
 } from '../messages.js'
 import { queryCheckpoint } from '../queryProfiler.js'
 import { parseSlashCommand } from '../slashCommandParsing.js'
-import {
-  hasUltraplanKeyword,
-  replaceUltraplanKeyword,
-} from '../ultraplan/keyword.js'
 import { processTextPrompt } from './processTextPrompt.js'
 export type ProcessUserInputContext = ToolUseContext & LocalJSXCommandContext
 
@@ -101,7 +96,6 @@ export async function processUserInput({
   querySource,
   canUseTool,
   skipSlashCommands,
-  bridgeOrigin,
   isMeta,
   skipAttachments,
   autonomy,
@@ -126,15 +120,10 @@ export async function processUserInput({
   canUseTool?: CanUseToolFn
   /**
    * When true, input starting with `/` is treated as plain text.
-   * Used for remotely-received messages (bridge/CCR) that should not
+   * Used for remotely-received messages that should not
    * trigger local slash commands or skills.
    */
   skipSlashCommands?: boolean
-  /**
-   * When true, slash commands matching isBridgeSafeCommand() execute even
-   * though skipSlashCommands is set. See QueuedCommand.bridgeOrigin.
-   */
-  bridgeOrigin?: boolean
   /**
    * When true, the resulting UserMessage gets `isMeta: true` (user-hidden,
    * model-visible). Propagated from `QueuedCommand.isMeta` for queued
@@ -171,7 +160,6 @@ export async function processUserInput({
     canUseTool,
     appState.toolPermissionContext.mode,
     skipSlashCommands,
-    bridgeOrigin,
     isMeta,
     skipAttachments,
     preExpansionInput,
@@ -302,7 +290,6 @@ async function processUserInputBase(
   canUseTool?: CanUseToolFn,
   permissionMode?: PermissionMode,
   skipSlashCommands?: boolean,
-  bridgeOrigin?: boolean,
   isMeta?: boolean,
   skipAttachments?: boolean,
   preExpansionInput?: string,
@@ -318,7 +305,7 @@ async function processUserInputBase(
   // this is just `input`; for array input it's the processed blocks. We pass
   // this (not raw `input`) to processTextPrompt so resized/normalized image
   // blocks actually reach the API — otherwise the resize work above is
-  // discarded for the regular prompt path. Also normalizes bridge inputs
+  // discarded for the regular prompt path. Also normalizes remote inputs
   // where iOS may send `mediaType` instead of `media_type` (mobile-apps#5825).
   let normalizedInput: string | ContentBlockParam[] = input
 
@@ -430,82 +417,7 @@ async function processUserInputBase(
   }
   queryCheckpoint('query_pasted_image_processing_end')
 
-  // Bridge-safe slash command override: mobile/web clients set bridgeOrigin
-  // with skipSlashCommands still true (defense-in-depth against exit words and
-  // immediate-command fast paths). Resolve the command here — if it passes
-  // isBridgeSafeCommand, clear the skip so the gate below opens. If it's a
-  // known-but-unsafe command (local-jsx UI or terminal-only), short-circuit
-  // with a helpful message rather than letting the model see raw "/config".
-  let effectiveSkipSlash = skipSlashCommands
-  if (bridgeOrigin && inputString !== null && inputString.startsWith('/')) {
-    const parsed = parseSlashCommand(inputString)
-    const cmd = parsed
-      ? findCommand(parsed.commandName, context.options.commands)
-      : undefined
-    if (cmd) {
-      const safety = getBridgeCommandSafety(cmd, parsed?.args ?? '')
-      if (safety.ok) {
-        effectiveSkipSlash = false
-      } else {
-        const msg =
-          safety.reason ??
-          `/${getCommandName(cmd)} isn't available over Remote Control.`
-        return {
-          messages: [
-            createUserMessage({ content: inputString, uuid }),
-            createCommandInputMessage(
-              `<local-command-stdout>${msg}</local-command-stdout>`,
-            ),
-          ],
-          shouldQuery: false,
-          resultText: msg,
-        }
-      }
-    }
-    // Unknown /foo or unparseable — fall through to plain text, same as
-    // pre-#19134. A mobile user typing "/shrug" shouldn't see "Unknown skill".
-  }
-
-  // Ultraplan keyword — route through /ultraplan. Detect on the
-  // pre-expansion input so pasted content containing the word cannot
-  // trigger a CCR session; replace with "plan" in the expanded input so
-  // the CCR prompt receives paste contents and stays grammatical. See
-  // keyword.ts for the quote/path exclusions. Interactive prompt mode +
-  // non-slash-prefixed only:
-  // headless/print mode filters local-jsx commands out of context.options,
-  // so routing to /ultraplan there yields "Unknown skill" — and there's no
-  // rainbow animation in print mode anyway.
-  // Runs before attachment extraction so this path matches the slash-command
-  // path below (no await between setUserInputOnProcessing and setAppState —
-  // React batches both into one render, no flash).
-  if (
-    feature('ULTRAPLAN') &&
-    mode === 'prompt' &&
-    !context.options.isNonInteractiveSession &&
-    inputString !== null &&
-    !effectiveSkipSlash &&
-    !inputString.startsWith('/') &&
-    !context.getAppState().ultraplanSessionUrl &&
-    !context.getAppState().ultraplanLaunching &&
-    hasUltraplanKeyword(preExpansionInput ?? inputString)
-  ) {
-    logEvent('tengu_ultraplan_keyword', {})
-    const rewritten = replaceUltraplanKeyword(inputString).trim()
-    const { processSlashCommand } = await import('./processSlashCommand.js')
-    const slashResult = await processSlashCommand(
-      `/ultraplan ${rewritten}`,
-      precedingInputBlocks,
-      imageContentBlocks,
-      [],
-      context,
-      setToolJSX,
-      uuid,
-      isAlreadyProcessing,
-      canUseTool,
-      autonomy,
-    )
-    return addImageMetadataMessage(slashResult, imageMetadataTexts)
-  }
+  const effectiveSkipSlash = skipSlashCommands
 
   // For slash commands, attachments will be extracted within getMessagesForSlashCommand
   const shouldExtractAttachments =

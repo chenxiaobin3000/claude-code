@@ -56,7 +56,6 @@ import { escapeXml } from '../../../utils/xml.js';
 import type { SandboxAskCallback, NetworkHostPattern } from '../../../utils/sandbox/sandbox-adapter.js';
 import { IdeOnboardingDialog } from '../../../components/IdeOnboardingDialog.js';
 import { EffortCallout, shouldShowEffortCallout } from '../../../components/EffortCallout.js';
-import { RemoteCallout } from '../../../components/RemoteCallout.js';
 import { createAbortController } from '../../../utils/abortController.js';
 import { SandboxManager } from 'src/utils/sandbox/sandbox-adapter.js';
 import { SandboxPermissionRequest } from 'src/components/permissions/SandboxPermissionRequest.js';
@@ -65,9 +64,6 @@ import {
   DesktopUpsellStartup,
   shouldShowDesktopUpsellStartup,
 } from 'src/components/DesktopUpsell/DesktopUpsellStartup.js';
-import { UltraplanChoiceDialog } from '../../../components/ultraplan/UltraplanChoiceDialog.js';
-import { UltraplanLaunchDialog } from '../../../components/ultraplan/UltraplanLaunchDialog.js';
-import { launchUltraplan } from '../../../commands/ultraplan.js';
 import type { ReactNode } from 'react';
 import type { ReplViewState } from '../view/ReplView.js';
 
@@ -92,7 +88,6 @@ export function ReplDialogLayer({ state }: { state: ReplViewState }): ReactNode 
     promptQueue,
     queryGuard,
     readFileState,
-    sandboxBridgeCleanupRef,
     sandboxPermissionRequestQueue,
     searchExtraToolsHint,
     setAppState,
@@ -113,8 +108,6 @@ export function ReplDialogLayer({ state }: { state: ReplViewState }): ReactNode 
     skipIdleCheckRef,
     store,
     teamContext,
-    ultraplanLaunchPending,
-    ultraplanPendingChoice,
     UndercoverAutoCallout,
     workerSandboxPermissions,
   } = state;
@@ -165,15 +158,6 @@ export function ReplDialogLayer({ state }: { state: ReplViewState }): ReactNode 
               return queue.filter((item: any) => item.hostPattern.host !== approvedHost);
             });
 
-            // Clean up bridge subscriptions and cancel remote prompts
-            // for this host since the local user already responded.
-            const cleanups = sandboxBridgeCleanupRef.current.get(approvedHost);
-            if (cleanups) {
-              for (const fn of cleanups) {
-                fn();
-              }
-              sandboxBridgeCleanupRef.current.delete(approvedHost);
-            }
           }}
         />
       )}
@@ -401,24 +385,6 @@ export function ReplDialogLayer({ state }: { state: ReplViewState }): ReactNode 
           }}
         />
       )}
-      {focusedInputDialog === 'remote-callout' && (
-        <RemoteCallout
-          onDone={selection => {
-            setAppState((prev: any) => {
-              if (!prev.showRemoteCallout) return prev;
-              return {
-                ...prev,
-                showRemoteCallout: false,
-                ...(selection === 'enable' && {
-                  replBridgeEnabled: true,
-                  replBridgeExplicit: true,
-                  replBridgeOutboundOnly: false,
-                }),
-              };
-            });
-          }}
-        />
-      )}
 
       {exitFlow}
 
@@ -434,78 +400,6 @@ export function ReplDialogLayer({ state }: { state: ReplViewState }): ReactNode 
         <DesktopUpsellStartup onDone={() => setShowDesktopUpsellStartup(false)} />
       )}
 
-      {feature('ULTRAPLAN')
-        ? focusedInputDialog === 'ultraplan-choice' &&
-          ultraplanPendingChoice && (
-            <UltraplanChoiceDialog
-              plan={ultraplanPendingChoice.plan}
-              sessionId={ultraplanPendingChoice.sessionId}
-              taskId={ultraplanPendingChoice.taskId}
-              setMessages={setMessages}
-              readFileState={readFileState.current}
-              getAppState={() => store.getState()}
-              setConversationId={setConversationId}
-            />
-          )
-        : null}
-
-      {feature('ULTRAPLAN')
-        ? focusedInputDialog === 'ultraplan-launch' &&
-          ultraplanLaunchPending && (
-            <UltraplanLaunchDialog
-              onChoice={(choice, opts) => {
-                const blurb = ultraplanLaunchPending.blurb;
-                setAppState((prev: any) =>
-                  prev.ultraplanLaunchPending ? { ...prev, ultraplanLaunchPending: undefined } : prev,
-                );
-                if (choice === 'cancel') return;
-                // Command's onDone used display:'skip', so add the
-                // echo here — gives immediate feedback before the
-                // ~5s teleportToRemote resolves.
-                setMessages((prev: any[]) => [
-                  ...prev,
-                  createCommandInputMessage(formatCommandInputTags('ultraplan', blurb)),
-                ]);
-                const appendStdout = (msg: string) =>
-                  setMessages((prev: any[]) => [
-                    ...prev,
-                    createCommandInputMessage(
-                      `<${LOCAL_COMMAND_STDOUT_TAG}>${escapeXml(msg)}</${LOCAL_COMMAND_STDOUT_TAG}>`,
-                    ),
-                  ]);
-                // Defer the second message if a query is mid-turn
-                // so it lands after the assistant reply, not
-                // between the user's prompt and the reply.
-                const appendWhenIdle = (msg: string) => {
-                  if (!queryGuard.isActive) {
-                    appendStdout(msg);
-                    return;
-                  }
-                  const unsub = queryGuard.subscribe(() => {
-                    if (queryGuard.isActive) return;
-                    unsub();
-                    // Skip if the user stopped ultraplan while we
-                    // were waiting — avoids a stale "Monitoring
-                    // <url>" message for a session that's gone.
-                    if (!store.getState().ultraplanSessionUrl) return;
-                    appendStdout(msg);
-                  });
-                };
-                void launchUltraplan({
-                  blurb,
-                  promptIdentifier: opts?.promptIdentifier,
-                  getAppState: () => store.getState(),
-                  setAppState,
-                  signal: createAbortController().signal,
-                  disconnectedBridge: opts?.disconnectedBridge,
-                  onSessionReady: appendWhenIdle,
-                })
-                  .then(appendStdout)
-                  .catch(logError);
-              }}
-            />
-          )
-        : null}
     </>
   );
 }

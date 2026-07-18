@@ -1,10 +1,5 @@
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 import { getInitialMainLoopModel } from '../../bootstrap/state.js'
-import {
-  isClaudeAISubscriber,
-  isMaxSubscriber,
-  isTeamPremiumSubscriber,
-} from '../auth.js'
 import { getModelStrings } from './modelStrings.js'
 import { getAntModels } from './antModels.js'
 import {
@@ -62,15 +57,6 @@ export function getDefaultOptionForUser(fastMode = false): ModelOption {
       label: 'Default (recommended)',
       description: `Use the default model for Ants (currently ${currentModel})`,
       descriptionForModel: `Default model (currently ${currentModel})`,
-    }
-  }
-
-  // Subscribers
-  if (isClaudeAISubscriber()) {
-    return {
-      value: null,
-      label: 'Default (recommended)',
-      description: getClaudeAiUserDefaultModelDescription(fastMode),
     }
   }
 
@@ -246,20 +232,18 @@ function getMaxOpusOption(fastMode = false): ModelOption {
 
 export function getMaxSonnet46_1MOption(): ModelOption {
   const is3P = getAPIProvider() !== 'firstParty'
-  const billingInfo = isClaudeAISubscriber() ? ' · Billed as extra usage' : ''
   return {
     value: 'sonnet[1m]',
     label: 'Sonnet (1M context)',
-    description: `Sonnet 4.6 with 1M context${billingInfo}${is3P ? '' : ` · ${formatModelPricing(COST_TIER_3_15)}`}`,
+    description: `Sonnet 4.6 with 1M context${is3P ? '' : ` · ${formatModelPricing(COST_TIER_3_15)}`}`,
   }
 }
 
 export function getMaxOpus47_1MOption(fastMode = false): ModelOption {
-  const billingInfo = isClaudeAISubscriber() ? ' · Billed as extra usage' : ''
   return {
     value: 'opus[1m]',
     label: 'Opus 4.7 (1M context)',
-    description: `Opus 4.7 with 1M context${billingInfo}${getOpusPricingSuffix(fastMode)}`,
+    description: `Opus 4.7 with 1M context${getOpusPricingSuffix(fastMode)}`,
   }
 }
 
@@ -334,42 +318,6 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
 
   if (getAPIProvider() === 'openai' && isChatGPTAuthMode()) {
     return getChatGPTCodexModelOptions()
-  }
-
-  if (isClaudeAISubscriber()) {
-    if (isMaxSubscriber() || isTeamPremiumSubscriber()) {
-      // Max and Team Premium users: Default = Opus 4.7 1M (merged), plus Opus 4.6 1M
-      const premiumOptions = [getDefaultOptionForUser(fastMode)]
-      premiumOptions.push(getOpus46_1MOption(fastMode))
-
-      premiumOptions.push(MaxSonnet46Option)
-      if (checkSonnet1mAccess()) {
-        premiumOptions.push(getMaxSonnet46_1MOption())
-      }
-
-      premiumOptions.push(MaxHaiku45Option)
-      return premiumOptions
-    }
-
-    // Pro/Team Standard/Enterprise users: Sonnet is default, show Opus 4.7 1M + Opus 4.6 1M
-    const standardOptions = [getDefaultOptionForUser(fastMode)]
-
-    if (isOpus1mMergeEnabled()) {
-      standardOptions.push(getMergedOpus1MOption(fastMode))
-    } else {
-      standardOptions.push(getMaxOpusOption(fastMode))
-      if (checkOpus1mAccess()) {
-        standardOptions.push(getMaxOpus47_1MOption(fastMode))
-      }
-    }
-    standardOptions.push(getOpus46_1MOption(fastMode))
-
-    if (checkSonnet1mAccess()) {
-      standardOptions.push(getMaxSonnet46_1MOption())
-    }
-
-    standardOptions.push(MaxHaiku45Option)
-    return standardOptions
   }
 
   // PAYG 1P API: Default (Sonnet) + Opus 4.7 1M + Opus 4.6 1M + Sonnet 1M + Haiku

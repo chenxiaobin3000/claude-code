@@ -17,15 +17,6 @@ const coordinatorModeModule = feature('COORDINATOR_MODE')
   ? (require('../../coordinator/coordinatorMode.js') as typeof import('../../coordinator/coordinatorMode.js'))
   : null
 /* eslint-enable @typescript-eslint/no-require-imports */
-// Dead code elimination: conditional import for KAIROS (assistant mode)
-/* eslint-disable @typescript-eslint/no-require-imports */
-const assistantModule = feature('KAIROS')
-  ? (require('../../assistant/index.js') as typeof import('../../assistant/index.js'))
-  : null
-const kairosGate = feature('KAIROS')
-  ? (require('../../assistant/gate.js') as typeof import('../../assistant/gate.js'))
-  : null
-
 import { getOriginalCwd } from '../../bootstrap/state.js'
 import { getAutoModeEnabledStateIfCached } from '../../utils/permissions/permissionSetup.js'
 import { TASK_STATUSES } from '../../utils/tasks.js'
@@ -572,49 +563,6 @@ export function registerSubcommands(
         )
         await autonomyFlowResumeHandler(flowId)
         process.exit(0)
-      })
-  }
-
-  // Remote Control command — connect local environment to claude.ai/code.
-  // The actual command is intercepted by the fast-path in cli.tsx before
-  // Commander.js runs, so this registration exists only for help output.
-  // Always hidden: isBridgeEnabled() at this point (before enableConfigs)
-  // would throw inside isClaudeAISubscriber → getGlobalConfig and return
-  // false via the try/catch — but not before paying ~65ms of side effects
-  // (25ms settings Zod parse + 40ms sync `security` keychain subprocess).
-  // The dynamic visibility never worked; the command was always hidden.
-  if (feature('BRIDGE_MODE')) {
-    program
-      .command('remote-control', { hidden: true })
-      .alias('rc')
-      .description(
-        'Connect your local environment for remote-control sessions via claude.ai/code',
-      )
-      .action(async () => {
-        // Unreachable — cli.tsx fast-path handles this command before main.tsx loads.
-        // If somehow reached, delegate to bridgeMain.
-        const { bridgeMain } = await import('../../bridge/bridgeMain.js')
-        await bridgeMain(process.argv.slice(3))
-      })
-  }
-
-  if (feature('KAIROS')) {
-    program
-      .command('assistant [sessionId]')
-      .description(
-        'Attach the REPL as a client to a running bridge session. Discovers sessions via API if no sessionId given.',
-      )
-      .action(() => {
-        // Argv rewriting above should have consumed `assistant [id]`
-        // before commander runs. Reaching here means a root flag came first
-        // (e.g. `--debug assistant`) and the position-0 predicate
-        // didn't match. Print usage like the ssh stub does.
-        process.stderr.write(
-          'Usage: claude assistant [sessionId]\n\n' +
-            'Attach the REPL as a viewer client to a running bridge session.\n' +
-            'Omit sessionId to discover and pick from available sessions.\n',
-        )
-        process.exit(1)
       })
   }
 

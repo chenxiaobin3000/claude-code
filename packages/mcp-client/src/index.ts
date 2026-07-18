@@ -10,7 +10,6 @@ export {
   McpHTTPServerConfigSchema,
   McpWebSocketServerConfigSchema,
   McpSdkServerConfigSchema,
-  McpClaudeAIProxyServerConfigSchema,
   McpServerConfigSchema,
   McpJsonConfigSchema,
 } from './types.js'
@@ -25,7 +24,6 @@ export type {
   McpHTTPServerConfig,
   McpWebSocketServerConfig,
   McpSdkServerConfig,
-  McpClaudeAIProxyServerConfig,
   McpServerConfig,
   ScopedMcpServerConfig,
   McpJsonConfig,

@@ -1,12 +1,9 @@
 import React from 'react';
 import { logEvent } from 'src/services/analytics/index.js';
 // eslint-disable-next-line custom-rules/prefer-use-keybindings -- enter to continue
-import { Box, Dialog, Link, Newline, Text, useInput } from '@anthropic/ink';
+import { Box, Dialog, Newline, Text, useInput } from '@anthropic/ink';
 import { isChromeExtensionInstalled } from '../utils/claudeInChrome/setup.js';
 import { saveGlobalConfig } from '../utils/config.js';
-
-const CHROME_EXTENSION_URL = 'https://claude.ai/chrome';
-const CHROME_PERMISSIONS_URL = 'https://clau.de/chrome/permissions';
 
 type Props = {
   onDone(): void;
@@ -41,7 +38,7 @@ export function ClaudeInChromeOnboarding({ onDone }: Props): React.ReactNode {
             <>
               <Newline />
               <Newline />
-              Requires the Chrome extension. Get started at <Link url={CHROME_EXTENSION_URL} />
+              Install the local extension package and Native Messaging host before continuing.
             </>
           )}
         </Text>
@@ -49,12 +46,6 @@ export function ClaudeInChromeOnboarding({ onDone }: Props): React.ReactNode {
         <Text dimColor>
           Site-level permissions are inherited from the Chrome extension. Manage permissions in the Chrome extension
           settings to control which sites Claude can browse, click, and type on
-          {isExtensionInstalled && (
-            <>
-              {' '}
-              (<Link url={CHROME_PERMISSIONS_URL} />)
-            </>
-          )}
           .
         </Text>
         <Text dimColor>
@@ -62,7 +53,7 @@ export function ClaudeInChromeOnboarding({ onDone }: Props): React.ReactNode {
           <Text bold color="chromeYellow">
             /chrome
           </Text>{' '}
-          or visit <Link url="https://code.claude.com/docs/en/chrome" />
+          to inspect the local connection.
         </Text>
       </Box>
     </Dialog>

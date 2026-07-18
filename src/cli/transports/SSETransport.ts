@@ -1,7 +1,7 @@
 import axios, { type AxiosError } from 'axios'
 import type { StdoutMessage } from 'src/entrypoints/sdk/controlTypes.js'
 import { logForDebugging } from '../../utils/debug.js'
-import { rcLog } from '../../bridge/rcDebugLog.js'
+import { rcLog } from './transportDebug.js'
 import { logForDiagnosticsNoPII } from '../../utils/diagLogs.js'
 import { errorMessage } from '../../utils/errors.js'
 import { getSessionIngressAuthHeaders } from '../../utils/sessionIngressAuth.js'
@@ -257,19 +257,13 @@ export class SSETransport implements Transport {
       sseUrl.searchParams.set('from_sequence_num', String(this.lastSequenceNum))
     }
 
-    // Build headers -- use fresh auth headers (supports Cookie for session keys).
-    // Remove stale Authorization header from this.headers when Cookie auth is used,
-    // since sending both confuses the auth interceptor.
+    // Build headers with the explicitly configured self-hosted RCS token.
     const authHeaders = this.getAuthHeaders()
     const headers: Record<string, string> = {
       ...this.headers,
       ...authHeaders,
       Accept: 'text/event-stream',
-      'anthropic-version': '2023-06-01',
       'User-Agent': getClaudeCodeUserAgent(),
-    }
-    if (authHeaders['Cookie']) {
-      delete headers['Authorization']
     }
     if (this.lastSequenceNum > 0) {
       headers['Last-Event-ID'] = String(this.lastSequenceNum)
@@ -610,7 +604,6 @@ export class SSETransport implements Transport {
     const headers: Record<string, string> = {
       ...authHeaders,
       'Content-Type': 'application/json',
-      'anthropic-version': '2023-06-01',
       'User-Agent': getClaudeCodeUserAgent(),
     }
 

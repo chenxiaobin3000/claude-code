@@ -26,7 +26,6 @@ import {
 import { useMainLoopModel } from '../hooks/useMainLoopModel.js';
 import { type ReadonlySettings, useSettings } from '../hooks/useSettings.js';
 import { Ansi, Box, Text } from '@anthropic/ink';
-import { getRawUtilization } from '../services/claudeAiLimits.js';
 import type { Message } from '../types/message.js';
 import type { StatusLineCommandInput } from '../types/statusLine.js';
 import type { VimMode } from '../types/textInputTypes.js';
@@ -237,21 +236,6 @@ function buildStatusLineCommandInput(
 
   const sessionId = getSessionId();
   const sessionName = getCurrentSessionTitle(sessionId);
-  const rawUtil = getRawUtilization();
-  const rateLimits: NonNullable<StatusLineCommandInput['rate_limits']> = {
-    ...(rawUtil.five_hour && {
-      five_hour: {
-        used_percentage: rawUtil.five_hour.utilization * 100,
-        resets_at: rawUtil.five_hour.resets_at,
-      },
-    }),
-    ...(rawUtil.seven_day && {
-      seven_day: {
-        used_percentage: rawUtil.seven_day.utilization * 100,
-        resets_at: rawUtil.seven_day.resets_at,
-      },
-    }),
-  };
   return {
     ...createBaseHookInput(),
     ...(sessionName && { session_name: sessionName }),
@@ -284,9 +268,6 @@ function buildStatusLineCommandInput(
       remaining_percentage: contextPercentages.remaining,
     },
     exceeds_200k_tokens: exceeds200kTokens,
-    ...((rateLimits.five_hour || rateLimits.seven_day) && {
-      rate_limits: rateLimits,
-    }),
     ...(isVimModeEnabled() && {
       vim: {
         mode: vimMode ?? 'INSERT',
@@ -530,21 +511,7 @@ function StatusLineInner({ messagesRef, lastAssistantMessageId, vimMode }: Props
   const builtinContextPct = builtinCurrentUsage
     ? Math.round(calculateContextPercentages(builtinCurrentUsage, builtinContextWindowSize).used ?? 0)
     : 0;
-  const builtinRawUtil = getRawUtilization();
-  const builtinRateLimits = {
-    ...(builtinRawUtil.five_hour && {
-      five_hour: {
-        utilization: builtinRawUtil.five_hour.utilization,
-        resets_at: builtinRawUtil.five_hour.resets_at,
-      },
-    }),
-    ...(builtinRawUtil.seven_day && {
-      seven_day: {
-        utilization: builtinRawUtil.seven_day.utilization,
-        resets_at: builtinRawUtil.seven_day.resets_at,
-      },
-    }),
-  };
+  const builtinRateLimits = {};
 
   // BuiltinStatusLine + CachePill: only when statusLineEnabled is explicitly true.
   // Shell command output: only when a statusLine.command is configured.

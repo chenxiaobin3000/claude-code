@@ -170,7 +170,7 @@ type LocalJSXCommand = {
 export type CommandAvailability =
   // claude.ai OAuth subscriber (Pro/Max/Team/Enterprise via claude.ai)
   | 'claude-ai'
-  // Console API key user (direct api.anthropic.com, not via claude.ai OAuth)
+  // Legacy direct API-key user marker retained in the command type.
   | 'console'
 
 export type CommandBase = {

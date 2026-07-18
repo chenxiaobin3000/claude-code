@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { ToolUseConfirm } from '../components/permissions/PermissionRequest.js'
-import type { RemotePermissionResponse } from '../remote/RemoteSessionManager.js'
+import type { RemotePermissionResponse } from '../remote/types.js'
 import {
   createSyntheticAssistantMessage,
   createToolStub,
@@ -22,7 +22,7 @@ import type {
 } from '../types/permissions.js'
 import { logForDebugging } from '../utils/debug.js'
 import { gracefulShutdown } from '../utils/gracefulShutdown.js'
-import type { RemoteMessageContent } from '../utils/teleport/api.js'
+import type { RemoteMessageContent } from '../remote/types.js'
 
 type UseDirectConnectResult = {
   isRemoteMode: boolean

@@ -2,13 +2,10 @@ import { feature } from 'bun:bundle'
 import type Anthropic from '@anthropic-ai/sdk'
 import type { BetaToolUnion } from '@anthropic-ai/sdk/resources/beta/messages.js'
 import { mkdir, writeFile } from 'fs/promises'
-import { dirname, join } from 'path'
+import { join } from 'path'
 import { z } from 'zod/v4'
 import {
   getCachedClaudeMdContent,
-  getLastClassifierRequests,
-  getSessionId,
-  setLastClassifierRequests,
 } from '../../bootstrap/state.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import { logEvent } from '../../services/analytics/index.js'
@@ -177,76 +174,6 @@ async function maybeDumpAutoMode(
     )
   } catch {
     // Ignore errors
-  }
-}
-
-/**
- * Session-scoped dump file for auto mode classifier error prompts. Written on API
- * error so users can share via /share without needing to repro with env var.
- */
-export function getAutoModeClassifierErrorDumpPath(): string {
-  return join(
-    getClaudeTempDir(),
-    'auto-mode-classifier-errors',
-    `${getSessionId()}.txt`,
-  )
-}
-
-/**
- * Snapshot of the most recent classifier API request(s), stringified lazily
- * only when /share reads it. Array because the XML path may send two requests
- * (stage1 + stage2). Stored in bootstrap/state.ts to avoid module-scope
- * mutable state.
- */
-export function getAutoModeClassifierTranscript(): string | null {
-  const requests = getLastClassifierRequests()
-  if (requests === null) return null
-  return jsonStringify(requests, null, 2)
-}
-
-/**
- * Dump classifier input prompts + context-comparison diagnostics on API error.
- * Written to a session-scoped file in the claude temp dir so /share can collect
- * it (replaces the old Desktop dump). Includes context numbers to help diagnose
- * projection divergence (classifier tokens >> main loop tokens).
- * Returns the dump path on success, null on failure.
- */
-async function dumpErrorPrompts(
-  systemPrompt: string,
-  userPrompt: string,
-  error: unknown,
-  contextInfo: {
-    mainLoopTokens: number
-    classifierChars: number
-    classifierTokensEst: number
-    transcriptEntries: number
-    messages: number
-    action: string
-    model: string
-  },
-): Promise<string | null> {
-  try {
-    const path = getAutoModeClassifierErrorDumpPath()
-    await mkdir(dirname(path), { recursive: true })
-    const content =
-      `=== ERROR ===\n${errorMessage(error)}\n\n` +
-      `=== CONTEXT COMPARISON ===\n` +
-      `timestamp: ${new Date().toISOString()}\n` +
-      `model: ${contextInfo.model}\n` +
-      `mainLoopTokens: ${contextInfo.mainLoopTokens}\n` +
-      `classifierChars: ${contextInfo.classifierChars}\n` +
-      `classifierTokensEst: ${contextInfo.classifierTokensEst}\n` +
-      `transcriptEntries: ${contextInfo.transcriptEntries}\n` +
-      `messages: ${contextInfo.messages}\n` +
-      `delta (classifierEst - mainLoop): ${contextInfo.classifierTokensEst - contextInfo.mainLoopTokens}\n\n` +
-      `=== ACTION BEING CLASSIFIED ===\n${contextInfo.action}\n\n` +
-      `=== SYSTEM PROMPT ===\n${systemPrompt}\n\n` +
-      `=== USER PROMPT (transcript) ===\n${userPrompt}\n`
-    await writeFile(path, content, 'utf-8')
-    logForDebugging(`Dumped auto mode classifier error prompts to ${path}`)
-    return path
-  } catch {
-    return null
   }
 }
 
@@ -805,7 +732,6 @@ async function classifyYoloActionXml(
       const stage1Block = parseXmlBlock(stage1Text)
 
       void maybeDumpAutoMode(stage1Opts, stage1Raw, stage1Start, 'stage1')
-      setLastClassifierRequests([stage1Opts])
 
       // If stage 1 says allow, return immediately (fast path)
       if (stage1Block === false) {
@@ -895,9 +821,6 @@ async function classifyYoloActionXml(
       : stage2Usage
 
     void maybeDumpAutoMode(stage2Opts, stage2Raw, stage2Start, 'stage2')
-    setLastClassifierRequests(
-      stage1Opts ? [stage1Opts, stage2Opts] : [stage2Opts],
-    )
 
     if (stage2Block === null) {
       logAutoModeOutcome('parse_failure', model, { classifierType })
@@ -962,11 +885,6 @@ async function classifyYoloActionXml(
         level: 'warn',
       },
     )
-    const errorDumpPath =
-      (await dumpErrorPrompts(xmlSystemPrompt, userPrompt, error, {
-        ...dumpContextInfo,
-        model,
-      })) ?? undefined
     logAutoModeOutcome(tooLong ? 'transcript_too_long' : 'error', model, {
       classifierType,
       ...(tooLong && {
@@ -986,7 +904,6 @@ async function classifyYoloActionXml(
       transcriptTooLong: Boolean(tooLong),
       stage: stage1Usage ? 'thinking' : undefined,
       durationMs: Date.now() - overallStart,
-      errorDumpPath,
       ...(stage1Usage && {
         usage: stage1Usage,
         stage1Usage,
@@ -1163,7 +1080,6 @@ export async function classifyYoloAction(
     }
     const result = await sideQuery(sideQueryOpts)
     void maybeDumpAutoMode(sideQueryOpts, result, start)
-    setLastClassifierRequests([sideQueryOpts])
     const durationMs = Date.now() - start
     const stage1RequestId = extractRequestId(result)
     const stage1MsgId = result.id
@@ -1276,16 +1192,6 @@ export async function classifyYoloAction(
     logForDebugging(`Auto mode classifier error: ${errorMessage(error)}`, {
       level: 'warn',
     })
-    const errorDumpPath =
-      (await dumpErrorPrompts(systemPrompt, userPrompt, error, {
-        mainLoopTokens,
-        classifierChars,
-        classifierTokensEst,
-        transcriptEntries: transcriptEntries.length,
-        messages: messages.length,
-        action: actionCompact,
-        model,
-      })) ?? undefined
     // No API usage on error — use classifierTokensEst / mainLoopTokens
     // for the ratio. Overflow errors are the critical divergence signal.
     logAutoModeOutcome(tooLong ? 'transcript_too_long' : 'error', model, {
@@ -1304,7 +1210,6 @@ export async function classifyYoloAction(
       model,
       unavailable: true,
       transcriptTooLong: Boolean(tooLong),
-      errorDumpPath,
     }
   }
 }

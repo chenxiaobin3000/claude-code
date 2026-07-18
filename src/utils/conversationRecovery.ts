@@ -67,11 +67,6 @@ const LEGACY_BRIEF_TOOL_NAME: string | null =
         require('@claude-code-best/builtin-tools/tools/BriefTool/prompt.js') as typeof import('@claude-code-best/builtin-tools/tools/BriefTool/prompt.js')
       ).LEGACY_BRIEF_TOOL_NAME
     : null
-const SEND_USER_FILE_TOOL_NAME: string | null = feature('KAIROS')
-  ? (
-      require('@claude-code-best/builtin-tools/tools/SendUserFileTool/prompt.js') as typeof import('@claude-code-best/builtin-tools/tools/SendUserFileTool/prompt.js')
-    ).SEND_USER_FILE_TOOL_NAME
-  : null
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 /**
@@ -377,8 +372,7 @@ function isTerminalToolResult(
       ) {
         return (
           ('name' in b ? b.name : undefined) === BRIEF_TOOL_NAME ||
-          ('name' in b ? b.name : undefined) === LEGACY_BRIEF_TOOL_NAME ||
-          ('name' in b ? b.name : undefined) === SEND_USER_FILE_TOOL_NAME
+          ('name' in b ? b.name : undefined) === LEGACY_BRIEF_TOOL_NAME
         )
       }
     }

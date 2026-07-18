@@ -34,7 +34,6 @@ import {
 import { builtInCommandNames } from '../commands.js'
 import { COMMAND_NAME_TAG, TICK_TAG } from '../constants/xml.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
-import * as sessionIngress from '../services/api/sessionIngress.js'
 import { REPL_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/REPLTool/constants.js'
 import {
   type AgentId,
@@ -517,14 +516,6 @@ export function setInternalEventReader(
   getProject().setInternalSubagentEventReader(subagentReader)
 }
 
-/**
- * Set the remote ingress URL on the current Project for testing.
- * This simulates what hydrateRemoteSession does in production.
- */
-export function setRemoteIngressUrlForTesting(url: string): void {
-  getProject().setRemoteIngressUrl(url)
-}
-
 const REMOTE_FLUSH_INTERVAL_MS = 10
 
 // Limit the number of cached session-file lookups to prevent unbounded Map growth
@@ -553,7 +544,6 @@ class Project {
   // Entries buffered while sessionFile is null. Flushed by materializeSessionFile
   // on the first user/assistant message — prevents metadata-only session files.
   private pendingEntries: Entry[] = []
-  private remoteIngressUrl: string | null = null
   private internalEventWriter: InternalEventWriter | null = null
   private internalEventReader: InternalEventReader | null = null
   private internalSubagentEventReader: InternalEventReader | null = null
@@ -1356,33 +1346,6 @@ class Project {
       return
     }
 
-    // v1 Session Ingress path
-    if (
-      !isEnvTruthy(process.env.ENABLE_SESSION_PERSISTENCE) ||
-      !this.remoteIngressUrl
-    ) {
-      return
-    }
-
-    const success = await sessionIngress.appendSessionLog(
-      sessionId,
-      entry,
-      this.remoteIngressUrl,
-    )
-
-    if (!success) {
-      logEvent('tengu_session_persistence_failed', {})
-      gracefulShutdownSync(1, 'other')
-    }
-  }
-
-  setRemoteIngressUrl(url: string): void {
-    this.remoteIngressUrl = url
-    logForDebugging(`Remote persistence enabled with URL: ${url}`)
-    if (url) {
-      // If using CCR, don't delay messages by any more than 10ms.
-      this.FLUSH_INTERVAL_MS = REMOTE_FLUSH_INTERVAL_MS
-    }
   }
 
   setInternalEventWriter(writer: InternalEventWriter): void {
@@ -1618,51 +1581,6 @@ export async function flushSessionStorage(): Promise<void> {
   await getProject().flush()
 }
 
-export async function hydrateRemoteSession(
-  sessionId: string,
-  ingressUrl: string,
-): Promise<boolean> {
-  switchSession(asSessionId(sessionId))
-
-  const project = getProject()
-
-  try {
-    const remoteLogs =
-      (await sessionIngress.getSessionLogs(sessionId, ingressUrl)) || []
-
-    // Ensure the project directory and session file exist
-    const projectDir = getProjectDir(getOriginalCwd())
-    await mkdir(projectDir, { recursive: true, mode: 0o700 })
-
-    const sessionFile = getTranscriptPathForSession(sessionId)
-
-    // Replace local logs with remote logs. writeFile truncates, so no
-    // unlink is needed; an empty remoteLogs array produces an empty file.
-    const content = remoteLogs.map(e => jsonStringify(e) + '\n').join('')
-    await writeFile(sessionFile, content, { encoding: 'utf8', mode: 0o600 })
-
-    logForDebugging(`Hydrated ${remoteLogs.length} entries from remote`)
-    return remoteLogs.length > 0
-  } catch (error) {
-    logForDebugging(`Error hydrating session from remote: ${error}`)
-    logForDiagnosticsNoPII('error', 'hydrate_remote_session_fail')
-    return false
-  } finally {
-    // Set remote ingress URL after hydrating the remote session
-    // to ensure we've always synced with the remote session
-    // prior to enabling persistence
-    project.setRemoteIngressUrl(ingressUrl)
-  }
-}
-
-/**
- * Hydrate session state from CCR v2 internal events.
- * Fetches foreground and subagent events via the registered readers,
- * extracts transcript entries from payloads, and writes them to the
- * local transcript files (main + per-agent).
- * The server handles compaction filtering — it returns events starting
- * from the latest compaction boundary.
- */
 export async function hydrateFromCCRv2InternalEvents(
   sessionId: string,
 ): Promise<boolean> {

@@ -26,12 +26,9 @@ import {
   getAllBrowserDataPaths,
   getAllNativeMessagingHostsDirs,
   getAllWindowsRegistryKeys,
-  openInChrome,
 } from './common.js'
 import { getChromeSystemPrompt } from './prompt.js'
 import { isChromeExtensionInstalledPortable } from './setupPortable.js'
-
-const CHROME_EXTENSION_RECONNECT_URL = 'https://clau.de/chrome/reconnect'
 
 const NATIVE_HOST_IDENTIFIER = 'com.anthropic.claude_code_browser_extension'
 const NATIVE_HOST_MANIFEST_NAME = `${NATIVE_HOST_IDENTIFIER}.json`
@@ -246,20 +243,8 @@ export async function installChromeNativeHostManifest(
     registerWindowsNativeHosts(manifestPath)
   }
 
-  // Restart the native host if we have rewritten any manifest
   if (anyManifestUpdated) {
-    void isChromeExtensionInstalled().then(isInstalled => {
-      if (isInstalled) {
-        logForDebugging(
-          `[Claude in Chrome] First-time install detected, opening reconnect page in browser`,
-        )
-        void openInChrome(CHROME_EXTENSION_RECONNECT_URL)
-      } else {
-        logForDebugging(
-          `[Claude in Chrome] First-time install detected, but extension not installed, skipping reconnect`,
-        )
-      }
-    })
+    logForDebugging('[Claude in Chrome] Native host manifest updated')
   }
 }
 

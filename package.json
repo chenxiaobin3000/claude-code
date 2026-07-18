@@ -58,7 +58,7 @@
     "workspaces:verify": "bun run scripts/verify-workspaces.ts",
     "verify": "bun run scripts/verify.ts",
     "check:unused": "knip-bun",
-    "postinstall": "node scripts/run-parallel.mjs scripts/postinstall.cjs scripts/setup-chrome-mcp.mjs",
+    "postinstall": "node scripts/postinstall.cjs",
     "docs:dev": "npx mintlify dev",
     "typecheck": "tsc --noEmit",
     "precheck": "bun run typecheck && bun run check:fix",

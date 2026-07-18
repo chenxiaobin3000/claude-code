@@ -4,15 +4,6 @@ import '../utils/config.js'
 import memoize from 'lodash-es/memoize.js'
 import { getIsNonInteractiveSession } from 'src/bootstrap/state.js'
 import { shutdownLspServerManager } from '../services/lsp/manager.js'
-import {
-  initializePolicyLimitsLoadingPromise,
-  isPolicyLimitsEligible,
-} from '../services/policyLimits/index.js'
-import {
-  initializeRemoteManagedSettingsLoadingPromise,
-  isEligibleForRemoteManagedSettings,
-  waitForRemoteManagedSettingsToLoad,
-} from '../services/remoteManagedSettings/index.js'
 import { applyExtraCACertsFromConfig } from '../utils/caCertsConfig.js'
 import { registerCleanup } from '../utils/cleanupRegistry.js'
 import {
@@ -108,17 +99,6 @@ export const init = memoize(async (): Promise<void> => {
     // Detect GitHub repository asynchronously (populates cache for gitDiff PR linking)
     void detectCurrentRepository()
 
-    // Initialize the loading promise early so that other systems (like plugin hooks)
-    // can await remote settings loading. The promise includes a timeout to prevent
-    // deadlocks if loadRemoteManagedSettings() is never called (e.g., Agent SDK tests).
-    if (isEligibleForRemoteManagedSettings()) {
-      initializeRemoteManagedSettingsLoadingPromise()
-    }
-    if (isPolicyLimitsEligible()) {
-      initializePolicyLimitsLoadingPromise()
-    }
-    profileCheckpoint('init_after_remote_settings_check')
-
     // Record the first start time
     recordFirstStartTime()
 
@@ -143,37 +123,6 @@ export const init = memoize(async (): Promise<void> => {
 
     // Populate local user metadata used by non-observability features.
     await initUser()
-
-    // Preconnect to the Anthropic API — overlap TCP+TLS handshake
-    // (~100-200ms) with the ~100ms of action-handler work before the API
-    // request. After CA certs + proxy agents are configured so the warmed
-    // connection uses the right transport. Fire-and-forget; skipped for
-    // proxy/mTLS/unix/cloud-provider where the SDK's dispatcher wouldn't
-    // reuse the global pool.
-
-    // CCR upstreamproxy: start the local CONNECT relay so agent subprocesses
-    // can reach org-configured upstreams with credential injection. Gated on
-    // CLAUDE_CODE_REMOTE + GrowthBook; fail-open on any error. Lazy import so
-    // non-CCR startups don't pay the module load. The getUpstreamProxyEnv
-    // function is registered with subprocessEnv.ts so subprocess spawning can
-    // inject proxy vars without a static import of the upstreamproxy module.
-    if (isEnvTruthy(process.env.CLAUDE_CODE_REMOTE)) {
-      try {
-        const { initUpstreamProxy, getUpstreamProxyEnv } = await import(
-          '../upstreamproxy/upstreamproxy.js'
-        )
-        const { registerUpstreamProxyEnvFn } = await import(
-          '../utils/subprocessEnv.js'
-        )
-        registerUpstreamProxyEnvFn(getUpstreamProxyEnv)
-        await initUpstreamProxy()
-      } catch (err) {
-        logForDebugging(
-          `[init] upstreamproxy init failed: ${err instanceof Error ? err.message : String(err)}; continuing without proxy`,
-          { level: 'warn' },
-        )
-      }
-    }
 
     // Set up git-bash if relevant
     setShellIfWindows()

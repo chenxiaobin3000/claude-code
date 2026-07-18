@@ -3,7 +3,6 @@ import figures from 'figures';
 import * as React from 'react';
 import { color, Text } from '@anthropic/ink';
 import type { MCPServerConnection } from '../services/mcp/types.js';
-import { getAccountInformation, isClaudeAISubscriber } from './auth.js';
 import { getLargeMemoryFiles, getMemoryFiles, MAX_MEMORY_CHARACTER_COUNT } from './claudemd.js';
 import { getDoctorDiagnostic } from './doctorDiagnostic.js';
 import { getDisplayPath } from './file.js';
@@ -180,8 +179,6 @@ export function buildSettingSourcesProperties(): Property[] {
           return null; // Skip - no policy settings exist
         }
         switch (origin) {
-          case 'remote':
-            return 'Enterprise managed settings (remote)';
           case 'plist':
             return 'Enterprise managed settings (plist)';
           case 'hklm':
@@ -237,49 +234,7 @@ export async function buildInstallationHealthDiagnostics(): Promise<Diagnostic[]
 }
 
 export function buildAccountProperties(): Property[] {
-  const accountInfo = getAccountInformation();
-  if (!accountInfo) {
-    return [];
-  }
-
-  const properties: Property[] = [];
-
-  if (accountInfo.subscription) {
-    properties.push({
-      label: 'Login method',
-      value: `${accountInfo.subscription} Account`,
-    });
-  }
-
-  if (accountInfo.tokenSource) {
-    properties.push({
-      label: 'Auth token',
-      value: accountInfo.tokenSource,
-    });
-  }
-
-  if (accountInfo.apiKeySource) {
-    properties.push({
-      label: 'API key',
-      value: accountInfo.apiKeySource,
-    });
-  }
-
-  // Hide sensitive account info in demo mode
-  if (accountInfo.organization && !process.env.IS_DEMO) {
-    properties.push({
-      label: 'Organization',
-      value: accountInfo.organization,
-    });
-  }
-  if (accountInfo.email && !process.env.IS_DEMO) {
-    properties.push({
-      label: 'Email',
-      value: accountInfo.email,
-    });
-  }
-
-  return properties;
+  return [];
 }
 
 export function buildAPIProviderProperties(): Property[] {
@@ -295,15 +250,7 @@ export function buildAPIProviderProperties(): Property[] {
     });
   }
 
-  if (apiProvider === 'firstParty') {
-    const anthropicBaseUrl = process.env.ANTHROPIC_BASE_URL;
-    if (anthropicBaseUrl) {
-      properties.push({
-        label: 'Anthropic base URL',
-        value: anthropicBaseUrl,
-      });
-    }
-  } else if (apiProvider === 'openai') {
+  if (apiProvider === 'openai') {
     try {
       const target = resolveModelTarget();
       properties.push({ label: 'Default model', value: target.model });
@@ -349,12 +296,6 @@ export function buildAPIProviderProperties(): Property[] {
 
 export function getModelDisplayLabel(mainLoopModel: string | null): string {
   let modelLabel = modelDisplayString(mainLoopModel);
-
-  if (mainLoopModel === null && isClaudeAISubscriber()) {
-    const description = getClaudeAiUserDefaultModelDescription();
-
-    modelLabel = `${chalk.bold('Default')} ${description}`;
-  }
 
   return modelLabel;
 }

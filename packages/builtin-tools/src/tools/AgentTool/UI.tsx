@@ -25,7 +25,7 @@ import { buildSubagentLookups, createAssistantMessage, EMPTY_LOOKUPS } from 'src
 import type { ModelAlias } from 'src/utils/model/aliases.js';
 import { getMainLoopModel, parseUserSpecifiedModel, renderModelName } from 'src/utils/model/model.js';
 import type { Theme, ThemeName } from 'src/utils/theme.js';
-import type { outputSchema, Progress, RemoteLaunchedOutput } from './AgentTool.js';
+import type { outputSchema, Progress } from './AgentTool.js';
 import { inputSchema } from './AgentTool.js';
 import { getAgentColor } from './agentColorManager.js';
 import { GENERAL_PURPOSE_AGENT } from './built-in/generalPurposeAgent.js';
@@ -299,23 +299,6 @@ export function renderToolResultMessage(
     isTranscriptMode?: boolean;
   },
 ): React.ReactNode {
-  // Remote-launched agents (ant-only) use a private output type not in the
-  // public schema. Narrow via the internal discriminant.
-  const internal = data as Output | RemoteLaunchedOutput;
-  if (internal.status === 'remote_launched') {
-    return (
-      <Box flexDirection="column">
-        <MessageResponse height={1}>
-          <Text>
-            Remote agent launched{' '}
-            <Text dimColor>
-              · {internal.taskId} · {internal.sessionUrl}
-            </Text>
-          </Text>
-        </MessageResponse>
-      </Box>
-    );
-  }
   if (data.status === 'async_launched') {
     const { prompt } = data;
     return (

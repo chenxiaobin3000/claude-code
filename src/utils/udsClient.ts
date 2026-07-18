@@ -32,7 +32,6 @@ export type PeerSession = {
   name?: string
   messagingSocketPath?: string
   entrypoint?: string
-  bridgeSessionId?: string | null
   alive: boolean
 }
 
@@ -101,7 +100,6 @@ export async function listAllLiveSessions(): Promise<PeerSession[]> {
         name: data.name as string | undefined,
         messagingSocketPath: data.messagingSocketPath as string | undefined,
         entrypoint: data.entrypoint as string | undefined,
-        bridgeSessionId: data.bridgeSessionId as string | null | undefined,
         alive: true,
       })
     } catch {

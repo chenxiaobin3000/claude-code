@@ -1,10 +1,5 @@
 // Critical system constants extracted to break circular dependencies
 
-import { feature } from 'bun:bundle'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
-import { logForDebugging } from '../utils/debug.js'
-import { isEnvDefinedFalsy } from '../utils/envUtils.js'
-import { getWorkload } from '../utils/workloadContext.js'
 
 const DEFAULT_PREFIX = `You are Claude Code, Anthropic's official CLI for Claude.`
 const AGENT_SDK_CLAUDE_CODE_PRESET_PREFIX = `You are Claude Code, Anthropic's official CLI for Claude, running within the Claude Agent SDK.`
@@ -39,47 +34,6 @@ export function getCLISyspromptPrefix(options?: {
   return DEFAULT_PREFIX
 }
 
-/**
- * Check if attribution header is enabled.
- * Enabled by default, can be disabled via env var or GrowthBook killswitch.
- */
-function isAttributionHeaderEnabled(): boolean {
-  if (isEnvDefinedFalsy(process.env.CLAUDE_CODE_ATTRIBUTION_HEADER)) {
-    return false
-  }
-  return getFeatureValue_CACHED_MAY_BE_STALE('tengu_attribution_header', true)
-}
-
-/**
- * Get attribution header for API requests.
- * Returns a header string with cc_version and cc_entrypoint.
- * Enabled by default, can be disabled via env var or GrowthBook killswitch.
- *
- * When NATIVE_CLIENT_ATTESTATION is enabled, includes a `cch=00000` placeholder.
- * Before the request is sent, Bun's native HTTP stack finds this placeholder
- * in the request body and overwrites the zeros with a computed hash. The
- * server verifies this token to confirm the request came from a real Claude
- * Code client. See bun-anthropic/src/http/Attestation.zig for implementation.
- *
- * We use a placeholder (instead of injecting from Zig) because same-length
- * replacement avoids Content-Length changes and buffer reallocation.
- */
 export function getAttributionHeader(): string {
-  if (!isAttributionHeaderEnabled()) {
-    return ''
-  }
-
-  const version = MACRO.VERSION
-  const entrypoint = process.env.CLAUDE_CODE_ENTRYPOINT ?? 'unknown'
-
-  // cch=00000 placeholder is overwritten by Bun's HTTP stack with attestation token
-  const cch = feature('NATIVE_CLIENT_ATTESTATION') ? ' cch=00000;' : ''
-  // cc_workload: turn-scoped hint so the API can route e.g. cron-initiated
-  // requests to a lower QoS pool. Absent = interactive default.
-  const workload = getWorkload()
-  const workloadPair = workload ? ` cc_workload=${workload};` : ''
-  const header = `x-anthropic-billing-header: cc_version=${version}; cc_entrypoint=${entrypoint};${cch}${workloadPair}`
-
-  logForDebugging(`attribution header ${header}`)
-  return header
+  return ''
 }

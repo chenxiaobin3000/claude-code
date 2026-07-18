@@ -50,7 +50,6 @@ async function run(): Promise<CommanderCommand> {
   registerRootCommand(program, async (prompt, options) =>
     runDefaultMode(prompt, options, {
       pendingConnect: startupRuntimeState.pendingConnect,
-      pendingAssistantChat: startupRuntimeState.pendingAssistantChat,
       pendingSSH: startupRuntimeState.pendingSSH,
       isSshRemoteEnabled,
       getInputPrompt,

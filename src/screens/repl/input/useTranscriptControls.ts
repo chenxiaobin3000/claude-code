@@ -17,14 +17,6 @@ import type { DirectConnectConfig } from '../../../server/directConnectManager.j
 import type { SSHSession } from '../../../ssh/createSSHSession.js'
 // Dead code elimination: conditional imports
 /* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
-// Frustration detection is ant-only (dogfooding). Conditional require so external
-// builds eliminate the module entirely (including its two O(n) useMemos that run
-// on every messages change, plus the GrowthBook fetch).
-const useFrustrationDetection: typeof import('../../../components/FeedbackSurvey/useFrustrationDetection.js').useFrustrationDetection =
-  process.env.USER_TYPE === 'ant'
-    ? require('../../../components/FeedbackSurvey/useFrustrationDetection.js')
-        .useFrustrationDetection
-    : () => ({ state: 'closed', handleTranscriptSelect: () => {} })
 // Ant-only org warning. Conditional require so the org UUID list is
 // eliminated from external builds (one UUID is on excluded-strings).
 const useAntOrgWarningNotification: typeof import('../../../hooks/notifs/useAntOrgWarningNotification.js').useAntOrgWarningNotification =
@@ -116,18 +108,13 @@ const UndercoverAutoCallout =
         .UndercoverAutoCallout
     : null
 // Session manager removed - using AppState now
-import type { RemoteSessionConfig } from '../../../remote/RemoteSessionManager.js'
 import { isFullscreenEnvEnabled } from '../../../utils/fullscreen.js'
-import type { ScrollBoxHandle } from '@anthropic/ink'
 
 // Stable empty array for hooks that accept MCPServerConnection[] — avoids
 // creating a new [] literal on every render in remote mode, which would
 // cause useEffect dependency changes and infinite re-render loops.
 const EMPTY_MCP_CLIENTS: MCPServerConnection[] = []
 
-// Stable stub for useAssistantHistory's non-KAIROS branch — avoids a new
-// function identity each render, which would break composedOnScroll's memo.
-const HISTORY_STUB = { maybeLoadOlder: (_: ScrollBoxHandle) => {} }
 // Window after a user-initiated scroll during which type-into-empty does NOT
 // repin to bottom. Josh Rosen's workflow: Claude emits long output → scroll
 // up to read the start → start typing → before this fix, snapped to bottom.
@@ -178,7 +165,6 @@ export type Props = {
   // Task list id: when set, enables tasks mode that watches a task list and auto-processes tasks.
   taskListId?: string
   // Remote session config for --remote mode (uses CCR as execution engine)
-  remoteSessionConfig?: RemoteSessionConfig
   // Direct connect config for `claude connect` mode (connects to a claude server)
   directConnectConfig?: DirectConnectConfig
   // SSH session for `claude ssh` mode (local REPL, remote tools over ssh)

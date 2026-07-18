@@ -16,15 +16,6 @@ const coordinatorModeModule = feature('COORDINATOR_MODE')
   ? (require('../../coordinator/coordinatorMode.js') as typeof import('../../coordinator/coordinatorMode.js'))
   : null
 /* eslint-enable @typescript-eslint/no-require-imports */
-// Dead code elimination: conditional import for KAIROS (assistant mode)
-/* eslint-disable @typescript-eslint/no-require-imports */
-const assistantModule = feature('KAIROS')
-  ? (require('../../assistant/index.js') as typeof import('../../assistant/index.js'))
-  : null
-const kairosGate = feature('KAIROS')
-  ? (require('../../assistant/gate.js') as typeof import('../../assistant/gate.js'))
-  : null
-
 import { relative } from 'path'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,

@@ -1,4 +1,4 @@
-import { Settings } from '../../components/Settings/Settings.js';
+import { Stats } from '../../components/Stats.js';
 import type { LocalJSXCommandCall } from '../../types/command.js';
 
 /**
@@ -11,6 +11,6 @@ import type { LocalJSXCommandCall } from '../../types/command.js';
  * Both /cost and /stats are registered as aliases of this command so that
  * existing muscle-memory still works.
  */
-export const call: LocalJSXCommandCall = async (onDone, context) => {
-  return <Settings onClose={onDone} context={context} defaultTab="Usage" />;
+export const call: LocalJSXCommandCall = async onDone => {
+  return <Stats onClose={onDone} />;
 };

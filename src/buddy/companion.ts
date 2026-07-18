@@ -123,7 +123,7 @@ export function generateSeed(): string {
 
 export function companionUserId(): string {
   const config = getGlobalConfig()
-  return config.oauthAccount?.accountUuid ?? config.userID ?? 'anon'
+  return config.userID ?? 'anon'
 }
 
 const WORD_BOUNDARY = '[^a-z0-9]+'

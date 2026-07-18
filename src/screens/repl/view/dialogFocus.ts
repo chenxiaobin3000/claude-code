@@ -1,5 +1,3 @@
-import { feature } from 'bun:bundle'
-
 export type FocusedInputDialog =
   | 'message-selector'
   | 'sandbox-permission'
@@ -13,11 +11,8 @@ export type FocusedInputDialog =
   | 'model-switch'
   | 'undercover-callout'
   | 'effort-callout'
-  | 'remote-callout'
   | 'search-extra-tools-hint'
   | 'desktop-upsell'
-  | 'ultraplan-choice'
-  | 'ultraplan-launch'
   | undefined
 
 type DialogAvailability = {
@@ -32,14 +27,10 @@ type DialogAvailability = {
   cost: boolean
   idleReturn: boolean
   allowDialogsWithAnimation: boolean
-  isLoading: boolean
-  ultraplanChoice: boolean
-  ultraplanLaunch: boolean
   ideOnboarding: boolean
   modelSwitch: boolean
   undercoverCallout: boolean
   effortCallout: boolean
-  remoteCallout: boolean
   searchExtraToolsHint: boolean
   desktopUpsell: boolean
 }
@@ -58,17 +49,12 @@ export function selectFocusedInputDialog(
   if (state.elicitation) return 'elicitation'
   if (state.cost) return 'cost'
   if (state.idleReturn) return 'idle-return'
-  if (feature('ULTRAPLAN') && !state.isLoading && state.ultraplanChoice)
-    return 'ultraplan-choice'
-  if (feature('ULTRAPLAN') && !state.isLoading && state.ultraplanLaunch)
-    return 'ultraplan-launch'
   if (state.ideOnboarding) return 'ide-onboarding'
   if (process.env.USER_TYPE === 'ant' && state.modelSwitch)
     return 'model-switch'
   if (process.env.USER_TYPE === 'ant' && state.undercoverCallout)
     return 'undercover-callout'
   if (state.effortCallout) return 'effort-callout'
-  if (state.remoteCallout) return 'remote-callout'
   if (state.searchExtraToolsHint) return 'search-extra-tools-hint'
   if (state.desktopUpsell) return 'desktop-upsell'
   return undefined

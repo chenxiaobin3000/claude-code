@@ -41,20 +41,6 @@ export function initBundledSkills(): void {
   registerCronListSkill()
   registerCronDeleteSkill()
   registerDreamSkill()
-  if (feature('AGENT_TRIGGERS_REMOTE')) {
-    /* eslint-disable @typescript-eslint/no-require-imports */
-    const {
-      registerScheduleRemoteAgentsSkill,
-    } = require('./scheduleRemoteAgents.js')
-    /* eslint-enable @typescript-eslint/no-require-imports */
-    registerScheduleRemoteAgentsSkill()
-  }
-  if (feature('BUILDING_CLAUDE_APPS')) {
-    /* eslint-disable @typescript-eslint/no-require-imports */
-    const { registerClaudeApiSkill } = require('./claudeApi.js')
-    /* eslint-enable @typescript-eslint/no-require-imports */
-    registerClaudeApiSkill()
-  }
   if (shouldAutoEnableClaudeInChrome()) {
     registerClaudeInChromeSkill()
   }

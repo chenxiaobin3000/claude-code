@@ -8,10 +8,6 @@ import { getOriginalCwd, getSessionTrustAccepted } from '../bootstrap/state.js'
 import { getAutoMemEntrypoint } from '../memdir/paths.js'
 import { logEvent } from '../services/analytics/index.js'
 import type { McpServerConfig } from '../services/mcp/types.js'
-import type {
-  BillingType,
-  ReferralEligibilityResponse,
-} from '../services/oauth/types.js'
 import { getCwd } from '../utils/cwd.js'
 import { registerCleanup } from './cleanupRegistry.js'
 import { logForDebugging } from './debug.js'
@@ -36,10 +32,6 @@ import type { ThemeSetting } from './theme.js'
 const teamMemPaths = feature('TEAMMEM')
   ? (require('../memdir/teamMemPaths.js') as typeof import('../memdir/teamMemPaths.js'))
   : null
-const ccrAutoConnect = feature('CCR_AUTO_CONNECT')
-  ? (require('../bridge/bridgeEnabled.js') as typeof import('../bridge/bridgeEnabled.js'))
-  : null
-
 /* eslint-enable @typescript-eslint/no-require-imports */
 import type { ImageDimensions } from './imageResizer.js'
 import type { ModelOption } from './model/modelOptions.js'
@@ -130,8 +122,6 @@ export type ProjectConfig = {
     sessionId: string
     hookBased?: boolean
   }
-  /** Spawn mode for `claude remote-control` multi-session. Set by first-run dialog or `w` toggle. */
-  remoteControlSpawnMode?: 'same-dir' | 'worktree'
 }
 
 const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
@@ -155,21 +145,6 @@ export {
 import type { EDITOR_MODES, NOTIFICATION_CHANNELS } from './configConstants.js'
 
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number]
-
-export type AccountInfo = {
-  accountUuid: string
-  emailAddress: string
-  organizationUuid?: string
-  organizationName?: string | null // added 4/23/2025, not populated for existing users
-  organizationRole?: string | null
-  workspaceRole?: string | null
-  // Populated by /api/oauth/profile
-  displayName?: string
-  hasExtraUsageEnabled?: boolean
-  billingType?: BillingType | null
-  accountCreatedAt?: string
-  subscriptionCreatedAt?: string
-}
 
 // TODO: 'emacs' is kept for backward compatibility - remove after a few releases
 export type EditorMode = 'emacs' | (typeof EDITOR_MODES)[number]
@@ -199,12 +174,6 @@ export type GlobalConfig = {
   // @deprecated - Migrated to ~/.claude/cache/changelog.md. Keep for migration support.
   cachedChangelog?: string
   mcpServers?: Record<string, McpServerConfig>
-  // claude.ai MCP connectors that have successfully connected at least once.
-  // Used to gate "connector unavailable" / "needs auth" startup notifications:
-  // a connector the user has actually used is worth flagging when it breaks,
-  // but an org-configured connector that's been needs-auth since day one is
-  // something the user has demonstrably ignored and shouldn't nag about.
-  claudeAiMcpEverConnected?: string[]
   preferredNotifChannel: NotificationChannel
   /**
    * @deprecated. Use the Notification hook instead (docs/hooks.md).
@@ -215,18 +184,9 @@ export type GlobalConfig = {
     approved?: string[]
     rejected?: string[]
   }
-  primaryApiKey?: string // Primary API key for the user when no environment variable is set, set via oauth (TODO: rename)
-  /**
-   * Workspace API key saved via /login UI (sk-ant-api03-*).
-   * Stored in plaintext — file should be gitignored and chmod 600.
-   * ANTHROPIC_API_KEY env var takes precedence when both are present.
-   */
-  workspaceApiKey?: string
   hasAcknowledgedCostThreshold?: boolean
   hasSeenUndercoverAutoNotice?: boolean // ant-only: whether the one-time auto-undercover explainer has been shown
-  hasSeenUltraplanTerms?: boolean // ant-only: whether the one-time CCR terms notice has been shown in the ultraplan launch dialog
   hasResetAutoModeOptInForDefaultOffer?: boolean // ant-only: one-shot migration guard, re-prompts churned auto-mode users
-  oauthAccount?: AccountInfo
   iterm2KeyBindingInstalled?: boolean // Legacy - keeping for backward compatibility
   editorMode?: EditorMode
   bypassPermissionsModeAccepted?: boolean
@@ -270,69 +230,9 @@ export type GlobalConfig = {
   companion?: import('../buddy/types.js').StoredCompanion
   companionMuted?: boolean
 
-  // Feedback survey tracking
-  feedbackSurveyState?: {
-    lastShownTime?: number
-  }
-
-  // Transcript share prompt tracking ("Don't ask again")
-  transcriptShareDismissed?: boolean
-
   // Memory usage tracking
   memoryUsageCount: number // Number of times user has added to memory
 
-  // Sonnet-1M configs
-  hasShownS1MWelcomeV2?: Record<string, boolean> // Whether the Sonnet-1M v2 welcome message has been shown per org
-  // Cache of Sonnet-1M subscriber access per org - key is org ID
-  // hasAccess means "hasAccessAsDefault" but the old name is kept for backward
-  // compatibility.
-  s1mAccessCache?: Record<
-    string,
-    { hasAccess: boolean; hasAccessNotAsDefault?: boolean; timestamp: number }
-  >
-  // Cache of Sonnet-1M PayG access per org - key is org ID
-  // hasAccess means "hasAccessAsDefault" but the old name is kept for backward
-  // compatibility.
-  s1mNonSubscriberAccessCache?: Record<
-    string,
-    { hasAccess: boolean; hasAccessNotAsDefault?: boolean; timestamp: number }
-  >
-
-  // Guest passes eligibility cache per org - key is org ID
-  passesEligibilityCache?: Record<
-    string,
-    ReferralEligibilityResponse & { timestamp: number }
-  >
-
-  // Grove config cache per account - key is account UUID
-  groveConfigCache?: Record<
-    string,
-    { grove_enabled: boolean; timestamp: number }
-  >
-
-  // Guest passes upsell tracking
-  passesUpsellSeenCount?: number // Number of times the guest passes upsell has been shown
-  hasVisitedPasses?: boolean // Whether the user has visited /passes command
-  passesLastSeenRemaining?: number // Last seen remaining_passes count — reset upsell when it increases
-
-  // Overage credit grant upsell tracking (keyed by org UUID — multi-org users).
-  // Inlined shape (not import()) because config.ts is in the SDK build surface
-  // and the SDK bundler can't resolve CLI service modules.
-  overageCreditGrantCache?: Record<
-    string,
-    {
-      info: {
-        available: boolean
-        eligible: boolean
-        granted: boolean
-        amount_minor_units: number | null
-        currency: string | null
-      }
-      timestamp: number
-    }
-  >
-  overageCreditUpsellSeenCount?: number // Number of times the overage credit upsell has been shown
-  hasVisitedExtraUsage?: boolean // Whether the user has visited /extra-usage — hides credit upsells
 
   // Display language preference
   preferredLanguage?: 'auto' | 'en' | 'zh' // auto = follow system locale, en = English, zh = 中文
@@ -355,11 +255,6 @@ export type GlobalConfig = {
   // Plan mode usage tracking
   lastPlanModeUse?: number // Timestamp of last plan mode usage
 
-  // Subscription notice tracking
-  subscriptionNoticeCount?: number // Number of times the subscription notice has been shown
-  hasAvailableSubscription?: boolean // Cached result of whether user has a subscription available
-  subscriptionUpsellShownCount?: number // Number of times the subscription upsell has been shown (deprecated)
-  recommendedSubscription?: string // Cached config value from Statsig (deprecated)
 
   // Todo feature configuration
   todoFeatureEnabled: boolean // Whether the todo feature is enabled
@@ -385,13 +280,6 @@ export type GlobalConfig = {
   // from the title (the dot makes it redundant).
   showStatusInTerminalTab?: boolean
 
-  // Push-notification toggles (set via /config). Default off — explicit opt-in required.
-  taskCompleteNotifEnabled?: boolean
-  inputNeededNotifEnabled?: boolean
-  agentPushNotifEnabled?: boolean
-
-  // Claude Code usage tracking
-  claudeCodeFirstTokenDate?: string // ISO timestamp of the user's first Claude Code OAuth token
 
   // Model switch callout tracking (ant-only)
   modelSwitchCalloutDismissed?: boolean // Whether user chose "Don't show again"
@@ -402,21 +290,6 @@ export type GlobalConfig = {
   effortCalloutDismissed?: boolean // v1 - legacy, read to suppress v2 for Pro users who already saw it
   effortCalloutV2Dismissed?: boolean
 
-  // Remote callout tracking - shown once before first bridge enable
-  remoteDialogSeen?: boolean
-
-  // Cross-process backoff for initReplBridge's oauth_expired_unrefreshable skip.
-  // `expiresAt` is the dedup key — content-addressed, self-clears when /login
-  // replaces the token. `failCount` caps false positives: transient refresh
-  // failures (auth server 5xx, lock errors) get 3 retries before backoff kicks
-  // in, mirroring useReplBridge's MAX_CONSECUTIVE_INIT_FAILURES. Dead-token
-  // accounts cap at 3 config writes; healthy+transient-blip self-heals in ~210s.
-  bridgeOauthDeadExpiresAt?: number
-  bridgeOauthDeadFailCount?: number
-
-  // Desktop upsell startup dialog tracking
-  desktopUpsellSeenCount?: number // Total showings (max 3)
-  desktopUpsellDismissed?: boolean // "Don't ask again" picked
 
   // Idle-return dialog tracking
   idleReturnDismissed?: boolean // "Don't ask again" picked
@@ -469,12 +342,6 @@ export type GlobalConfig = {
   claudeInChromeDefaultEnabled?: boolean // Whether Claude in Chrome is enabled by default (undefined means platform default)
   cachedChromeExtensionInstalled?: boolean // Cached result of whether Chrome extension is installed
 
-  // Chrome extension pairing state (persisted across sessions)
-  chromeExtension?: {
-    pairedDeviceId?: string
-    pairedDeviceName?: string
-  }
-
 
   // Permission explainer configuration
   permissionExplainerEnabled?: boolean // Enable Haiku-generated explanations for permission requests (default: true)
@@ -490,22 +357,6 @@ export type GlobalConfig = {
 
   // Tmux live panel visibility (ant-only, toggled via Enter on tmux pill)
   tungstenPanelVisible?: boolean
-
-  // Cached org-level fast mode status from the API.
-  // Used to detect cross-session changes and notify users.
-  penguinModeOrgEnabled?: boolean
-
-  // Epoch ms when background refreshes last ran (fast mode, quota, passes, client data).
-  // Used with tengu_cicada_nap_ms to throttle API calls
-  startupPrefetchedAt?: number
-
-  // Run Remote Control at startup (requires BRIDGE_MODE)
-  // undefined = use default (see getRemoteControlAtStartup() for precedence)
-  remoteControlAtStartup?: boolean
-
-  // Cached extra usage disabled reason from the last API response
-  // undefined = no cache, null = extra usage enabled, string = disabled reason.
-  cachedExtraUsageDisabledReason?: string | null
 
   // Auto permissions notification tracking (ant-only)
   autoPermissionsNotificationCount?: number // Number of times the auto permissions notification has been shown
@@ -596,9 +447,6 @@ export const GLOBAL_CONFIG_KEYS = [
   'fileCheckpointingEnabled',
   'terminalProgressBarEnabled',
   'showStatusInTerminalTab',
-  'taskCompleteNotifEnabled',
-  'inputNeededNotifEnabled',
-  'agentPushNotifEnabled',
   'respectGitignore',
   'claudeInChromeDefaultEnabled',
   'hasCompletedClaudeInChromeOnboarding',
@@ -606,8 +454,6 @@ export const GLOBAL_CONFIG_KEYS = [
   'copyOnSelect',
   'permissionExplainerEnabled',
   'prStatusFooterEnabled',
-  'remoteControlAtStartup',
-  'remoteDialogSeen',
 ] as const
 
 export type GlobalConfigKey = (typeof GLOBAL_CONFIG_KEYS)[number]
@@ -725,17 +571,14 @@ export function isProjectConfigKey(key: string): key is ProjectConfigKey {
  * wipe auth. See GH #3117.
  */
 function wouldLoseAuthState(fresh: {
-  oauthAccount?: unknown
   hasCompletedOnboarding?: boolean
 }): boolean {
   const cached = globalConfigCache.config
   if (!cached) return false
-  const lostOauth =
-    cached.oauthAccount !== undefined && fresh.oauthAccount === undefined
   const lostOnboarding =
     cached.hasCompletedOnboarding === true &&
     fresh.hasCompletedOnboarding !== true
-  return lostOauth || lostOnboarding
+  return lostOnboarding
 }
 
 export function saveGlobalConfig(
@@ -969,21 +812,6 @@ export function getGlobalConfig(): GlobalConfig {
     // If anything goes wrong, fall back to uncached behavior
     return getConfig(getGlobalClaudeFile(), createDefaultGlobalConfig)
   }
-}
-
-/**
- * Returns the effective value of remoteControlAtStartup. Precedence:
- *   1. User's explicit config value (always wins — honors opt-out)
- *   2. CCR auto-connect default (ant-only build, GrowthBook-gated)
- *   3. false (Remote Control must be explicitly opted into)
- */
-export function getRemoteControlAtStartup(): boolean {
-  const explicit = getGlobalConfig().remoteControlAtStartup
-  if (explicit !== undefined) return explicit
-  if (feature('CCR_AUTO_CONNECT')) {
-    if (ccrAutoConnect?.getCcrAutoConnectDefault()) return true
-  }
-  return false
 }
 
 export function getCustomApiKeyStatus(

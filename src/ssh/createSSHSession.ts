@@ -4,15 +4,17 @@ import type {
   SSHSessionManager,
   SSHSessionManagerOptions,
 } from './SSHSessionManager.js'
-import { createAuthProxy } from './SSHAuthProxy.js'
-export type { SSHAuthProxy } from './SSHAuthProxy.js'
-import type { SSHAuthProxy } from './SSHAuthProxy.js'
 import { probeRemote } from './SSHProbe.js'
 import { deployBinary } from './SSHDeploy.js'
 import { buildCliLaunch } from '../utils/cliLaunch.js'
 import { logForDebugging } from '../utils/debug.js'
 import { jsonParse } from '../utils/slowOperations.js'
-import { randomUUID } from 'crypto'
+
+export interface SSHAuthProxy {
+  stop(): void
+}
+
+const NOOP_AUTH_PROXY: SSHAuthProxy = { stop() {} }
 
 const INIT_TIMEOUT_MS = 30_000
 const STDERR_TAIL_LINES = 20
@@ -96,18 +98,11 @@ export async function createSSHSession(
     }
   }
 
-  // 3. Start local auth proxy
-  const { proxy, localAddress, authEnv } = await createAuthProxy()
-  logForDebugging(`[SSH] auth proxy listening on ${localAddress}`)
-
-  // 4. Build SSH command with -R reverse forward and remote CLI
-  const remoteSocketId = randomUUID().slice(0, 8)
-  const isWindows = process.platform === 'win32'
+  // The remote process must use its own explicit OpenAI-compatible provider
+  // configuration. Local account credentials are never forwarded over SSH.
+  const proxy = NOOP_AUTH_PROXY
 
   const remoteCli: string[] = []
-  for (const [k, v] of Object.entries(authEnv)) {
-    remoteCli.push(`${k}=${v}`)
-  }
   remoteCli.push(
     remoteBinaryPath,
     '--output-format',
@@ -125,31 +120,6 @@ export async function createSSHSession(
   remoteCli.push(...extraCliArgs)
 
   const sshArgs = ['ssh']
-
-  if (!isWindows) {
-    const remoteSocket = `/tmp/claude-ssh-auth-${remoteSocketId}.sock`
-    sshArgs.push('-R', `${remoteSocket}:${localAddress}`)
-    sshArgs.push('-o', 'StreamLocalBindUnlink=yes')
-    // Override auth env to use the remote socket path
-    const idx = remoteCli.indexOf(
-      `ANTHROPIC_AUTH_SOCKET=${authEnv.ANTHROPIC_AUTH_SOCKET}`,
-    )
-    if (idx !== -1) {
-      remoteCli[idx] = `ANTHROPIC_AUTH_SOCKET=${remoteSocket}`
-    }
-  } else {
-    // Windows: TCP reverse forward
-    const localPort = localAddress.split(':')[1]
-    const remotePort = 10000 + Math.floor(Math.random() * 50000)
-    sshArgs.push('-R', `${remotePort}:127.0.0.1:${localPort}`)
-    // Override auth env to use remote TCP address
-    const baseIdx = remoteCli.findIndex(s =>
-      s.startsWith('ANTHROPIC_BASE_URL='),
-    )
-    if (baseIdx !== -1) {
-      remoteCli[baseIdx] = `ANTHROPIC_BASE_URL=http://127.0.0.1:${remotePort}`
-    }
-  }
 
   sshArgs.push(host, remoteCli.join(' '))
 
@@ -257,7 +227,7 @@ export async function createLocalSSHSession(config: {
   permissionMode?: string
   dangerouslySkipPermissions?: boolean
 }): Promise<SSHSession> {
-  const { proxy, authEnv } = await createAuthProxy()
+  const proxy = NOOP_AUTH_PROXY
 
   const cliArgs: string[] = [
     '--output-format',
@@ -284,7 +254,7 @@ export async function createLocalSSHSession(config: {
       stdin: 'pipe',
       stdout: 'pipe',
       stderr: 'pipe',
-      env: { ...spec.env, ...authEnv },
+      env: spec.env,
     })
   } catch (err) {
     proxy.stop()
@@ -323,7 +293,7 @@ export async function createLocalSSHSession(config: {
       stdin: 'pipe',
       stdout: 'pipe',
       stderr: 'pipe',
-      env: { ...reconnectSpec.env, ...authEnv },
+      env: reconnectSpec.env,
     })
 
     const newStderrChunks: string[] = []

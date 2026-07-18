@@ -10,7 +10,6 @@ import type { Tool } from 'src/Tool.js';
 import { buildTool, type ToolDef } from 'src/Tool.js';
 import type { LocalAgentTaskState } from 'src/tasks/LocalAgentTask/LocalAgentTask.js';
 import type { LocalShellTaskState } from 'src/tasks/LocalShellTask/guards.js';
-import type { RemoteAgentTaskState } from 'src/tasks/RemoteAgentTask/RemoteAgentTask.js';
 import type { TaskState } from 'src/tasks/types.js';
 import { AbortError } from 'src/utils/errors.js';
 import { lazySchema } from 'src/utils/lazySchema.js';
@@ -108,14 +107,6 @@ async function getTaskOutputData(task: TaskState): Promise<TaskOutput> {
       result: cleanResult || output,
       output: cleanResult || output,
       error: agentTask.error,
-    };
-  }
-
-  if (task.type === 'remote_agent') {
-    const remoteTask = task as RemoteAgentTaskState;
-    return {
-      ...baseOutput,
-      prompt: remoteTask.command,
     };
   }
 

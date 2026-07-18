@@ -82,8 +82,12 @@ assert(
 const setupScript = await source('scripts/setup-chrome-mcp.mjs')
 const postinstall = await source('scripts/postinstall.cjs')
 assert(
+  pkg.scripts.postinstall === 'node scripts/postinstall.cjs',
+  'dependency install must not mutate or validate the user Chrome registration',
+)
+assert(
   setupScript.includes("'@claude-code-best/mcp-chrome-bridge/dist/cli.js'"),
-  'Chrome MCP install consumer must remain explicit',
+  'explicit local Chrome MCP setup consumer must remain available',
 )
 for (const dependency of ['fflate', 'undici']) {
   assert(

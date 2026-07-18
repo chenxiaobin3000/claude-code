@@ -96,16 +96,6 @@ function AutonomyPanel({ onDone }: { onDone: LocalJSXCommandOnDone }): React.Rea
         description: 'Show daemon state and live background or interactive sessions',
         run: () => getAutonomyDeepSectionText('runtime'),
       },
-      {
-        label: 'Remote Control',
-        description: 'Show bridge mode, base URL, token presence, and entitlement note',
-        run: () => getAutonomyDeepSectionText('remote-control'),
-      },
-      {
-        label: 'RemoteTrigger',
-        description: 'Show recent remote trigger audit records, failures, and latest call',
-        run: () => getAutonomyDeepSectionText('remote-trigger'),
-      },
     ];
 
     const flowActions = flows.flatMap<AutonomyAction>(flow => {

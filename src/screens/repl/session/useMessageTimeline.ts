@@ -16,10 +16,8 @@ import type {
   MessageActionsNav,
   MessageActionsState,
 } from '../../../components/messageActions.js'
-import { useAssistantHistory } from '../../../hooks/useAssistantHistory.js'
 import { useAwaySummary } from '../../../hooks/useAwaySummary.js'
 import { useDeferredHookMessages } from '../../../hooks/useDeferredHookMessages.js'
-import type { RemoteSessionConfig } from '../../../remote/RemoteSessionManager.js'
 import type { useSetAppState } from '../../../state/AppState.js'
 import type {
   HookResultMessage,
@@ -28,7 +26,6 @@ import type {
 import { logForDebugging } from '../../../utils/debug.js'
 import { isHumanTurn } from '../../../utils/messagePredicates.js'
 
-const HISTORY_STUB = { maybeLoadOlder: (_handle: ScrollBoxHandle) => {} }
 const DEFERRED_CAP = 500
 
 type RefValue<T> = { current: T }
@@ -36,7 +33,6 @@ type RefValue<T> = { current: T }
 export interface MessageTimelineOptions {
   initialMessages?: MessageType[]
   pendingHookMessages?: Promise<HookResultMessage[]>
-  remoteSessionConfig?: RemoteSessionConfig
   isLoading: boolean
   scrollRef: RefValue<ScrollBoxHandle | null>
   lastUserScrollTsRef: RefValue<number>
@@ -49,7 +45,6 @@ export interface MessageTimelineOptions {
 export function useMessageTimeline({
   initialMessages,
   pendingHookMessages,
-  remoteSessionConfig,
   isLoading,
   scrollRef,
   lastUserScrollTsRef,
@@ -126,13 +121,6 @@ export function useMessageTimeline({
     if (lastMessageIsHuman) repinScroll()
   }, [lastMessageIsHuman, lastMessage, repinScroll])
 
-  const assistantHistory = useAssistantHistory({
-    config: remoteSessionConfig,
-    setMessages,
-    scrollRef,
-    onPrepend: shiftDivider,
-  })
-  const { maybeLoadOlder } = feature('KAIROS') ? assistantHistory : HISTORY_STUB
   const composedOnScroll = useCallback(
     (sticky: boolean, handle: ScrollBoxHandle) => {
       lastUserScrollTsRef.current = Date.now()
@@ -141,7 +129,6 @@ export function useMessageTimeline({
         return
       }
       onScrollAway(handle)
-      if (feature('KAIROS')) maybeLoadOlder(handle)
       if (feature('BUDDY')) {
         setAppState(previous =>
           previous.companionReaction === undefined
@@ -150,7 +137,7 @@ export function useMessageTimeline({
         )
       }
     },
-    [lastUserScrollTsRef, maybeLoadOlder, onRepin, onScrollAway, setAppState],
+    [lastUserScrollTsRef, onRepin, onScrollAway, setAppState],
   )
 
   const awaitPendingHooks = useDeferredHookMessages(

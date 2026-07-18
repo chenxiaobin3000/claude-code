@@ -20,7 +20,6 @@ import {
   createRecentActivityFeed,
   createWhatsNewFeed,
   createProjectOnboardingFeed,
-  createGuestPassesFeed,
 } from './feedConfigs.js';
 import { getGlobalConfig, saveGlobalConfig } from 'src/utils/config.js';
 import { resolveThemeSetting } from 'src/utils/systemTheme.js';
@@ -55,12 +54,6 @@ const ChannelsNoticeModule =
     : null;
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { SandboxManager } from 'src/utils/sandbox/sandbox-adapter.js';
-import { useShowGuestPassesUpsell, incrementGuestPassesSeenCount } from './GuestPassesUpsell.js';
-import {
-  useShowOverageCreditUpsell,
-  incrementOverageCreditUpsellSeenCount,
-  createOverageCreditFeed,
-} from './OverageCreditUpsell.js';
 import { useAppState } from '../../state/AppState.js';
 import { getEffortSuffix } from '../../utils/effort.js';
 import { useMainLoopModel } from '../../hooks/useMainLoopModel.js';
@@ -70,13 +63,11 @@ const LEFT_PANEL_MAX_WIDTH = 50;
 
 export function LogoV2(): React.ReactNode {
   const activities = getRecentActivitySync();
-  const username = getGlobalConfig().oauthAccount?.displayName ?? '';
+  const username = '';
 
   const { columns } = useTerminalSize();
   const showOnboarding = shouldShowProjectOnboarding();
   const showSandboxStatus = SandboxManager.isSandboxingEnabled();
-  const showGuestPassesUpsell = useShowGuestPassesUpsell();
-  const showOverageCreditUpsell = useShowOverageCreditUpsell();
   const agent = useAppState(s => s.agent);
   const effortValue = useAppState(s => s.effortValue);
 
@@ -115,23 +106,6 @@ export function LogoV2(): React.ReactNode {
     }
   }, [config, showOnboarding]);
 
-  // In condensed mode (early-return below renders <CondensedLogo/>),
-  // CondensedLogo's own useEffect handles the impression count. Skipping
-  // here avoids double-counting since hooks fire before the early return.
-  const isCondensedMode = !hasReleaseNotes && !showOnboarding && !isEnvTruthy(process.env.CLAUDE_CODE_FORCE_FULL_LOGO);
-
-  useEffect(() => {
-    if (showGuestPassesUpsell && !showOnboarding && !isCondensedMode) {
-      incrementGuestPassesSeenCount();
-    }
-  }, [showGuestPassesUpsell, showOnboarding, isCondensedMode]);
-
-  useEffect(() => {
-    if (showOverageCreditUpsell && !showOnboarding && !showGuestPassesUpsell && !isCondensedMode) {
-      incrementOverageCreditUpsellSeenCount();
-    }
-  }, [showOverageCreditUpsell, showOnboarding, showGuestPassesUpsell, isCondensedMode]);
-
   const model = useMainLoopModel();
   const fullModelDisplayName = renderModelSetting(model);
   const { version, cwd, billingType, agentName: agentNameFromSettings } = getLogoDisplayData();
@@ -167,9 +141,6 @@ export function LogoV2(): React.ReactNode {
         )}
         {announcement && (
           <Box paddingLeft={2} flexDirection="column">
-            {!process.env.IS_DEMO && config.oauthAccount?.organizationName && (
-              <Text dimColor>Message from {config.oauthAccount.organizationName}:</Text>
-            )}
             <Text>{announcement}</Text>
           </Box>
         )}
@@ -260,10 +231,7 @@ export function LogoV2(): React.ReactNode {
   }
 
   const welcomeMessage = formatWelcomeMessage(username);
-  const modelLine =
-    !process.env.IS_DEMO && config.oauthAccount?.organizationName
-      ? `${modelDisplayName} · ${billingType} · ${config.oauthAccount.organizationName}`
-      : `${modelDisplayName} · ${billingType}`;
+  const modelLine = `${modelDisplayName} · ${billingType}`;
   // Calculate cwd width accounting for agent name if present
   const cwdSeparator = ' · ';
   const cwdAtPrefix = '@';
@@ -332,11 +300,7 @@ export function LogoV2(): React.ReactNode {
                 feeds={
                   showOnboarding
                     ? [createProjectOnboardingFeed(getSteps()), createRecentActivityFeed(activities)]
-                    : showGuestPassesUpsell
-                      ? [createRecentActivityFeed(activities), createGuestPassesFeed()]
-                      : showOverageCreditUpsell
-                        ? [createRecentActivityFeed(activities), createOverageCreditFeed()]
-                        : [createRecentActivityFeed(activities), createWhatsNewFeed(changelog)]
+                    : [createRecentActivityFeed(activities), createWhatsNewFeed(changelog)]
                 }
                 maxWidth={rightWidth}
               />
@@ -365,9 +329,6 @@ export function LogoV2(): React.ReactNode {
       )}
       {announcement && (
         <Box paddingLeft={2} flexDirection="column">
-          {!process.env.IS_DEMO && config.oauthAccount?.organizationName && (
-            <Text dimColor>Message from {config.oauthAccount.organizationName}:</Text>
-          )}
           <Text>{announcement}</Text>
         </Box>
       )}

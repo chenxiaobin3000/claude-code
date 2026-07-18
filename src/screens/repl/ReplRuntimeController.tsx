@@ -96,7 +96,6 @@ import {
 } from '../../utils/swarm/leaderPermissionBridge.js';
 import { endInteractionSpan } from '../../utils/telemetry/sessionTracing.js';
 import { useLogMessages } from '../../hooks/useLogMessages.js';
-import { useReplBridge } from '../../hooks/useReplBridge.js';
 import {
   type Command,
   type CommandResultDisplay,
@@ -149,13 +148,6 @@ import { logError } from '../../utils/log.js';
 import { getCwd } from '../../utils/cwd.js';
 // Dead code elimination: conditional imports
 /* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
-// Frustration detection is ant-only (dogfooding). Conditional require so external
-// builds eliminate the module entirely (including its two O(n) useMemos that run
-// on every messages change, plus the GrowthBook fetch).
-const useFrustrationDetection: typeof import('../../components/FeedbackSurvey/useFrustrationDetection.js').useFrustrationDetection =
-  process.env.USER_TYPE === 'ant'
-    ? require('../../components/FeedbackSurvey/useFrustrationDetection.js').useFrustrationDetection
-    : () => ({ state: 'closed', handleTranscriptSelect: () => {} });
 // Ant-only org warning. Conditional require so the org UUID list is
 // eliminated from external builds (one UUID is on excluded-strings).
 const useAntOrgWarningNotification: typeof import('../../hooks/notifs/useAntOrgWarningNotification.js').useAntOrgWarningNotification =
@@ -302,7 +294,6 @@ import {
 } from '../../utils/sessionRestore.js';
 import { isBgSession, updateSessionName, updateSessionActivity } from '../../utils/concurrentSessions.js';
 import { type InProcessTeammateTaskState } from '../../tasks/InProcessTeammateTask/types.js';
-import { restoreRemoteAgentTasks } from '../../tasks/RemoteAgentTask/RemoteAgentTask.js';
 import { BackgroundAgentSelector } from '../../components/tasks/BackgroundAgentSelector.js';
 import { usePipeLifecycle, usePipeRouting } from './runtime/usePipeRuntime.js';
 import { useRemoteRuntime } from './runtime/useRemoteRuntime.js';
@@ -359,7 +350,6 @@ import { handleSpeculationAccept, type ActiveSpeculationState } from '../../serv
 import { IdeOnboardingDialog } from '../../components/IdeOnboardingDialog.js';
 import { EffortCallout, shouldShowEffortCallout } from '../../components/EffortCallout.js';
 import type { EffortValue } from '../../utils/effort.js';
-import { RemoteCallout } from '../../components/RemoteCallout.js';
 /* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
 const AntModelSwitchCallout =
   process.env.USER_TYPE === 'ant' ? require('../../components/AntModelSwitchCallout.js').AntModelSwitchCallout : null;
@@ -373,10 +363,6 @@ const UndercoverAutoCallout =
 import { activityManager } from '../../utils/activityManager.js';
 import { createAbortController } from '../../utils/abortController.js';
 import { MCPConnectionManager } from 'src/services/mcp/MCPConnectionManager.js';
-import { useFeedbackSurvey } from 'src/components/FeedbackSurvey/useFeedbackSurvey.js';
-import { useMemorySurvey } from 'src/components/FeedbackSurvey/useMemorySurvey.js';
-import { usePostCompactSurvey } from 'src/components/FeedbackSurvey/usePostCompactSurvey.js';
-import { FeedbackSurvey } from 'src/components/FeedbackSurvey/FeedbackSurvey.js';
 import { useChromeExtensionNotification } from 'src/hooks/useChromeExtensionNotification.js';
 import { usePromptsFromClaudeInChrome } from 'src/hooks/usePromptsFromClaudeInChrome.js';
 import { getTipToShowOnSpinner, recordShownTip } from 'src/services/tips/tipScheduler.js';
@@ -403,11 +389,9 @@ import {
 import { usePluginInstallationStatus } from 'src/hooks/notifs/usePluginInstallationStatus.js';
 import { UserTextMessage } from 'src/components/messages/UserTextMessage.js';
 import { AwsAuthStatusBox } from '../../components/AwsAuthStatusBox.js';
-import { useRateLimitWarningNotification } from 'src/hooks/notifs/useRateLimitWarningNotification.js';
 import { useDeprecationWarningNotification } from 'src/hooks/notifs/useDeprecationWarningNotification.js';
 import { useIDEStatusIndicator } from 'src/hooks/notifs/useIDEStatusIndicator.js';
 import { useModelMigrationNotifications } from 'src/hooks/notifs/useModelMigrationNotifications.js';
-import { useCanSwitchToExistingSubscription } from 'src/hooks/notifs/useCanSwitchToExistingSubscription.js';
 import { useTeammateLifecycleNotification } from 'src/hooks/notifs/useTeammateShutdownNotification.js';
 import { useFastModeNotification } from 'src/hooks/notifs/useFastModeNotification.js';
 import {
@@ -425,12 +409,8 @@ import { IssueFlagBanner } from '../../components/PromptInput/IssueFlagBanner.js
 import { useIssueFlagBanner } from '../../hooks/useIssueFlagBanner.js';
 import { CompanionSprite, CompanionFloatingBubble, MIN_COLS_FOR_FULL_SPRITE } from '../../buddy/CompanionSprite.js';
 import { DevBar } from '../../components/DevBar.js';
-import { UltraplanChoiceDialog } from '../../components/ultraplan/UltraplanChoiceDialog.js';
-import { UltraplanLaunchDialog } from '../../components/ultraplan/UltraplanLaunchDialog.js';
-import { launchUltraplan } from '../../commands/ultraplan.js';
 // Session manager removed - using AppState now
-import type { RemoteSessionConfig } from '../../remote/RemoteSessionManager.js';
-import type { RemoteMessageContent } from '../../utils/teleport/api.js';
+import type { RemoteMessageContent } from '../../remote/types.js';
 import { FullscreenLayout } from '../../components/FullscreenLayout.js';
 import { isFullscreenEnvEnabled, maybeGetTmuxMouseHint, isMouseTrackingEnabled } from '../../utils/fullscreen.js';
 import { AlternateScreen } from '@anthropic/ink';
@@ -499,8 +479,6 @@ export type Props = {
   disableSlashCommands?: boolean;
   // Task list id: when set, enables tasks mode that watches a task list and auto-processes tasks.
   taskListId?: string;
-  // Remote session config for --remote mode (uses CCR as execution engine)
-  remoteSessionConfig?: RemoteSessionConfig;
   // Direct connect config for `claude connect` mode (connects to a claude server)
   directConnectConfig?: DirectConnectConfig;
   // SSH session for `claude ssh` mode (local REPL, remote tools over ssh)
@@ -533,12 +511,11 @@ export function REPL({
   mainThreadAgentDefinition: initialMainThreadAgentDefinition,
   disableSlashCommands = false,
   taskListId,
-  remoteSessionConfig,
   directConnectConfig,
   sshSession,
   thinkingConfig,
 }: Props): React.ReactNode {
-  const isRemoteSession = !!remoteSessionConfig;
+  const isRemoteSession = false;
 
   // Env-var gates hoisted to mount-time — isEnvTruthy does toLowerCase+trim+
   // includes, and these were on the render path (hot during PageUp spam).
@@ -580,8 +557,6 @@ export function REPL({
     tasks,
     workerSandboxPermissions,
     elicitation,
-    ultraplanPendingChoice,
-    ultraplanLaunchPending,
     viewingAgentTaskId,
     viewedTeammateTask,
     viewedAgentTask,
@@ -664,16 +639,13 @@ export function REPL({
     return false;
   });
   const [showEffortCallout, setShowEffortCallout] = useState(() => shouldShowEffortCallout(mainLoopModel));
-  const showRemoteCallout = useAppState(s => s.showRemoteCallout);
   const [showDesktopUpsellStartup, setShowDesktopUpsellStartup] = useState(() => shouldShowDesktopUpsellStartup());
   // notifications
   useModelMigrationNotifications();
-  useCanSwitchToExistingSubscription();
   useIDEStatusIndicator({ ideSelection, mcpClients, ideInstallationStatus });
   useMcpConnectivityStatus({ mcpClients });
   usePluginInstallationStatus();
   useSettingsErrors();
-  useRateLimitWarningNotification(mainLoopModel);
   useFastModeNotification();
   useDeprecationWarningNotification(mainLoopModel);
   useAntOrgWarningNotification();
@@ -780,10 +752,6 @@ export function REPL({
   // false at the start of the next user-initiated turn.
   const [wasAborted, setWasAborted] = useState(false);
 
-  // Ref for the bridge result callback — set after useReplBridge initializes,
-  // read in the onQuery finally block to notify mobile clients that a turn ended.
-  const sendBridgeResultRef = useRef<() => void>(() => {});
-
   // Ref for the synchronous restore callback — set after restoreMessageSync is
   // defined, read in the onQuery finally block for auto-restore on interrupt.
   const restoreMessageSyncRef = useRef<(m: UserMessage) => void>(() => {});
@@ -820,7 +788,7 @@ export function REPL({
   // background tasks (useSessionBackgrounding). These don't route through
   // onQuery / queryGuard, so they need their own spinner-visibility state.
   // Initialize true if remote mode with initial prompt (CCR processing it).
-  const [isExternalLoading, setIsExternalLoadingRaw] = React.useState(remoteSessionConfig?.hasInitialPrompt ?? false);
+  const [isExternalLoading, setIsExternalLoadingRaw] = React.useState(false);
 
   // Derived: any loading source active. Read-only — no setter. Local query
   // loading is driven by queryGuard (reserve/tryStart/end/cancelReservation),
@@ -1018,11 +986,6 @@ export function REPL({
     }>
   >([]);
 
-  // Track bridge cleanup functions for sandbox permission requests so the
-  // local dialog handler can cancel the remote prompt when the local user
-  // responds first. Keyed by host to support concurrent same-host requests.
-  const sandboxBridgeCleanupRef = useRef<Map<string, Array<() => void>>>(new Map());
-
   // -- Terminal title management
   // Session title (set via /rename or restored on resume) wins over
   // the agent name, which wins over the Haiku-extracted topic;
@@ -1114,7 +1077,6 @@ export function REPL({
   } = useMessageTimeline({
     initialMessages,
     pendingHookMessages,
-    remoteSessionConfig,
     isLoading,
     scrollRef,
     lastUserScrollTsRef,
@@ -1132,17 +1094,14 @@ export function REPL({
     });
   const {
     activeRemote,
-    remoteSession,
     inProgressToolUseIDs,
     setInProgressToolUseIDs,
     hasInterruptibleToolInProgressRef,
   } = useRemoteRuntime({
-    remoteSessionConfig,
     directConnectConfig,
     sshSession,
     setMessages,
     setIsLoading: setIsExternalLoading,
-    setLocalCommands,
     setToolUseConfirmQueue,
     tools: combinedInitialTools,
     setStreamingToolUses,
@@ -1215,17 +1174,6 @@ export function REPL({
   const [showBashesDialog, setShowBashesDialog] = useState<string | boolean>(false);
   const [isSearchingHistory, setIsSearchingHistory] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
-
-  // showBashesDialog is REPL-level so it survives PromptInput unmounting.
-  // When ultraplan approval fires while the pill dialog is open, PromptInput
-  // unmounts (focusedInputDialog → 'ultraplan-choice') but this stays true;
-  // after accepting, PromptInput remounts into an empty "No tasks" dialog
-  // (the completed ultraplan task has been filtered out). Close it here.
-  useEffect(() => {
-    if (ultraplanPendingChoice && showBashesDialog) {
-      setShowBashesDialog(false);
-    }
-  }, [ultraplanPendingChoice, showBashesDialog]);
 
   const isTerminalFocused = useTerminalFocus();
   const terminalFocusRef = useRef(isTerminalFocused);
@@ -1433,46 +1381,9 @@ export function REPL({
     elicitation.queue.length > 0 ||
     workerSandboxPermissions.queue.length > 0;
 
-  const feedbackSurveyOriginal = useFeedbackSurvey(messages, isLoading, submitCount, 'session', hasActivePrompt);
-
   const skillImprovementSurvey = useSkillImprovementSurvey(setMessages);
 
   const showIssueFlagBanner = useIssueFlagBanner(messages, submitCount);
-
-  // Wrap feedback survey handler to trigger auto-run /issue
-  const feedbackSurvey = useMemo(
-    () => ({
-      ...feedbackSurveyOriginal,
-      handleSelect: (selected: 'dismissed' | 'bad' | 'fine' | 'good') => {
-        // Reset the ref when a new survey response comes in
-        didAutoRunIssueRef.current = false;
-        const showedTranscriptPrompt = feedbackSurveyOriginal.handleSelect(selected);
-        // Auto-run /issue for "bad" if transcript prompt wasn't shown
-        if (selected === 'bad' && !showedTranscriptPrompt && shouldAutoRunIssue('feedback_survey_bad')) {
-          setAutoRunIssueReason('feedback_survey_bad');
-          didAutoRunIssueRef.current = true;
-        }
-      },
-    }),
-    [feedbackSurveyOriginal],
-  );
-
-  // Post-compact survey: shown after compaction if feature gate is enabled
-  const postCompactSurvey = usePostCompactSurvey(messages, isLoading, hasActivePrompt, { enabled: !isRemoteSession });
-
-  // Memory survey: shown when the assistant mentions memory and a memory file
-  // was read this conversation
-  const memorySurvey = useMemorySurvey(messages, isLoading, hasActivePrompt, {
-    enabled: !isRemoteSession,
-  });
-
-  // Frustration detection: show transcript sharing prompt after detecting frustrated messages
-  const frustrationDetection = useFrustrationDetection(
-    messages,
-    isLoading,
-    hasActivePrompt,
-    feedbackSurvey.state !== 'closed' || postCompactSurvey.state !== 'closed' || memorySurvey.state !== 'closed',
-  );
 
   // Initialize IDE integration
   useIDEIntegration({
@@ -1545,11 +1456,6 @@ export function REPL({
   useEffect(() => {
     if (initialMessages && initialMessages.length > 0) {
       restoreReadFileState(initialMessages, getOriginalCwd());
-      void restoreRemoteAgentTasks({
-        abortController: new AbortController(),
-        getAppState: () => store.getState(),
-        setAppState,
-      });
     }
     // Only run on mount - initialMessages shouldn't change during component lifetime
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1586,14 +1492,10 @@ export function REPL({
     cost: showingCostDialog,
     idleReturn: !!idleReturnPending,
     allowDialogsWithAnimation: !toolJSX || toolJSX.shouldContinueAnimation === true,
-    isLoading,
-    ultraplanChoice: !!ultraplanPendingChoice,
-    ultraplanLaunch: !!ultraplanLaunchPending,
     ideOnboarding: showIdeOnboarding,
     modelSwitch: showModelSwitchCallout,
     undercoverCallout: showUndercoverCallout,
     effortCallout: showEffortCallout,
-    remoteCallout: showRemoteCallout,
     searchExtraToolsHint: searchExtraToolsHint.visible,
     desktopUpsell: showDesktopUpsellStartup,
   });
@@ -1777,55 +1679,6 @@ export function REPL({
           },
         ]);
 
-        // When the REPL bridge is connected, also forward the sandbox
-        // permission request as a can_use_tool control_request so the
-        // remote user (e.g. on claude.ai) can approve it too.
-        if (feature('BRIDGE_MODE')) {
-          const bridgeCallbacks = store.getState().replBridgePermissionCallbacks;
-          if (bridgeCallbacks) {
-            const bridgeRequestId = randomUUID();
-            bridgeCallbacks.sendRequest(
-              bridgeRequestId,
-              SANDBOX_NETWORK_ACCESS_TOOL_NAME,
-              { host: hostPattern.host },
-              randomUUID(),
-              `Allow network connection to ${hostPattern.host}?`,
-            );
-
-            const unsubscribe = bridgeCallbacks.onResponse(bridgeRequestId, response => {
-              unsubscribe();
-              const allow = response.behavior === 'allow';
-              // Resolve ALL pending requests for the same host, not just
-              // this one — mirrors the local dialog handler pattern.
-              setSandboxPermissionRequestQueue(queue => {
-                queue
-                  .filter(item => item.hostPattern.host === hostPattern.host)
-                  .forEach(item => item.resolvePromise(allow));
-                return queue.filter(item => item.hostPattern.host !== hostPattern.host);
-              });
-              // Clean up all sibling bridge subscriptions for this host
-              // (other concurrent same-host requests) before deleting.
-              const siblingCleanups = sandboxBridgeCleanupRef.current.get(hostPattern.host);
-              if (siblingCleanups) {
-                for (const fn of siblingCleanups) {
-                  fn();
-                }
-                sandboxBridgeCleanupRef.current.delete(hostPattern.host);
-              }
-            });
-
-            // Register cleanup so the local dialog handler can cancel
-            // the remote prompt and unsubscribe when the local user
-            // responds first.
-            const cleanup = () => {
-              unsubscribe();
-              bridgeCallbacks.cancelRequest(bridgeRequestId);
-            };
-            const existing = sandboxBridgeCleanupRef.current.get(hostPattern.host) ?? [];
-            existing.push(cleanup);
-            sandboxBridgeCleanupRef.current.set(hostPattern.host, existing);
-          }
-        }
       });
     },
     [setAppState, store],
@@ -2234,7 +2087,6 @@ export function REPL({
     setLastQueryCompletionTime,
     skipIdleCheckRef,
     resetLoadingState,
-    sendBridgeResultRef,
     setAppState,
     loadingStartTimeRef,
     totalPausedMsRef,
@@ -2439,18 +2291,6 @@ export function REPL({
     setAutoRunIssueReason(null);
   }, []);
 
-  // Handler for when user presses 1 on survey thanks screen to share details
-  const handleSurveyRequestFeedback = useCallback(() => {
-    const command = process.env.USER_TYPE === 'ant' ? '/issue' : '/feedback';
-    onSubmit(command, {
-      setCursorOffset: () => {},
-      clearBuffer: () => {},
-      resetHistory: () => {},
-    }).catch(err => {
-      logForDebugging(`Survey feedback request failed: ${err instanceof Error ? err.message : String(err)}`);
-    });
-  }, [onSubmit]);
-
   // onSubmit is unstable (deps include `messages` which changes every turn).
   // `handleOpenRateLimitOptions` is prop-drilled to every MessageRow, and each
   // MessageRow fiber pins the closure (and transitively the entire REPL render
@@ -2566,11 +2406,6 @@ export function REPL({
   // the case where user resumes a conversation then quites before doing
   // anything else
   useLogMessages(messages, messages.length === initialMessages?.length);
-
-  // REPL Bridge: replicate user/assistant messages to the bridge session
-  // for remote access via claude.ai. No-op in external builds or when not enabled.
-  const { sendBridgeResult } = useReplBridge(messages, setMessages, abortControllerRef, commands, mainLoopModel);
-  sendBridgeResultRef.current = sendBridgeResult;
 
   useAfterFirstRender();
 
@@ -3187,9 +3022,7 @@ export function REPL({
         elicitation,
         enterMessageActions,
         exitFlow,
-        feedbackSurvey,
         focusedInputDialog,
-        frustrationDetection,
         getToolUseContext,
         globalKeybindingProps,
         haikuTitleAttemptedRef,
@@ -3201,7 +3034,6 @@ export function REPL({
         handleQueuedCommandOnCancel,
         handleRestoreMessage,
         handleShowMessageSelector,
-        handleSurveyRequestFeedback,
         hasRunningTeammates,
         hasSuppressedDialogs,
         ideInstallationStatus,
@@ -3223,7 +3055,6 @@ export function REPL({
         loadingStartTimeRef,
         mainLoopModel,
         mcpClients,
-        memorySurvey,
         messageActionHandlers,
         messages,
         messageSelectorPreselect,
@@ -3240,14 +3071,12 @@ export function REPL({
         pendingSandboxRequest,
         pendingWorkerRequest,
         permissionStickyFooter,
-        postCompactSurvey,
         proactiveModule,
         promptQueue,
         queryGuard,
         readFileState,
         remountKey,
         responseLengthRef,
-        sandboxBridgeCleanupRef,
         sandboxPermissionRequestQueue,
         scanElement,
         scrollRef,
@@ -3324,8 +3153,6 @@ export function REPL({
         transcriptCols,
         transcriptMessages,
         transcriptStreamingToolUses,
-        ultraplanLaunchPending,
-        ultraplanPendingChoice,
         UndercoverAutoCallout,
         unseenDivider,
         userInputBaselineRef,

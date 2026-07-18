@@ -1,10 +1,8 @@
 import { feature } from 'bun:bundle'
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'
-import { randomUUID } from 'crypto'
 import { CHANNEL_TAG } from 'src/constants/xml.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import { getAllowedChannels } from '../../../bootstrap/state.js'
-import type { BridgePermissionCallbacks } from '../../../bridge/bridgePermissionCallbacks.js'
 import type { ToolUseConfirm } from '../../../components/permissions/PermissionRequest.js'
 import { getTerminalFocused } from '@anthropic/ink'
 import {
@@ -43,7 +41,6 @@ type InteractivePermissionParams = {
   description: string
   result: PermissionDecision & { behavior: 'ask' }
   awaitAutomatedChecksBeforeDialog: boolean | undefined
-  bridgeCallbacks?: BridgePermissionCallbacks
   channelCallbacks?: ChannelPermissionCallbacks
 }
 
@@ -144,7 +141,6 @@ function handleInteractivePermission(
     description,
     result,
     awaitAutomatedChecksBeforeDialog,
-    bridgeCallbacks,
     channelCallbacks,
   } = params
 
@@ -154,7 +150,6 @@ function handleInteractivePermission(
   // Hoisted so onDismissCheckmark (Esc during checkmark window) can also
   // remove the abort listener — not just the timer callback.
   let checkmarkAbortHandler: (() => void) | undefined
-  const bridgeRequestId = bridgeCallbacks ? randomUUID() : undefined
   // Hoisted so local/hook/classifier wins can remove the pending channel
   // entry. No "tell remote to dismiss" equivalent — the text sits in your
   // phone, and a stale "yes abc123" after local-resolve falls through
@@ -230,13 +225,6 @@ function handleInteractivePermission(
     onAbort() {
       if (!claim()) return
       forgetPipePermission('Permission request was aborted locally in sub.')
-      if (bridgeCallbacks && bridgeRequestId) {
-        bridgeCallbacks.sendResponse(bridgeRequestId, {
-          behavior: 'deny',
-          message: 'User aborted',
-        })
-        bridgeCallbacks.cancelRequest(bridgeRequestId)
-      }
       channelUnsubscribe?.()
       ctx.logCancelled()
       ctx.logDecision(
@@ -254,14 +242,6 @@ function handleInteractivePermission(
       if (!claim()) return // atomic check-and-mark before await
       forgetPipePermission('Permission request was approved locally in sub.')
 
-      if (bridgeCallbacks && bridgeRequestId) {
-        bridgeCallbacks.sendResponse(bridgeRequestId, {
-          behavior: 'allow',
-          updatedInput,
-          updatedPermissions: permissionUpdates,
-        })
-        bridgeCallbacks.cancelRequest(bridgeRequestId)
-      }
       channelUnsubscribe?.()
 
       resolveOnce(
@@ -279,13 +259,6 @@ function handleInteractivePermission(
       if (!claim()) return
       forgetPipePermission('Permission request was rejected locally in sub.')
 
-      if (bridgeCallbacks && bridgeRequestId) {
-        bridgeCallbacks.sendResponse(bridgeRequestId, {
-          behavior: 'deny',
-          message: feedback ?? 'User denied permission',
-        })
-        bridgeCallbacks.cancelRequest(bridgeRequestId)
-      }
       channelUnsubscribe?.()
 
       ctx.logDecision(
@@ -317,9 +290,6 @@ function handleInteractivePermission(
         // for after useReplBridge started calling it).
         if (!claim()) return
         forgetPipePermission('Permission request was resolved locally in sub.')
-        if (bridgeCallbacks && bridgeRequestId) {
-          bridgeCallbacks.cancelRequest(bridgeRequestId)
-        }
         channelUnsubscribe?.()
         ctx.removeFromQueue()
         ctx.logDecision({ decision: 'accept', source: 'config' })
@@ -338,9 +308,6 @@ function handleInteractivePermission(
       clearClassifierIndicator()
       ctx.removeFromQueue()
       channelUnsubscribe?.()
-      if (bridgeCallbacks && bridgeRequestId) {
-        bridgeCallbacks.cancelRequest(bridgeRequestId)
-      }
 
       if (response.behavior === 'allow') {
         void (async () => {
@@ -390,71 +357,6 @@ function handleInteractivePermission(
   // When the bridge is connected, send the permission request to CCR and
   // subscribe for a response. Whichever side (CLI or CCR) responds first
   // wins via claim().
-  //
-  // All tools are forwarded — CCR's generic allow/deny modal handles any
-  // tool, and can return `updatedInput` when it has a dedicated renderer
-  // (e.g. plan edit). Tools whose local dialog injects fields (such as
-  // AskUserQuestion `answers`) tolerate the field being missing
-  // so generic remote approval degrades gracefully instead of throwing.
-  if (bridgeCallbacks && bridgeRequestId) {
-    bridgeCallbacks.sendRequest(
-      bridgeRequestId,
-      ctx.tool.name,
-      displayInput,
-      ctx.toolUseID,
-      description,
-      result.suggestions,
-      result.blockedPath,
-    )
-
-    const signal = ctx.toolUseContext.abortController.signal
-    const unsubscribe = bridgeCallbacks.onResponse(
-      bridgeRequestId,
-      response => {
-        if (!claim()) return // Local user/hook/classifier already responded
-        forgetPipePermission(
-          'Permission request was resolved by bridge before pipe response.',
-        )
-        signal.removeEventListener('abort', unsubscribe)
-        clearClassifierChecking(ctx.toolUseID)
-        clearClassifierIndicator()
-        ctx.removeFromQueue()
-        channelUnsubscribe?.()
-
-        if (response.behavior === 'allow') {
-          if (response.updatedPermissions?.length) {
-            void ctx.persistPermissions(response.updatedPermissions)
-          }
-          ctx.logDecision(
-            {
-              decision: 'accept',
-              source: {
-                type: 'user',
-                permanent: !!response.updatedPermissions?.length,
-              },
-            },
-            { permissionPromptStartTimeMs },
-          )
-          resolveOnce(ctx.buildAllow(response.updatedInput ?? displayInput))
-        } else {
-          ctx.logDecision(
-            {
-              decision: 'reject',
-              source: {
-                type: 'user_reject',
-                hasFeedback: !!response.message,
-              },
-            },
-            { permissionPromptStartTimeMs },
-          )
-          resolveOnce(ctx.cancelAndAbort(response.message))
-        }
-      },
-    )
-
-    signal.addEventListener('abort', unsubscribe, { once: true })
-  }
-
   // Channel permission relay — races alongside the bridge block above. Send a
   // permission prompt to every active channel (Telegram, iMessage, etc.) via
   // its MCP send_message tool, then race the reply against local/bridge/hook/
@@ -540,11 +442,6 @@ function handleInteractivePermission(
           clearClassifierChecking(ctx.toolUseID)
           clearClassifierIndicator()
           ctx.removeFromQueue()
-          // Bridge is the other remote — tell it we're done.
-          if (bridgeCallbacks && bridgeRequestId) {
-            bridgeCallbacks.cancelRequest(bridgeRequestId)
-          }
-
           if (response.behavior === 'allow') {
             ctx.logDecision(
               {
@@ -596,9 +493,6 @@ function handleInteractivePermission(
       forgetPipePermission(
         'Permission request was resolved by hook before pipe response.',
       )
-      if (bridgeCallbacks && bridgeRequestId) {
-        bridgeCallbacks.cancelRequest(bridgeRequestId)
-      }
       channelUnsubscribe?.()
       ctx.removeFromQueue()
       resolveOnce(hookDecision)
@@ -631,9 +525,6 @@ function handleInteractivePermission(
           forgetPipePermission(
             'Permission request was auto-approved before pipe response.',
           )
-          if (bridgeCallbacks && bridgeRequestId) {
-            bridgeCallbacks.cancelRequest(bridgeRequestId)
-          }
           channelUnsubscribe?.()
           clearClassifierChecking(ctx.toolUseID)
 

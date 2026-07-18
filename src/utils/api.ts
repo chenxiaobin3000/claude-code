@@ -52,11 +52,7 @@ import {
   getFileReadIgnorePatterns,
   normalizePatternsToPath,
 } from './permissions/filesystem.js'
-import {
-  getPlan,
-  getPlanFilePath,
-  persistFileSnapshotIfRemote,
-} from './plans.js'
+import { getPlan, getPlanFilePath } from './plans.js'
 import { getPlatform } from './platform.js'
 import { countFilesRoundedRg } from './ripgrep.js'
 import { jsonStringify } from './slowOperations.js'
@@ -194,7 +190,7 @@ export async function toolToAPISchema(
     // Enable fine-grained tool streaming via per-tool API field.
     // Without FGTS, the API buffers entire tool input parameters before sending
     // input_json_delta events, causing multi-minute hangs on large tool inputs.
-    // Gated to direct api.anthropic.com: proxies (LiteLLM etc.) and Bedrock/Vertex
+    // Legacy first-party-only capability; unavailable for compatible providers.
     // with Claude 4.5 reject this field with 400. See GH#32742, PR #21729.
     if (
       getAPIProvider() === 'firstParty' &&
@@ -499,8 +495,6 @@ export function normalizeToolInput<T extends Tool>(
       // The V2 tool reads plan from file instead of input, but hooks/SDK
       const plan = getPlan(agentId)
       const planFilePath = getPlanFilePath(agentId)
-      // Persist file snapshot for CCR sessions so the plan survives pod recycling
-      void persistFileSnapshotIfRemote()
       return plan !== null ? { ...input, plan, planFilePath } : input
     }
     case BashTool.name: {

@@ -118,12 +118,10 @@ export type HandlePromptSubmitParams = BaseExecutionParams & {
   uuid?: UUID
   /**
    * When true, input starting with `/` is treated as plain text.
-   * Used for remotely-received messages (bridge/CCR) that should not
+   * Used for remotely-received messages that should not
    * trigger local slash commands or skills.
    */
   skipSlashCommands?: boolean
-  /** Preserves that the input originated from Remote Control when queued. */
-  bridgeOrigin?: boolean
 }
 
 export async function handlePromptSubmit(
@@ -150,7 +148,6 @@ export async function handlePromptSubmit(
     queuedCommands,
     uuid,
     skipSlashCommands,
-    bridgeOrigin,
   } = params
 
   const { setCursorOffset, clearBuffer, resetHistory } = helpers
@@ -200,7 +197,6 @@ export async function handlePromptSubmit(
   }
 
   // Handle exit commands by triggering the exit command instead of direct process.exit
-  // Skip for remote bridge messages — "exit" typed on iOS shouldn't kill the local session
   if (
     !skipSlashCommands &&
     ['exit', 'quit', ':q', ':q!', ':wq', ':wq!'].includes(input.trim())
@@ -235,7 +231,6 @@ export async function handlePromptSubmit(
   logEvent('tengu_paste_text', { pastedTextCount, pastedTextBytes })
 
   // Handle local-jsx immediate commands (e.g., /config, /doctor)
-  // Skip for remote bridge messages — slash commands from CCR clients are plain text
   if (!skipSlashCommands && finalInput.trim().startsWith('/')) {
     const trimmedInput = finalInput.trim()
     const spaceIndex = trimmedInput.indexOf(' ')
@@ -349,7 +344,6 @@ export async function handlePromptSubmit(
       mode,
       pastedContents: hasImages ? pastedContents : undefined,
       skipSlashCommands,
-      bridgeOrigin,
       uuid,
     })
 
@@ -373,7 +367,6 @@ export async function handlePromptSubmit(
     mode,
     pastedContents: hasImages ? pastedContents : undefined,
     skipSlashCommands,
-    bridgeOrigin,
     uuid,
   }
 
@@ -517,7 +510,6 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
             uuid: cmd.uuid,
             ideSelection: isFirst ? ideSelection : undefined,
             skipSlashCommands: cmd.skipSlashCommands,
-            bridgeOrigin: cmd.bridgeOrigin,
             isMeta: cmd.isMeta,
             skipAttachments: !isFirst,
             autonomy: cmd.autonomy,

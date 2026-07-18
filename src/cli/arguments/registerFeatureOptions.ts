@@ -91,14 +91,6 @@ export function registerFeatureOptions(program: any): void {
       ),
     )
   }
-  if (feature('KAIROS')) {
-    program.addOption(
-      new Option(
-        '--assistant',
-        'Force assistant mode (Agent SDK daemon use)',
-      ).hideHelp(),
-    )
-  }
   program.addOption(
     new Option(
       '--channels <servers...>',
@@ -163,35 +155,6 @@ export function registerFeatureOptions(program: any): void {
       'Use remote WebSocket endpoint for SDK I/O streaming (only with -p and stream-json format)',
     ).hideHelp(),
   )
-
-  // Enable teleport/remote flags for all builds but keep them undocumented until GA
-  program.addOption(
-    new Option(
-      '--teleport [session]',
-      'Resume a teleport session, optionally specify session ID',
-    ).hideHelp(),
-  )
-  program.addOption(
-    new Option(
-      '--remote [description]',
-      'Create a remote session with the given description',
-    ).hideHelp(),
-  )
-  if (feature('BRIDGE_MODE')) {
-    program.addOption(
-      new Option(
-        '--remote-control [name]',
-        'Start an interactive session with Remote Control enabled (optionally named)',
-      )
-        .argParser(value => value || true)
-        .hideHelp(),
-    )
-    program.addOption(
-      new Option('--rc [name]', 'Alias for --remote-control')
-        .argParser(value => value || true)
-        .hideHelp(),
-    )
-  }
 
   if (feature('HARD_FAIL')) {
     program.addOption(

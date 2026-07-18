@@ -107,10 +107,8 @@ import type { SandboxAskCallback, NetworkHostPattern } from '../../../utils/sand
 import { SessionBackgroundHint } from '../../../components/SessionBackgroundHint.js';
 import { IdeOnboardingDialog } from '../../../components/IdeOnboardingDialog.js';
 import { EffortCallout, shouldShowEffortCallout } from '../../../components/EffortCallout.js';
-import { RemoteCallout } from '../../../components/RemoteCallout.js';
 import { createAbortController } from '../../../utils/abortController.js';
 import { MCPConnectionManager } from 'src/services/mcp/MCPConnectionManager.js';
-import { FeedbackSurvey } from 'src/components/FeedbackSurvey/FeedbackSurvey.js';
 import { SandboxManager } from 'src/utils/sandbox/sandbox-adapter.js';
 import { SandboxPermissionRequest } from 'src/components/permissions/SandboxPermissionRequest.js';
 import { SearchExtraToolsHint } from 'src/components/SearchExtraToolsHint.js';
@@ -131,9 +129,6 @@ import { TungstenLiveMonitor } from '@claude-code-best/builtin-tools/tools/Tungs
 import { IssueFlagBanner } from '../../../components/PromptInput/IssueFlagBanner.js';
 import { CompanionSprite, CompanionFloatingBubble, MIN_COLS_FOR_FULL_SPRITE } from '../../../buddy/CompanionSprite.js';
 import { DevBar } from '../../../components/DevBar.js';
-import { UltraplanChoiceDialog } from '../../../components/ultraplan/UltraplanChoiceDialog.js';
-import { UltraplanLaunchDialog } from '../../../components/ultraplan/UltraplanLaunchDialog.js';
-import { launchUltraplan } from '../../../commands/ultraplan.js';
 import { FullscreenLayout } from '../../../components/FullscreenLayout.js';
 import { isFullscreenEnvEnabled, maybeGetTmuxMouseHint, isMouseTrackingEnabled } from '../../../utils/fullscreen.js';
 import { AlternateScreen } from '@anthropic/ink';
@@ -180,9 +175,7 @@ export function ReplView({ state }: { state: ReplViewState }): React.ReactNode {
     elicitation,
     enterMessageActions,
     exitFlow,
-    feedbackSurvey,
     focusedInputDialog,
-    frustrationDetection,
     getToolUseContext,
     globalKeybindingProps,
     haikuTitleAttemptedRef,
@@ -194,7 +187,6 @@ export function ReplView({ state }: { state: ReplViewState }): React.ReactNode {
     handleQueuedCommandOnCancel,
     handleRestoreMessage,
     handleShowMessageSelector,
-    handleSurveyRequestFeedback,
     hasRunningTeammates,
     hasSuppressedDialogs,
     ideInstallationStatus,
@@ -216,7 +208,6 @@ export function ReplView({ state }: { state: ReplViewState }): React.ReactNode {
     loadingStartTimeRef,
     mainLoopModel,
     mcpClients,
-    memorySurvey,
     messageActionHandlers,
     messages,
     messageSelectorPreselect,
@@ -233,14 +224,12 @@ export function ReplView({ state }: { state: ReplViewState }): React.ReactNode {
     pendingSandboxRequest,
     pendingWorkerRequest,
     permissionStickyFooter,
-    postCompactSurvey,
     proactiveModule,
     promptQueue,
     queryGuard,
     readFileState,
     remountKey,
     responseLengthRef,
-    sandboxBridgeCleanupRef,
     sandboxPermissionRequestQueue,
     scanElement,
     scrollRef,
@@ -317,8 +306,6 @@ export function ReplView({ state }: { state: ReplViewState }): React.ReactNode {
     transcriptCols,
     transcriptMessages,
     transcriptStreamingToolUses,
-    ultraplanLaunchPending,
-    ultraplanPendingChoice,
     UndercoverAutoCallout,
     unseenDivider,
     userInputBaselineRef,
@@ -643,48 +630,6 @@ export function ReplView({ state }: { state: ReplViewState }): React.ReactNode {
                         onRun={handleAutoRunIssue}
                         onCancel={handleCancelAutoRunIssue}
                         reason={getAutoRunIssueReasonText(autoRunIssueReason)}
-                      />
-                    )}
-                    {postCompactSurvey.state !== 'closed' ? (
-                      <FeedbackSurvey
-                        state={postCompactSurvey.state}
-                        lastResponse={postCompactSurvey.lastResponse}
-                        handleSelect={postCompactSurvey.handleSelect}
-                        inputValue={inputValue}
-                        setInputValue={setInputValue}
-                        onRequestFeedback={handleSurveyRequestFeedback}
-                      />
-                    ) : memorySurvey.state !== 'closed' ? (
-                      <FeedbackSurvey
-                        state={memorySurvey.state}
-                        lastResponse={memorySurvey.lastResponse}
-                        handleSelect={memorySurvey.handleSelect}
-                        handleTranscriptSelect={memorySurvey.handleTranscriptSelect}
-                        inputValue={inputValue}
-                        setInputValue={setInputValue}
-                        onRequestFeedback={handleSurveyRequestFeedback}
-                        message="How well did Claude use its memory? (optional)"
-                      />
-                    ) : (
-                      <FeedbackSurvey
-                        state={feedbackSurvey.state}
-                        lastResponse={feedbackSurvey.lastResponse}
-                        handleSelect={feedbackSurvey.handleSelect}
-                        handleTranscriptSelect={feedbackSurvey.handleTranscriptSelect}
-                        inputValue={inputValue}
-                        setInputValue={setInputValue}
-                        onRequestFeedback={didAutoRunIssueRef.current ? undefined : handleSurveyRequestFeedback}
-                      />
-                    )}
-                    {/* Frustration-triggered transcript sharing prompt */}
-                    {frustrationDetection.state !== 'closed' && (
-                      <FeedbackSurvey
-                        state={frustrationDetection.state}
-                        lastResponse={null}
-                        handleSelect={() => {}}
-                        handleTranscriptSelect={frustrationDetection.handleTranscriptSelect}
-                        inputValue={inputValue}
-                        setInputValue={setInputValue}
                       />
                     )}
                     {/* Skill improvement survey - appears when improvements detected */}

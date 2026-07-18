@@ -8,7 +8,6 @@ import { type StoredCompanion, RARITY_STARS } from '../../buddy/types.js'
 import { renderSprite } from '../../buddy/sprites.js'
 import { CompanionCard } from '../../buddy/CompanionCard.js'
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js'
-import { triggerCompanionReaction } from '../../buddy/companionReact.js'
 import type { ToolUseContext } from '../../Tool.js'
 import type {
   LocalJSXCommandContext,
@@ -100,15 +99,6 @@ export async function call(
     // Auto-unmute on pet + trigger heart animation
     saveGlobalConfig(cfg => ({ ...cfg, companionMuted: false }))
     setState?.(prev => ({ ...prev, companionPetAt: Date.now() }))
-
-    // Trigger a post-pet reaction
-    triggerCompanionReaction(context.messages ?? [], reaction =>
-      setState?.(prev =>
-        prev.companionReaction === reaction
-          ? prev
-          : { ...prev, companionReaction: reaction },
-      ),
-    )
 
     onDone(`petted ${companion.name}`, { display: 'system' })
     return null

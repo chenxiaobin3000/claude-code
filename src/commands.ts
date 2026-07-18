@@ -1,11 +1,9 @@
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 import addDir from './commands/add-dir/index.js'
-import autofixPr from './commands/autofix-pr/index.js'
 import backfillSessions from './commands/backfill-sessions/index.js'
 import btw from './commands/btw/index.js'
 import goodClaude from './commands/good-claude/index.js'
 import issue from './commands/issue/index.js'
-import feedback from './commands/feedback/index.js'
 import clear from './commands/clear/index.js'
 import color from './commands/color/index.js'
 import commit from './commands/commit.js'
@@ -34,7 +32,7 @@ import pr_comments from './commands/pr_comments/index.js'
 import releaseNotes from './commands/release-notes/index.js'
 import rename from './commands/rename/index.js'
 import resume from './commands/resume/index.js'
-import review, { ultrareview } from './commands/review.js'
+import review from './commands/review.js'
 import session from './commands/session/index.js'
 import skills from './commands/skills/index.js'
 import status from './commands/status/index.js'
@@ -59,15 +57,6 @@ const briefCommand =
   feature('KAIROS') || feature('KAIROS_BRIEF')
     ? require('./commands/brief.js').default
     : null
-const assistantCommand = feature('KAIROS')
-  ? require('./commands/assistant/index.js').default
-  : null
-const bridge = feature('BRIDGE_MODE')
-  ? require('./commands/bridge/index.js').default
-  : null
-const remoteControlServerCommand = feature('BRIDGE_MODE')
-  ? require('./commands/remoteControlServer/index.js').default
-  : null
 const monitorCmd = feature('MONITOR_TOOL')
   ? require('./commands/monitor.js').default
   : null
@@ -89,9 +78,6 @@ const clearSkillIndexCache = feature('EXPERIMENTAL_SKILL_SEARCH')
   : null
 const subscribePr = feature('KAIROS_GITHUB_WEBHOOKS')
   ? require('./commands/subscribe-pr.js').default
-  : null
-const ultraplan = feature('ULTRAPLAN')
-  ? require('./commands/ultraplan.js').default
   : null
 const torch = feature('TORCH') ? require('./commands/torch.js').default : null
 const daemonCmd =
@@ -150,8 +136,6 @@ const goalCmd = feature('GOAL')
 /* eslint-enable @typescript-eslint/no-require-imports */
 import permissions from './commands/permissions/index.js'
 import plan from './commands/plan/index.js'
-import passes from './commands/passes/index.js'
-import privacySettings from './commands/privacy-settings/index.js'
 import hooks from './commands/hooks/index.js'
 import files from './commands/files/index.js'
 import branch from './commands/branch/index.js'
@@ -160,17 +144,11 @@ import plugin from './commands/plugin/index.js'
 import reloadPlugins from './commands/reload-plugins/index.js'
 import rewind from './commands/rewind/index.js'
 import heapDump from './commands/heapdump/index.js'
-import mockLimits from './commands/mock-limits/index.js'
-import bridgeKick from './commands/bridge-kick.js'
 import version from './commands/version.js'
 import summary from './commands/summary/index.js'
 import recap from './commands/recap/index.js'
 import skillLearning from './commands/skill-learning/index.js'
 import skillSearch from './commands/skill-search/index.js'
-import {
-  resetLimits,
-  resetLimitsNonInteractive,
-} from './commands/reset-limits/index.js'
 import antTrace from './commands/ant-trace/index.js'
 import perfIssue from './commands/perf-issue/index.js'
 import sandboxToggle from './commands/sandbox-toggle/index.js'
@@ -250,9 +228,6 @@ export const INTERNAL_ONLY_COMMANDS = [
   backfillSessions,
   bughunter,
   goodClaude,
-  mockLimits,
-  resetLimits,
-  resetLimitsNonInteractive,
   antTrace,
 ].filter(Boolean)
 
@@ -305,9 +280,7 @@ const COMMANDS = memoize((): Command[] => [
   stickers,
   tag,
   theme,
-  feedback,
   review,
-  ultrareview,
   rewind,
   securityReview,
   terminalSetup,
@@ -323,16 +296,11 @@ const COMMANDS = memoize((): Command[] => [
   ...(monitorCmd ? [monitorCmd] : []),
   ...(coordinatorCmd ? [coordinatorCmd] : []),
   ...(briefCommand ? [briefCommand] : []),
-  ...(assistantCommand ? [assistantCommand] : []),
-  ...(bridge ? [bridge] : []),
-  ...(remoteControlServerCommand ? [remoteControlServerCommand] : []),
   permissions,
   plan,
-  privacySettings,
   hooks,
   exportCommand,
   sandboxToggle,
-  passes,
   ...(peersCmd ? [peersCmd] : []),
   ...(attachCmd ? [attachCmd] : []),
   ...(detachCmd ? [detachCmd] : []),
@@ -343,7 +311,6 @@ const COMMANDS = memoize((): Command[] => [
   ...(claimMainCmd ? [claimMainCmd] : []),
   tasks,
   ...(workflowsCmd ? [workflowsCmd] : []),
-  ...(ultraplan ? [ultraplan] : []),
   ...(torch ? [torch] : []),
   ...(daemonCmd ? [daemonCmd] : []),
   ...(jobCmd ? [jobCmd] : []),
@@ -352,10 +319,8 @@ const COMMANDS = memoize((): Command[] => [
   recap,
   skillLearning,
   skillSearch,
-  autofixPr,
   commit,
   commitPushPr,
-  bridgeKick,
   version,
   ...(subscribePr ? [subscribePr] : []),
   initVerifiers,
@@ -613,92 +578,6 @@ export const getSlashCommandToolSkills = memoize(
     }
   },
 )
-
-/**
- * Commands that are safe to use in remote mode (--remote).
- * These only affect local TUI state and don't depend on local filesystem,
- * git, shell, IDE, MCP, or other local execution context.
- *
- * Used in two places:
- * 1. Pre-filtering commands in main.tsx before REPL renders (prevents race with CCR init)
- * 2. Preserving local-only commands in REPL's handleRemoteInit after CCR filters
- */
-export const REMOTE_SAFE_COMMANDS: Set<Command> = new Set([
-  session, // Shows QR code / URL for remote session
-  exit, // Exit the TUI
-  clear, // Clear screen
-  help, // Show help
-  theme, // Change terminal theme
-  color, // Change agent color
-  vim, // Toggle vim mode
-  usage, // Show session cost, plan usage, and activity stats (/cost and /stats are aliases)
-  copy, // Copy last message
-  btw, // Quick note
-  feedback, // Send feedback
-  plan, // Plan mode toggle
-  proactive, // Toggle proactive mode
-  keybindings, // Keybinding management
-  statusline, // Status line toggle
-  stickers, // Stickers
-])
-
-/**
- * Builtin commands of type 'local' that ARE safe to execute when received
- * over the Remote Control bridge. These produce text output that streams
- * back to the mobile/web client and have no terminal-only side effects.
- *
- * 'local-jsx' commands are blocked by type (they render Ink UI) and
- * 'prompt' commands are allowed by type (they expand to text sent to the
- * model) — this set only gates 'local' commands.
- *
- * When adding a new 'local' command that should work from mobile, add it
- * here. Default is blocked.
- */
-export const BRIDGE_SAFE_COMMANDS: Set<Command> = new Set(
-  [
-    compact, // Shrink context — useful mid-session from a phone
-    clear, // Wipe transcript
-    usage, // Show session cost (/cost alias)
-    summary, // Summarize conversation
-    releaseNotes, // Show changelog
-    files, // List tracked files
-  ].filter((c): c is Command => c !== null),
-)
-
-/**
- * Whether a slash command is safe to execute when its input arrived over the
- * Remote Control bridge (mobile/web client).
- *
- * PR #19134 blanket-blocked all slash commands from bridge inbound because
- * `/model` from iOS was popping the local Ink picker. This predicate relaxes
- * that with an explicit allowlist: 'prompt' commands (skills) expand to text
- * and are safe by construction; 'local' commands need an explicit opt-in via
- * BRIDGE_SAFE_COMMANDS; 'local-jsx' commands render Ink UI and stay blocked.
- */
-export function isBridgeSafeCommand(cmd: Command): boolean {
-  if (cmd.type === 'local-jsx') return cmd.bridgeSafe === true
-  if (cmd.type === 'prompt') return true
-  return cmd.bridgeSafe === true || BRIDGE_SAFE_COMMANDS.has(cmd)
-}
-
-export function getBridgeCommandSafety(
-  cmd: Command,
-  args: string,
-): { ok: true } | { ok: false; reason?: string } {
-  if (!isBridgeSafeCommand(cmd)) return { ok: false }
-  const reason = cmd.getBridgeInvocationError?.(args)
-  return reason ? { ok: false, reason } : { ok: true }
-}
-
-/**
- * Filter commands to only include those safe for remote mode.
- * Used to pre-filter commands when rendering the REPL in --remote mode,
- * preventing local-only commands from being briefly available before
- * the CCR init message arrives.
- */
-export function filterCommandsForRemoteMode(commands: Command[]): Command[] {
-  return commands.filter(cmd => REMOTE_SAFE_COMMANDS.has(cmd))
-}
 
 export function findCommand(
   commandName: string,

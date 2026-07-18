@@ -5,7 +5,6 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 
-import { createBridgeClient } from './bridgeClient.js'
 import { BROWSER_TOOLS } from './browserTools.js'
 import { createMcpSocketClient } from './mcpSocketClient.js'
 import { createMcpSocketPool } from './mcpSocketPool.js'
@@ -13,18 +12,16 @@ import { handleToolCall } from './toolCalls.js'
 import type { ClaudeForChromeContext, SocketClient } from './types.js'
 
 /**
- * Create the socket/bridge client for the Chrome extension MCP server.
+ * Create the local socket client for the Chrome extension MCP server.
  * Exported so Desktop can share a single instance between the registered
  * MCP server and the InternalMcpServerManager (CCD sessions).
  */
 export function createChromeSocketClient(
   context: ClaudeForChromeContext,
 ): SocketClient {
-  return context.bridgeConfig
-    ? createBridgeClient(context)
-    : context.getSocketPaths
-      ? createMcpSocketPool(context)
-      : createMcpSocketClient(context)
+  return context.getSocketPaths
+    ? createMcpSocketPool(context)
+    : createMcpSocketClient(context)
 }
 
 export function createClaudeForChromeMcpServer(
@@ -33,7 +30,7 @@ export function createClaudeForChromeMcpServer(
 ): Server {
   const { serverName, logger } = context
 
-  // Choose transport: bridge (WebSocket) > socket pool (multi-profile) > single socket.
+  // Choose a local socket pool or a single local socket.
   const socketClient = existingSocketClient ?? createChromeSocketClient(context)
 
   const server = new Server(
@@ -54,9 +51,7 @@ export function createClaudeForChromeMcpServer(
       return { tools: [] }
     }
     return {
-      tools: context.bridgeConfig
-        ? BROWSER_TOOLS
-        : BROWSER_TOOLS.filter(t => t.name !== 'switch_browser'),
+      tools: BROWSER_TOOLS,
     }
   })
 

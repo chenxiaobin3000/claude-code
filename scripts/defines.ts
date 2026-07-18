@@ -23,7 +23,6 @@ export function getMacroDefines(): Record<string, string> {
   return {
     'MACRO.VERSION': JSON.stringify(pkg.version),
     'MACRO.BUILD_TIME': JSON.stringify(new Date().toISOString()),
-    'MACRO.FEEDBACK_CHANNEL': JSON.stringify(''),
     'MACRO.ISSUES_EXPLAINER': JSON.stringify(''),
     'MACRO.NATIVE_PACKAGE_URL': JSON.stringify(''),
     'MACRO.PACKAGE_URL': JSON.stringify(''),

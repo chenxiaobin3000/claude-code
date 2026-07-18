@@ -19,12 +19,6 @@ export function useReplAgentState() {
     state => state.workerSandboxPermissions,
   )
   const elicitation = useAppState(state => state.elicitation)
-  const ultraplanPendingChoice = useAppState(
-    state => state.ultraplanPendingChoice,
-  )
-  const ultraplanLaunchPending = useAppState(
-    state => state.ultraplanLaunchPending,
-  )
   const viewingAgentTaskId = useAppState(state => state.viewingAgentTaskId)
   const setAppState = useSetAppState()
 
@@ -75,8 +69,6 @@ export function useReplAgentState() {
     tasks,
     workerSandboxPermissions,
     elicitation,
-    ultraplanPendingChoice,
-    ultraplanLaunchPending,
     viewingAgentTaskId,
     viewedTask,
     viewedTeammateTask,

@@ -8,7 +8,6 @@ import figures from 'figures';
 import { type GlobalConfig, saveGlobalConfig, getCurrentProjectConfig, type OutputStyle } from '../../utils/config.js';
 import {
   getGlobalConfig,
-  getRemoteControlAtStartup,
 } from '../../utils/config.js';
 import chalk from 'chalk';
 import {
@@ -29,7 +28,6 @@ import {
   logEvent,
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
 } from 'src/services/analytics/index.js';
-import { isBridgeEnabled } from '../../bridge/bridgeEnabled.js';
 import { ThemePicker } from '../ThemePicker.js';
 import { useAppState, useSetAppState, useAppStateStore } from '../../state/AppState.js';
 import { ModelPicker } from '../ModelPicker.js';
@@ -202,8 +200,6 @@ export function Config({
       fastMode: s.fastMode,
       promptSuggestionEnabled: s.promptSuggestionEnabled,
       isBriefOnly: s.isBriefOnly,
-      replBridgeEnabled: s.replBridgeEnabled,
-      replBridgeOutboundOnly: s.replBridgeOutboundOnly,
       settings: s.settings,
     };
   });
@@ -701,7 +697,7 @@ export function Config({
     },
     {
       id: 'notifChannel',
-      label: feature('KAIROS') || feature('KAIROS_PUSH_NOTIFICATION') ? 'Local notifications' : 'Notifications',
+      label: 'Local notifications',
       value: globalConfig.preferredNotifChannel,
       options: ['auto', 'iterm2', 'terminal_bell', 'iterm2_with_bell', 'kitty', 'ghostty', 'notifications_disabled'],
       type: 'enum',
@@ -716,58 +712,6 @@ export function Config({
         });
       },
     },
-    ...(feature('KAIROS') || feature('KAIROS_PUSH_NOTIFICATION')
-      ? [
-          {
-            id: 'taskCompleteNotifEnabled',
-            label: 'Push when idle',
-            value: globalConfig.taskCompleteNotifEnabled ?? false,
-            type: 'boolean' as const,
-            onChange(taskCompleteNotifEnabled: boolean) {
-              saveGlobalConfig(current => ({
-                ...current,
-                taskCompleteNotifEnabled,
-              }));
-              setGlobalConfig({
-                ...getGlobalConfig(),
-                taskCompleteNotifEnabled,
-              });
-            },
-          },
-          {
-            id: 'inputNeededNotifEnabled',
-            label: 'Push when input needed',
-            value: globalConfig.inputNeededNotifEnabled ?? false,
-            type: 'boolean' as const,
-            onChange(inputNeededNotifEnabled: boolean) {
-              saveGlobalConfig(current => ({
-                ...current,
-                inputNeededNotifEnabled,
-              }));
-              setGlobalConfig({
-                ...getGlobalConfig(),
-                inputNeededNotifEnabled,
-              });
-            },
-          },
-          {
-            id: 'agentPushNotifEnabled',
-            label: 'Push when Claude decides',
-            value: globalConfig.agentPushNotifEnabled ?? false,
-            type: 'boolean' as const,
-            onChange(agentPushNotifEnabled: boolean) {
-              saveGlobalConfig(current => ({
-                ...current,
-                agentPushNotifEnabled,
-              }));
-              setGlobalConfig({
-                ...getGlobalConfig(),
-                agentPushNotifEnabled,
-              });
-            },
-          },
-        ]
-      : []),
     {
       id: 'outputStyle',
       label: 'Output style',
@@ -1001,56 +945,6 @@ export function Config({
           ];
         })()
       : []),
-    // Remote at startup toggle — gated on build flag + GrowthBook + policy
-    ...(feature('BRIDGE_MODE') && isBridgeEnabled()
-      ? [
-          {
-            id: 'remoteControlAtStartup',
-            label: 'Enable Remote Control for all sessions',
-            value:
-              globalConfig.remoteControlAtStartup === undefined
-                ? 'default'
-                : String(globalConfig.remoteControlAtStartup),
-            options: ['true', 'false', 'default'],
-            type: 'enum' as const,
-            onChange(selected: string) {
-              if (selected === 'default') {
-                // Unset the config key so it falls back to the platform default
-                saveGlobalConfig(current => {
-                  if (current.remoteControlAtStartup === undefined) return current;
-                  const next = { ...current };
-                  delete next.remoteControlAtStartup;
-                  return next;
-                });
-                setGlobalConfig({
-                  ...getGlobalConfig(),
-                  remoteControlAtStartup: undefined,
-                });
-              } else {
-                const enabled = selected === 'true';
-                saveGlobalConfig(current => {
-                  if (current.remoteControlAtStartup === enabled) return current;
-                  return { ...current, remoteControlAtStartup: enabled };
-                });
-                setGlobalConfig({
-                  ...getGlobalConfig(),
-                  remoteControlAtStartup: enabled,
-                });
-              }
-              // Sync to AppState so useReplBridge reacts immediately
-              const resolved = getRemoteControlAtStartup();
-              setAppState(prev => {
-                if (prev.replBridgeEnabled === resolved && !prev.replBridgeOutboundOnly) return prev;
-                return {
-                  ...prev,
-                  replBridgeEnabled: resolved,
-                  replBridgeOutboundOnly: false,
-                };
-              });
-            },
-          },
-        ]
-      : []),
     ...(shouldShowExternalIncludesToggle
       ? [
           {
@@ -1182,13 +1076,6 @@ export function Config({
     if (globalConfig.showTurnDuration !== initialConfig.current.showTurnDuration) {
       formattedChanges.push(`${globalConfig.showTurnDuration ? 'Enabled' : 'Disabled'} turn duration`);
     }
-    if (globalConfig.remoteControlAtStartup !== initialConfig.current.remoteControlAtStartup) {
-      const remoteLabel =
-        globalConfig.remoteControlAtStartup === undefined
-          ? 'Reset Remote Control to default'
-          : `${globalConfig.remoteControlAtStartup ? 'Enabled' : 'Disabled'} Remote Control for all sessions`;
-      formattedChanges.push(remoteLabel);
-    }
     if (formattedChanges.length > 0) {
       onClose(formattedChanges.join('\n'));
     } else {
@@ -1262,8 +1149,6 @@ export function Config({
       fastMode: ia.fastMode,
       promptSuggestionEnabled: ia.promptSuggestionEnabled,
       isBriefOnly: ia.isBriefOnly,
-      replBridgeEnabled: ia.replBridgeEnabled,
-      replBridgeOutboundOnly: ia.replBridgeOutboundOnly,
       settings: ia.settings,
       // Reconcile auto-mode state after useAutoModeDuringPlan revert above —
       // the onChange handler may have activated/deactivated auto mid-plan.

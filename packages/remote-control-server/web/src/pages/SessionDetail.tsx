@@ -305,7 +305,7 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
           </div>
         )}
 
-        {/* Unified ChatInput — claude.ai style */}
+        {/* Unified chat input */}
         <ChatInput
           onSubmit={handleSubmit}
           isLoading={isLoading}

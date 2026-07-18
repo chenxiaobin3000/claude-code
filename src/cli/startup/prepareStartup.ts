@@ -18,14 +18,6 @@ const coordinatorModeModule = feature('COORDINATOR_MODE')
   ? (require('../../coordinator/coordinatorMode.js') as typeof import('../../coordinator/coordinatorMode.js'))
   : null
 /* eslint-enable @typescript-eslint/no-require-imports */
-// Dead code elimination: conditional import for KAIROS (assistant mode)
-/* eslint-disable @typescript-eslint/no-require-imports */
-const assistantModule = feature('KAIROS')
-  ? (require('../../assistant/index.js') as typeof import('../../assistant/index.js'))
-  : null
-const kairosGate = feature('KAIROS')
-  ? (require('../../assistant/gate.js') as typeof import('../../assistant/gate.js'))
-  : null
 
 import { isEnvTruthy } from '../../utils/envUtils.js'
 import { gracefulShutdownSync } from 'src/utils/gracefulShutdown.js'
@@ -58,14 +50,6 @@ const _pendingConnect: PendingConnect | undefined = feature('DIRECT_CONNECT')
     }
   : undefined
 
-// Set by early argv processing when `claude assistant [sessionId]` is detected
-export type PendingAssistantChat = { sessionId?: string; discover: boolean }
-const _pendingAssistantChat: PendingAssistantChat | undefined = feature(
-  'KAIROS',
-)
-  ? { sessionId: undefined, discover: false }
-  : undefined
-
 // `claude ssh <host> [dir]` — parsed from argv early (same pattern as
 // DIRECT_CONNECT above) so the main command path can pick it up and hand
 // the REPL an SSH-backed session instead of a local one.
@@ -95,7 +79,6 @@ const _pendingSSH: PendingSSH = {
 
 export const startupRuntimeState = {
   pendingConnect: _pendingConnect,
-  pendingAssistantChat: _pendingAssistantChat,
   pendingSSH: _pendingSSH,
 }
 
@@ -211,29 +194,6 @@ export async function executeStartup(runProgram: () => Promise<unknown>) {
       )
       const urlSchemeResult = await handleUrlSchemeLaunch()
       process.exit(urlSchemeResult ?? 1)
-    }
-  }
-
-  // `claude assistant [sessionId]` — stash and strip so the main
-  // command handles it, giving the full interactive TUI. Position-0 only
-  // (matching the ssh pattern below) — indexOf would false-positive on
-  // `claude -p "explain assistant"`. Root-flag-before-subcommand
-  // (e.g. `--debug assistant`) falls through to the stub, which
-  // prints usage.
-  if (feature('KAIROS') && _pendingAssistantChat) {
-    const rawArgs = process.argv.slice(2)
-    if (rawArgs[0] === 'assistant') {
-      const nextArg = rawArgs[1]
-      if (nextArg && !nextArg.startsWith('-')) {
-        _pendingAssistantChat.sessionId = nextArg
-        rawArgs.splice(0, 2) // drop 'assistant' and sessionId
-        process.argv = [process.argv[0]!, process.argv[1]!, ...rawArgs]
-      } else if (!nextArg) {
-        _pendingAssistantChat.discover = true
-        rawArgs.splice(0, 1) // drop 'assistant'
-        process.argv = [process.argv[0]!, process.argv[1]!, ...rawArgs]
-      }
-      // else: `claude assistant --help` → fall through to stub
     }
   }
 

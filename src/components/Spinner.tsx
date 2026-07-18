@@ -2,7 +2,6 @@
 import { Box, Text, stringWidth } from '@anthropic/ink';
 import * as React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { computeGlimmerIndex, computeShimmerSegments, SHIMMER_INTERVAL_MS } from '../bridge/bridgeStatusUtil.js';
 import { feature } from 'bun:bundle';
 import { getKairosActive, getUserMsgOptIn } from '../bootstrap/state.js';
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js';
@@ -36,9 +35,40 @@ import { getCurrentTurnTokenBudget, getTurnOutputTokens } from '../bootstrap/sta
 import { TeammateSpinnerTree } from './Spinner/TeammateSpinnerTree.js';
 import { useAnimationFrame } from '@anthropic/ink';
 import { getGlobalConfig } from '../utils/config.js';
+import { getGraphemeSegmenter } from '../utils/intl.js';
 export type { SpinnerMode } from './Spinner/index.js';
 
 const DEFAULT_CHARACTERS = getDefaultCharacters();
+
+const SHIMMER_INTERVAL_MS = 150;
+
+function computeGlimmerIndex(tick: number, messageWidth: number): number {
+  return messageWidth + 10 - (tick % (messageWidth + 20));
+}
+
+function computeShimmerSegments(text: string, glimmerIndex: number): {
+  before: string;
+  shimmer: string;
+  after: string;
+} {
+  const shimmerStart = glimmerIndex - 1;
+  const shimmerEnd = glimmerIndex + 1;
+  if (shimmerStart >= stringWidth(text) || shimmerEnd < 0) {
+    return { before: text, shimmer: '', after: '' };
+  }
+  let col = 0;
+  let before = '';
+  let shimmer = '';
+  let after = '';
+  for (const { segment } of getGraphemeSegmenter().segment(text)) {
+    const width = stringWidth(segment);
+    if (col + width <= Math.max(0, shimmerStart)) before += segment;
+    else if (col > shimmerEnd) after += segment;
+    else shimmer += segment;
+    col += width;
+  }
+  return { before, shimmer, after };
+}
 
 const SPINNER_FRAMES = [...DEFAULT_CHARACTERS, ...[...DEFAULT_CHARACTERS].reverse()];
 

@@ -25,11 +25,7 @@ import {
 } from 'src/utils/inProcessTeammateHelpers.js'
 import { lazySchema } from 'src/utils/lazySchema.js'
 import { logError } from 'src/utils/log.js'
-import {
-  getPlan,
-  getPlanFilePath,
-  persistFileSnapshotIfRemote,
-} from 'src/utils/plans.js'
+import { getPlan, getPlanFilePath } from 'src/utils/plans.js'
 import { jsonStringify } from 'src/utils/slowOperations.js'
 import {
   getAgentName,
@@ -252,12 +248,9 @@ export const ExitPlanModeV2Tool: Tool<InputSchema, Output> = buildTool({
       'plan' in input && typeof input.plan === 'string' ? input.plan : undefined
     const plan = inputPlan ?? getPlan(context.agentId)
 
-    // Sync disk so VerifyPlanExecution / Read see the edit. Re-snapshot
-    // after: the only other persistFileSnapshotIfRemote call (api.ts) runs
-    // in normalizeToolInput, pre-permission — it captured the old plan.
+    // Sync disk so VerifyPlanExecution / Read see the edit.
     if (inputPlan !== undefined && filePath) {
       await writeFile(filePath, inputPlan, 'utf-8').catch(e => logError(e))
-      void persistFileSnapshotIfRemote()
     }
 
     // Check if this is a teammate that requires leader approval

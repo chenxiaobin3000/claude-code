@@ -18,7 +18,6 @@ export interface SessionEntry {
   status?: string
   waitingFor?: string
   updatedAt?: number
-  bridgeSessionId?: string
   agent?: string
   tmuxSessionName?: string
   engine?: 'tmux' | 'detached'

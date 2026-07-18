@@ -49,7 +49,7 @@ export function isEnvDefinedFalsy(
 /**
  * --bare / CLAUDE_CODE_SIMPLE — skip hooks, LSP, plugin sync, skill dir-walk,
  * attribution, background prefetches, and ALL keychain/credential reads.
- * Auth is strictly ANTHROPIC_API_KEY env or apiKeyHelper from --settings.
+ * Model authentication is provided by the OpenAI-compatible provider layer.
  * Explicit CLI flags (--plugin-dir, --add-dir, --mcp-config) still honored.
  * ~30 gates across the codebase.
  *

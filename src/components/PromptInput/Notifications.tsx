@@ -9,11 +9,9 @@ import { useIdeConnectionStatus } from '../../hooks/useIdeConnectionStatus.js';
 import type { IDESelection } from '../../hooks/useIdeSelection.js';
 import { useMainLoopModel } from '../../hooks/useMainLoopModel.js';
 import { Box, Text } from '@anthropic/ink';
-import { useClaudeAiLimits } from '../../services/claudeAiLimitsHook.js';
 import { calculateTokenWarningState } from '../../services/compact/autoCompact.js';
 import type { MCPServerConnection } from '../../services/mcp/types.js';
 import type { Message } from '../../types/message.js';
-import { getApiKeyHelperElapsedMs, getConfiguredApiKeyHelper, getSubscriptionType } from '../../utils/auth.js';
 import { getExternalEditor } from '../../utils/editor.js';
 import { isEnvTruthy } from '../../utils/envUtils.js';
 import { formatDuration } from '../../utils/format.js';
@@ -64,7 +62,6 @@ export function Notifications({
   const { status: ideStatus } = useIdeConnectionStatus(mcpClients);
   const notifications = useAppState(s => s.notifications);
   const { addNotification, removeNotification } = useNotifications();
-  const claudeAiLimits = useClaudeAiLimits();
 
   // Register env hook notifier for CwdChanged/FileChanged feedback
   useEffect(() => {
@@ -83,11 +80,6 @@ export function Notifications({
   // Check if we should show the IDE selection indicator
   const shouldShowIdeSelection =
     ideStatus === 'connected' && (ideSelection?.filePath || (ideSelection?.text && ideSelection.lineCount > 0));
-
-  // Check if we're in overage mode for UI indicators
-  const isInOverageMode = claudeAiLimits.isUsingOverage;
-  const subscriptionType = getSubscriptionType();
-  const isTeamOrEnterprise = subscriptionType === 'team' || subscriptionType === 'enterprise';
 
   // Check if the external editor hint should be shown
   const editor = getExternalEditor();
@@ -129,8 +121,6 @@ export function Notifications({
           ideSelection={ideSelection}
           mcpClients={mcpClients}
           notifications={notifications}
-          isInOverageMode={isInOverageMode ?? false}
-          isTeamOrEnterprise={isTeamOrEnterprise}
           apiKeyStatus={apiKeyStatus}
           debug={debug}
           verbose={verbose}
@@ -146,8 +136,6 @@ function NotificationContent({
   ideSelection,
   mcpClients,
   notifications,
-  isInOverageMode,
-  isTeamOrEnterprise,
   apiKeyStatus,
   debug,
   verbose,
@@ -160,32 +148,12 @@ function NotificationContent({
     current: Notification | null;
     queue: Notification[];
   };
-  isInOverageMode: boolean;
-  isTeamOrEnterprise: boolean;
   apiKeyStatus: VerificationStatus;
   debug: boolean;
   verbose: boolean;
   tokenUsage: number;
   mainLoopModel: string;
 }): ReactNode {
-  // Poll apiKeyHelper inflight state to show slow-helper notice.
-  // Gated on configuration — most users never set apiKeyHelper, so the
-  // effect is a no-op for them (no interval allocated).
-  const [apiKeyHelperSlow, setApiKeyHelperSlow] = useState<string | null>(null);
-  useEffect(() => {
-    if (!getConfiguredApiKeyHelper()) return;
-    const interval = setInterval(
-      (setSlow: React.Dispatch<React.SetStateAction<string | null>>) => {
-        const ms = getApiKeyHelperElapsedMs();
-        const next = ms >= 10_000 ? formatDuration(ms) : null;
-        setSlow(prev => (next === prev ? prev : next));
-      },
-      1000,
-      setApiKeyHelperSlow,
-    );
-    return () => clearInterval(interval);
-  }, []);
-
   const isBriefOnlyState = useAppState(s => s.isBriefOnly);
   const isBriefOnly = feature('KAIROS') || feature('KAIROS_BRIEF') ? isBriefOnlyState : false;
 
@@ -202,23 +170,6 @@ function NotificationContent({
             {notifications.current.text}
           </Text>
         ))}
-      {isInOverageMode && !isTeamOrEnterprise && (
-        <Box>
-          <Text dimColor wrap="truncate">
-            Now using extra usage
-          </Text>
-        </Box>
-      )}
-      {apiKeyHelperSlow && (
-        <Box>
-          <Text color="warning" wrap="truncate">
-            apiKeyHelper is taking a while{' '}
-          </Text>
-          <Text dimColor wrap="truncate">
-            ({apiKeyHelperSlow})
-          </Text>
-        </Box>
-      )}
       {(apiKeyStatus === 'invalid' || apiKeyStatus === 'missing') && (
         <Box>
           <Text color="error" wrap="truncate">

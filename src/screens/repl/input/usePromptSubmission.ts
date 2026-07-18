@@ -55,7 +55,7 @@ import { logForDebugging } from '../../../utils/debug.js'
 import type { SetAppState } from '../../../utils/messageQueueManager.js'
 import type { FileStateCache } from '../../../utils/fileStateCache.js'
 import type { EffortValue } from '../../../utils/effort.js'
-import type { RemoteMessageContent } from '../../../utils/teleport/api.js'
+import type { RemoteMessageContent } from '../../../remote/types.js'
 import type { useRemoteRuntime } from '../runtime/useRemoteRuntime.js'
 import type { useReplInputState } from './useReplInputState.js'
 
@@ -615,9 +615,7 @@ export function usePromptSubmission({
         setMessages(prev => [...prev, userMessage])
 
         // Send to remote session
-        await activeRemote.sendMessage(remoteContent, {
-          uuid: userMessage.uuid,
-        })
+        await activeRemote.sendMessage(remoteContent)
         return
       }
 

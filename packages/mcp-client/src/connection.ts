@@ -236,7 +236,7 @@ export function installConnectionMonitor(
 
     // Session expiry for HTTP transports
     if (
-      (transportType === 'http' || transportType === 'claudeai-proxy') &&
+      transportType === 'http' &&
       isMcpSessionExpiredError(error)
     ) {
       logger.debug(
@@ -250,8 +250,7 @@ export function installConnectionMonitor(
     // Terminal error tracking for remote transports
     if (
       transportType === 'sse' ||
-      transportType === 'http' ||
-      transportType === 'claudeai-proxy'
+      transportType === 'http'
     ) {
       if (error.message.includes('Maximum reconnection attempts')) {
         safeClose('SSE reconnection exhausted')

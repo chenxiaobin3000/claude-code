@@ -21,7 +21,7 @@ function isSlashCommand(cmd: QueuedCommand): boolean {
   if (typeof cmd.value === 'string') {
     return (
       cmd.value.trim().startsWith('/') &&
-      (!cmd.skipSlashCommands || cmd.bridgeOrigin === true)
+      !cmd.skipSlashCommands
     )
   }
   // For ContentBlockParam[], check the first text block
@@ -29,7 +29,7 @@ function isSlashCommand(cmd: QueuedCommand): boolean {
     if (block.type === 'text') {
       return (
         block.text.trim().startsWith('/') &&
-        (!cmd.skipSlashCommands || cmd.bridgeOrigin === true)
+        !cmd.skipSlashCommands
       )
     }
   }

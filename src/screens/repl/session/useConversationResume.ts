@@ -13,7 +13,6 @@ import {
   resetCostState,
   saveCurrentSessionCosts,
 } from '../../../cost-tracker.js'
-import { restoreRemoteAgentTasks } from '../../../tasks/RemoteAgentTask/RemoteAgentTask.js'
 import type { Message as MessageType } from '../../../types/message.js'
 import type { ResumeEntrypoint } from '../../../types/command.js'
 import type { LogOption } from '../../../types/logs.js'
@@ -206,11 +205,6 @@ export function useConversationResume({
           exitRestoredWorktree()
           restoreWorktreeForResume(log.worktreeSession)
           adoptResumedSessionFile()
-          void restoreRemoteAgentTasks({
-            abortController: new AbortController(),
-            getAppState: () => store.getState(),
-            setAppState,
-          })
         } else {
           const worktree = getCurrentWorktreeSession()
           if (worktree) saveWorktreeState(worktree)

@@ -33,7 +33,6 @@ const runtimeBoundaryFiles = [
   'src/services/tokenEstimation.ts',
   'src/constants/betas.ts',
   'src/utils/betas.ts',
-  'src/utils/auth.ts',
   'src/utils/envUtils.ts',
   'src/utils/managedEnvConstants.ts',
   'src/utils/settings/types.ts',

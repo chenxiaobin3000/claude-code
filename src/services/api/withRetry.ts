@@ -14,13 +14,6 @@ import {
   getAPIProvider,
   getAPIProviderForStatsig,
 } from 'src/utils/model/providers.js'
-import {
-  clearApiKeyHelperCache,
-  getClaudeAIOAuthTokens,
-  handleOAuth401Error,
-  isClaudeAISubscriber,
-  isEnterpriseSubscriber,
-} from '../../utils/auth.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 import { errorMessage } from '../../utils/errors.js'
 import {
@@ -40,10 +33,6 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../analytics/index.js'
-import {
-  checkMockRateLimitError,
-  isMockRateLimitError,
-} from '../rateLimitMocking.js'
 import { REPEATED_529_ERROR_MESSAGE } from './errors.js'
 import { extractConnectionErrorDetails } from './errorUtils.js'
 
@@ -198,17 +187,6 @@ export async function* withRetry<T>(
       : false
 
     try {
-      // Check for mock rate limits (used by /mock-limits command for Ant employees)
-      if (process.env.USER_TYPE === 'ant') {
-        const mockError = checkMockRateLimitError(
-          retryContext.model,
-          wasFastModeActive,
-        )
-        if (mockError) {
-          throw mockError
-        }
-      }
-
       // Get a fresh client instance on first attempt or after authentication errors
       // - 401 for first-party API authentication failures
       // - 403 "OAuth token has been revoked" (another process refreshed the token)
@@ -230,19 +208,8 @@ export async function* withRetry<T>(
       if (
         client === null ||
         (lastError instanceof APIError && lastError.status === 401) ||
-        isOAuthTokenRevokedError(lastError) ||
         isStaleConnection
       ) {
-        // On 401 "token expired" or 403 "token revoked", force a token refresh
-        if (
-          (lastError instanceof APIError && lastError.status === 401) ||
-          isOAuthTokenRevokedError(lastError)
-        ) {
-          const failedAccessToken = getClaudeAIOAuthTokens()?.accessToken
-          if (failedAccessToken) {
-            await handleOAuth401Error(failedAccessToken)
-          }
-        }
         client = await getClient()
       }
 
@@ -325,7 +292,7 @@ export async function* withRetry<T>(
         // If FALLBACK_FOR_ALL_PRIMARY_MODELS is not set, fall through only if the primary model is a non-custom Opus model.
         // TODO: Revisit if the isNonCustomOpusModel check should still exist, or if isNonCustomOpusModel is a stale artifact of when Claude Code was hardcoded on Opus.
         (process.env.FALLBACK_FOR_ALL_PRIMARY_MODELS ||
-          (!isClaudeAISubscriber() && isNonCustomOpusModel(options.model)))
+          isNonCustomOpusModel(options.model))
       ) {
         consecutive529Errors++
         if (consecutive529Errors >= MAX_529_RETRIES) {
@@ -607,20 +574,7 @@ export function is529Error(error: unknown): boolean {
   )
 }
 
-function isOAuthTokenRevokedError(error: unknown): boolean {
-  return (
-    error instanceof APIError &&
-    error.status === 403 &&
-    (error.message?.includes('OAuth token has been revoked') ?? false)
-  )
-}
-
 function shouldRetry(error: APIError): boolean {
-  // Never retry mock errors - they're from /mock-limits command for testing
-  if (isMockRateLimitError(error)) {
-    return false
-  }
-
   // Persistent mode: 429/529 always retryable, bypass subscriber gates and
   // x-should-retry header.
   if (isPersistentRetryEnabled() && isTransientCapacityError(error)) {
@@ -656,10 +610,7 @@ function shouldRetry(error: APIError): boolean {
   // If the server explicitly says whether or not to retry, obey.
   // For Max and Pro users, should-retry is true, but in several hours, so we shouldn't.
   // Enterprise users can retry because they typically use PAYG instead of rate limits.
-  if (
-    shouldRetryHeader === 'true' &&
-    (!isClaudeAISubscriber() || isEnterpriseSubscriber())
-  ) {
+  if (shouldRetryHeader === 'true') {
     return true
   }
 
@@ -684,22 +635,12 @@ function shouldRetry(error: APIError): boolean {
   // Retry on lock timeouts.
   if (error.status === 409) return true
 
-  // Retry on rate limits, but not for ClaudeAI Subscription users
-  // Enterprise users can retry because they typically use PAYG instead of rate limits
   if (error.status === 429) {
-    return !isClaudeAISubscriber() || isEnterpriseSubscriber()
+    return true
   }
 
-  // Clear API key cache on 401 and allow retry.
-  // OAuth token handling is done in the main retry loop via handleOAuth401Error.
   if (error.status === 401) {
-    clearApiKeyHelperCache()
-    return true
-  }
-
-  // Retry on 403 "token revoked" (same refresh logic as 401, see above)
-  if (isOAuthTokenRevokedError(error)) {
-    return true
+    return false
   }
 
   // Retry internal errors.

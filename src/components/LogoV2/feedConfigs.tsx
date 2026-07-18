@@ -1,8 +1,6 @@
 import figures from 'figures';
 import { homedir } from 'os';
-import { Box, Text } from '@anthropic/ink';
 import type { Step } from '../../projectOnboardingState.js';
-import { formatCreditAmount, getCachedReferrerReward } from '../../services/api/referral.js';
 import type { LogOption } from '../../types/logs.js';
 import { getCwd } from '../../utils/cwd.js';
 import { formatRelativeTimeAgo } from '../../utils/format.js';
@@ -85,25 +83,3 @@ export function createProjectOnboardingFeed(steps: Step[]): FeedConfig {
   };
 }
 
-export function createGuestPassesFeed(): FeedConfig {
-  const reward = getCachedReferrerReward();
-  const subtitle = reward
-    ? `Share Claude Code and earn ${formatCreditAmount(reward)} of extra usage`
-    : 'Share Claude Code with friends';
-  return {
-    title: '3 guest passes',
-    lines: [],
-    customContent: {
-      content: (
-        <>
-          <Box marginY={1}>
-            <Text color="claude">[✻] [✻] [✻]</Text>
-          </Box>
-          <Text dimColor>{subtitle}</Text>
-        </>
-      ),
-      width: 48,
-    },
-    footer: '/passes',
-  };
-}

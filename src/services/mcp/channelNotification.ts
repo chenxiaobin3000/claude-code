@@ -10,10 +10,8 @@
  * The model sees where the message came from and decides which tool to reply
  * with (the channel's MCP tool, SendUserMessage, or both).
  *
- * feature('KAIROS') || feature('KAIROS_CHANNELS'). Runtime gate tengu_harbor.
- * Requires claude.ai OAuth auth — API key users are blocked until
- * console gets a channelsEnabled admin surface. Teams/Enterprise orgs
- * must explicitly opt in via channelsEnabled: true in managed settings.
+ * Channel delivery is local MCP traffic and requires an explicit --channels
+ * session allowlist. It has no account or cloud authentication dependency.
  */
 
 import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js'
@@ -21,7 +19,6 @@ import type { AnyObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compa
 import { z } from 'zod/v4'
 import { type ChannelEntry, getAllowedChannels } from '../../bootstrap/state.js'
 import { CHANNEL_TAG } from '../../constants/xml.js'
-import { getSubscriptionType } from '../../utils/auth.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 import { parsePluginIdentifier } from '../../utils/plugins/pluginIdentifier.js'
 import { escapeXmlAttr } from '../../utils/xml.js'
@@ -146,28 +143,12 @@ export function wrapChannelMessage(
  * Callers already read sub/policy for the policy gate — pass them in to
  * avoid double-reading getSettingsForSource (uncached).
  */
-export function getEffectiveChannelAllowlist(
-  sub: ReturnType<typeof getSubscriptionType>,
-  orgList: ChannelAllowlistEntry[] | undefined,
-): {
-  entries: ChannelAllowlistEntry[]
-  source: 'org' | 'ledger'
-} {
-  if ((sub === 'team' || sub === 'enterprise') && orgList) {
-    return { entries: orgList, source: 'org' }
-  }
-  return { entries: getChannelAllowlist(), source: 'ledger' }
-}
-
 export type ChannelGateResult =
   | { action: 'register' }
   | {
       action: 'skip'
       kind:
         | 'capability'
-        | 'disabled'
-        | 'auth'
-        | 'policy'
         | 'session'
         | 'marketplace'
         | 'allowlist'
@@ -197,10 +178,7 @@ export function findChannelEntry(
 /**
  * Gate an MCP server's channel-notification path. Caller checks
  * feature('KAIROS') || feature('KAIROS_CHANNELS') first (build-time
- * elimination). Gate order: capability → runtime gate (tengu_harbor) →
- * auth (OAuth only) → org policy → session --channels → allowlist.
- * API key users are blocked at the auth layer — channels requires
- * claude.ai auth; console orgs have no admin opt-in surface yet.
+ * elimination). Gate order: capability → session --channels → allowlist.
  *
  *   skip      Not a channel server, or managed org hasn't opted in, or
  *             not in session --channels. Connection stays up; handler

@@ -1,8 +1,6 @@
 import type { Command } from '@commander-js/extra-typings'
 import { feature } from 'bun:bundle'
 import { init } from '../../entrypoints/init.js'
-import { loadPolicyLimits } from '../../services/policyLimits/index.js'
-import { loadRemoteManagedSettings } from '../../services/remoteManagedSettings/index.js'
 import { setInlinePlugins } from '../../bootstrap/state.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 import { clearPluginCache } from '../../utils/plugins/pluginLoader.js'
@@ -39,15 +37,5 @@ export function registerCommandServiceInitialization(program: Command): void {
     runStartupMigrations()
     profileCheckpoint('preAction_after_migrations')
 
-    void loadRemoteManagedSettings()
-    void loadPolicyLimits()
-    profileCheckpoint('preAction_after_remote_settings')
-
-    if (feature('UPLOAD_USER_SETTINGS')) {
-      void import('../../services/settingsSync/index.js').then(module =>
-        module.uploadUserSettingsInBackground(),
-      )
-    }
-    profileCheckpoint('preAction_after_settings_sync')
   })
 }

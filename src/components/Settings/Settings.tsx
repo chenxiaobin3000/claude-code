@@ -8,13 +8,12 @@ import { useIsInsideModal, useModalOrTerminalSize } from '../../context/modalCon
 import { Pane, Tab, Tabs } from '@anthropic/ink';
 import { Status, buildDiagnostics } from './Status.js';
 import { Config } from './Config.js';
-import { Usage } from './Usage.js';
 import type { LocalJSXCommandContext, CommandResultDisplay } from '../../commands.js';
 
 type Props = {
   onClose: (result?: string, options?: { display?: CommandResultDisplay }) => void;
   context: LocalJSXCommandContext;
-  defaultTab: 'Status' | 'Config' | 'Usage';
+  defaultTab: 'Status' | 'Config';
 };
 
 export function Settings({ onClose, context, defaultTab }: Props): React.ReactNode {
@@ -75,9 +74,6 @@ export function Settings({ onClose, context, defaultTab }: Props): React.ReactNo
           contentHeight={contentHeight}
         />
       </Suspense>
-    </Tab>,
-    <Tab key="usage" title="Usage">
-      <Usage />
     </Tab>,
   ];
 

@@ -27,10 +27,8 @@ export function createAcpStream(
 export async function runAcpAgent(): Promise<void> {
   enableConfigs()
 
-  // Apply environment variables from settings.json (ANTHROPIC_BASE_URL,
-  // ANTHROPIC_AUTH_TOKEN, model overrides, etc.) so the API client can
-  // authenticate. Without this, Zed-launched processes won't have these
-  // env vars in process.env.
+  // Apply local OpenAI-compatible provider settings for editor-launched ACP
+  // processes, which may not inherit the interactive shell environment.
   applySafeConfigEnvironmentVariables()
 
   const stream = createAcpStream(process.stdin, process.stdout)

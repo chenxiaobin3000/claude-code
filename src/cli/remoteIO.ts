@@ -2,7 +2,6 @@ import type { StdoutMessage } from 'src/entrypoints/sdk/controlTypes.js'
 import { PassThrough } from 'stream'
 import { URL } from 'url'
 import { getSessionId } from '../bootstrap/state.js'
-import { getPollIntervalConfig } from '../bridge/pollConfig.js'
 import { registerCleanup } from '../utils/cleanupRegistry.js'
 import { setCommandLifecycleListener } from '../utils/commandLifecycle.js'
 import { isDebugMode, logForDebugging } from '../utils/debug.js'
@@ -185,7 +184,7 @@ export class RemoteIO extends StructuredIO {
     // (#21931). byoc workers ran without this before #21931 and do not
     // need it — different network path.
     const keepAliveIntervalMs =
-      getPollIntervalConfig().session_keepalive_interval_v2_ms
+      20_000
     if (this.isBridge && keepAliveIntervalMs > 0) {
       this.keepAliveTimer = setInterval(() => {
         logForDebugging('[remote-io] keep_alive sent')

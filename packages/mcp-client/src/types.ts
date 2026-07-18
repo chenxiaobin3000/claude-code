@@ -18,7 +18,6 @@ export const ConfigScope = z.enum([
   'project',
   'dynamic',
   'enterprise',
-  'claudeai',
   'managed',
 ])
 export type ConfigScope = z.infer<typeof ConfigScope>
@@ -34,7 +33,6 @@ export const TransportType = z.enum([
   'http',
   'ws',
   'sdk',
-  'claudeai-proxy',
 ])
 export type Transport = z.infer<typeof TransportType>
 
@@ -105,12 +103,6 @@ export const McpSdkServerConfigSchema = z.object({
   name: z.string(),
 })
 
-export const McpClaudeAIProxyServerConfigSchema = z.object({
-  type: z.literal('claudeai-proxy'),
-  url: z.string(),
-  id: z.string(),
-})
-
 export const McpServerConfigSchema = z.union([
   McpStdioServerConfigSchema,
   McpSSEServerConfigSchema,
@@ -119,7 +111,6 @@ export const McpServerConfigSchema = z.union([
   McpHTTPServerConfigSchema,
   McpWebSocketServerConfigSchema,
   McpSdkServerConfigSchema,
-  McpClaudeAIProxyServerConfigSchema,
 ])
 
 // ============================================================================
@@ -137,9 +128,6 @@ export type McpWebSocketServerConfig = z.infer<
   typeof McpWebSocketServerConfigSchema
 >
 export type McpSdkServerConfig = z.infer<typeof McpSdkServerConfigSchema>
-export type McpClaudeAIProxyServerConfig = z.infer<
-  typeof McpClaudeAIProxyServerConfigSchema
->
 export type McpServerConfig = z.infer<typeof McpServerConfigSchema>
 
 export type ScopedMcpServerConfig = McpServerConfig & {

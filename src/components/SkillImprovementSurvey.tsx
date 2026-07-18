@@ -3,14 +3,18 @@ import { BLACK_CIRCLE, BULLET_OPERATOR } from '../constants/figures.js';
 import { Box, Text } from '@anthropic/ink';
 import type { SkillUpdate } from '../utils/hooks/skillImprovement.js';
 import { normalizeFullWidthDigits } from '../utils/stringUtils.js';
-import { isValidResponseInput } from './FeedbackSurvey/FeedbackSurveyView.js';
-import type { FeedbackSurveyResponse } from './FeedbackSurvey/utils.js';
+
+export type SkillImprovementResponse = 'dismissed' | 'bad' | 'fine' | 'good';
+
+function isValidResponseInput(input: string): boolean {
+  return input === '' || ['0', '1', '2', '3'].includes(normalizeFullWidthDigits(input.slice(-1)));
+}
 
 type Props = {
   isOpen: boolean;
   skillName: string;
   updates: SkillUpdate[];
-  handleSelect: (selected: FeedbackSurveyResponse) => void;
+  handleSelect: (selected: SkillImprovementResponse) => void;
   inputValue: string;
   setInputValue: (value: string) => void;
 };
@@ -46,7 +50,7 @@ export function SkillImprovementSurvey({
 type ViewProps = {
   skillName: string;
   updates: SkillUpdate[];
-  onSelect: (option: FeedbackSurveyResponse) => void;
+  onSelect: (option: SkillImprovementResponse) => void;
   inputValue: string;
   setInputValue: (value: string) => void;
 };

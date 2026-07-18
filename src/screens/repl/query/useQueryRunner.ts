@@ -62,7 +62,6 @@ export function useQueryRunner({
   setLastQueryCompletionTime,
   skipIdleCheckRef,
   resetLoadingState,
-  sendBridgeResultRef,
   setAppState,
   loadingStartTimeRef,
   totalPausedMsRef,
@@ -106,7 +105,6 @@ export function useQueryRunner({
   setLastQueryCompletionTime: React.Dispatch<React.SetStateAction<number>>
   skipIdleCheckRef: React.MutableRefObject<boolean>
   resetLoadingState: () => void
-  sendBridgeResultRef: React.MutableRefObject<() => void>
   setAppState: SetAppState
   loadingStartTimeRef: React.MutableRefObject<number>
   totalPausedMsRef: React.MutableRefObject<number>
@@ -214,7 +212,6 @@ export function useQueryRunner({
           )
           if (feature('UDS_INBOX') && !pipeReturnHadErrorRef.current)
             relayPipeMessage({ type: 'done', data: '' })
-          sendBridgeResultRef.current()
           if (
             process.env.USER_TYPE === 'ant' &&
             !abortController.signal.aborted
@@ -313,7 +310,6 @@ export function useQueryRunner({
       setLastQueryCompletionTime,
       skipIdleCheckRef,
       resetLoadingState,
-      sendBridgeResultRef,
       setAppState,
       loadingStartTimeRef,
       totalPausedMsRef,

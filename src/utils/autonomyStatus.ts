@@ -18,13 +18,8 @@ import { cronToHuman } from './cron.js'
 import { listAllCronTasks, nextCronRunMs } from './cronTasks.js'
 import { getTeammateStatuses } from './teamDiscovery.js'
 import { listTasks } from './tasks.js'
-import {
-  formatRemoteTriggerAuditStatus,
-  listRemoteTriggerAuditRecords,
-} from './remoteTriggerAudit.js'
 import { formatWorkflowRunsStatus, listWorkflowRuns } from './workflowRuns.js'
 import { formatPipeRegistryStatus } from './pipeStatus.js'
-import { formatRemoteControlLocalStatus } from './remoteControlStatus.js'
 
 type DeepStatusParams = {
   runs: AutonomyRunRecord[]
@@ -41,8 +36,6 @@ export type AutonomyDeepStatusSectionId =
   | 'teams'
   | 'pipes'
   | 'runtime'
-  | 'remote-control'
-  | 'remote-trigger'
 
 export type AutonomyDeepStatusSection = {
   id: AutonomyDeepStatusSectionId
@@ -192,16 +185,6 @@ export async function formatAutonomyDeepStatusSections({
       id: 'runtime' as const,
       title: 'Runtime',
       content,
-    })),
-    Promise.resolve({
-      id: 'remote-control' as const,
-      title: 'Remote Control',
-      content: formatRemoteControlLocalStatus(),
-    }),
-    listRemoteTriggerAuditRecords().then(records => ({
-      id: 'remote-trigger' as const,
-      title: 'RemoteTrigger',
-      content: formatRemoteTriggerAuditStatus(records),
     })),
   ])
 }

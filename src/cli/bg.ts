@@ -100,7 +100,6 @@ export async function psHandler(_args: string[]): Promise<void> {
     if (s.startedAt) parts.push(`  Started: ${formatTime(s.startedAt)}`)
     if (s.status) parts.push(`  Status: ${s.status}`)
     if (s.waitingFor) parts.push(`  Waiting for: ${s.waitingFor}`)
-    if (s.bridgeSessionId) parts.push(`  Bridge: ${s.bridgeSessionId}`)
     if (s.tmuxSessionName) parts.push(`  Tmux: ${s.tmuxSessionName}`)
     if (s.logPath) parts.push(`  Log: ${s.logPath}`)
 

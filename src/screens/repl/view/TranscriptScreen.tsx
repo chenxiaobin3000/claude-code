@@ -81,7 +81,7 @@ export function TranscriptScreen({
       {transcriptScrollRef ? (
         <ScrollKeybindingHandler
           scrollRef={scrollRef}
-          isActive={focusedInputDialog !== 'ultraplan-choice'}
+          isActive
           isModal={!searchOpen}
           onScroll={() => jumpRef.current?.disarmSearch()}
         />

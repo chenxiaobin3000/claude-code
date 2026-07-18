@@ -43,6 +43,4 @@ export interface ModelProviderHooks {
   /** Check if non-interactive session */
   isNonInteractiveSession: () => boolean
 
-  /** Get OAuth account info */
-  getOauthAccountInfo?: () => Record<string, unknown> | undefined
 }

@@ -1,7 +1,6 @@
 import type { TextBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
 import React, { useContext } from 'react';
 import { ERROR_MESSAGE_USER_ABORT } from 'src/services/compact/compact.js';
-import { isRateLimitErrorMessage } from 'src/services/rateLimitMessages.js';
 import { BLACK_CIRCLE } from '../../constants/figures.js';
 import { Box, NoSelect, Text } from '@anthropic/ink';
 import {
@@ -11,11 +10,8 @@ import {
   CUSTOM_OFF_SWITCH_MESSAGE,
   INVALID_API_KEY_ERROR_MESSAGE,
   INVALID_API_KEY_ERROR_MESSAGE_EXTERNAL,
-  ORG_DISABLED_ERROR_MESSAGE_ENV_KEY,
-  ORG_DISABLED_ERROR_MESSAGE_ENV_KEY_WITH_OAUTH,
   PROMPT_TOO_LONG_ERROR_MESSAGE,
   startsWithApiErrorPrefix,
-  TOKEN_REVOKED_ERROR_MESSAGE,
 } from '../../services/api/errors.js';
 import { isEmptyMessageText, NO_RESPONSE_REQUESTED } from '../../utils/messages.js';
 import { getUpgradeMessage } from '../../utils/model/contextWindowUpgradeCheck.js';
@@ -26,7 +22,6 @@ import { InterruptedByUser } from '../InterruptedByUser.js';
 import { Markdown } from '../Markdown.js';
 import { MessageResponse } from '../MessageResponse.js';
 import { MessageActionsSelectedContext } from '../messageActions.js';
-import { RateLimitMessage } from './RateLimitMessage.js';
 
 const MAX_API_ERROR_CHARS = 1000;
 
@@ -64,12 +59,6 @@ export function AssistantTextMessage({
     return null;
   }
 
-  // Handle all rate limit error messages from getRateLimitErrorMessage
-  // Use the exported function to avoid fragile string coupling
-  if (isRateLimitErrorMessage(text)) {
-    return <RateLimitMessage text={text} onOpenRateLimitOptions={onOpenRateLimitOptions} />;
-  }
-
   switch (text) {
     // Local JSX commands don't need a response, but we still want Claude to see them
     // Tool results render their own interrupt messages
@@ -92,7 +81,7 @@ export function AssistantTextMessage({
       return (
         <MessageResponse height={1}>
           <Text color="error">
-            Credit balance too low &middot; Add funds: https://platform.claude.com/settings/billing
+            Provider credit balance is too low
           </Text>
         </MessageResponse>
       );
@@ -104,21 +93,6 @@ export function AssistantTextMessage({
       return (
         <MessageResponse height={1}>
           <Text color="error">{INVALID_API_KEY_ERROR_MESSAGE_EXTERNAL}</Text>
-        </MessageResponse>
-      );
-
-    case ORG_DISABLED_ERROR_MESSAGE_ENV_KEY:
-    case ORG_DISABLED_ERROR_MESSAGE_ENV_KEY_WITH_OAUTH:
-      return (
-        <MessageResponse>
-          <Text color="error">{text}</Text>
-        </MessageResponse>
-      );
-
-    case TOKEN_REVOKED_ERROR_MESSAGE:
-      return (
-        <MessageResponse height={1}>
-          <Text color="error">{TOKEN_REVOKED_ERROR_MESSAGE}</Text>
         </MessageResponse>
       );
 

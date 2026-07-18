@@ -95,7 +95,7 @@ export function ChatView({
 
 function entrySpacing(entries: ThreadEntry[], index: number): string {
   const entry = entries[index];
-  // 用户消息前后大留白 — Claude.ai 式宽松间距
+  // 用户消息前后使用宽松间距
   if (entry?.type === 'user_message') {
     return 'pt-10 pb-3';
   }

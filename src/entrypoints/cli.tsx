@@ -12,7 +12,6 @@ if (typeof globalThis.MACRO === 'undefined') {
   (globalThis as any).MACRO = {
     VERSION: process.env.CLAUDE_CODE_VERSION || '2.1.116',
     BUILD_TIME: new Date().toISOString(),
-    FEEDBACK_CHANNEL: '',
     ISSUES_EXPLAINER: '',
     NATIVE_PACKAGE_URL: '',
     PACKAGE_URL: '',
@@ -147,75 +146,6 @@ async function main(): Promise<void> {
       },
       MACRO.VERSION,
     );
-    return;
-  }
-
-  // Fast-path for `--daemon-worker=<kind>` (internal — supervisor spawns this).
-  // Must come before the daemon subcommand check: spawned per-worker, so
-  // perf-sensitive. No enableConfigs(), no analytics sinks at this layer —
-  // workers are lean. If a worker kind needs configs/auth (assistant will),
-  // it calls them inside its run() fn.
-  if (args[0] === '--daemon-worker' || args[0]?.startsWith('--daemon-worker=')) {
-    if (!feature('DAEMON')) {
-      console.error(
-        'Error: --daemon-worker requires an internal build with ALLOW_INTERNAL_FEATURES=1 and FEATURE_DAEMON=1.',
-      );
-      process.exitCode = 1;
-      return;
-    }
-    const kind = args[0] === '--daemon-worker' ? args[1] : args[0].split('=')[1];
-    const { runDaemonWorker } = await import('../daemon/workerRegistry.js');
-    await runDaemonWorker(kind);
-    return;
-  }
-
-  // Fast-path for `claude remote-control` (also accepts legacy `claude remote` / `claude sync` / `claude bridge`):
-  // serve local machine as bridge environment.
-  // feature() must stay inline for build-time dead code elimination;
-  // isBridgeEnabled() checks the runtime GrowthBook gate.
-  if (
-    feature('BRIDGE_MODE') &&
-    (args[0] === 'remote-control' ||
-      args[0] === 'rc' ||
-      args[0] === 'remote' ||
-      args[0] === 'sync' ||
-      args[0] === 'bridge')
-  ) {
-    profileCheckpoint('cli_bridge_path');
-    const { enableConfigs } = await import('../utils/config.js');
-    enableConfigs();
-
-    const { getBridgeDisabledReason, checkBridgeMinVersion } = await import('../bridge/bridgeEnabled.js');
-    const { BRIDGE_LOGIN_ERROR } = await import('../bridge/types.js');
-    const { bridgeMain } = await import('../bridge/bridgeMain.js');
-    const { exitWithError } = await import('../utils/process.js');
-
-    // Auth check must come before the GrowthBook gate check — without auth,
-    // GrowthBook has no user context and would return a stale/default false.
-    // getBridgeDisabledReason awaits GB init, so the returned value is fresh
-    // (not the stale disk cache), but init still needs auth headers to work.
-    const { getClaudeAIOAuthTokens } = await import('../utils/auth.js');
-    const { getBridgeAccessToken } = await import('../bridge/bridgeConfig.js');
-    if (!getClaudeAIOAuthTokens()?.accessToken && !getBridgeAccessToken()) {
-      exitWithError(BRIDGE_LOGIN_ERROR);
-    }
-    const disabledReason = await getBridgeDisabledReason();
-    if (disabledReason) {
-      exitWithError(`Error: ${disabledReason}`);
-    }
-    const versionError = checkBridgeMinVersion();
-    if (versionError) {
-      exitWithError(versionError);
-    }
-
-    // Bridge is a remote control feature - check policy limits
-    const { waitForPolicyLimitsToLoad, isPolicyAllowed } = await import('../services/policyLimits/index.js');
-    await waitForPolicyLimitsToLoad();
-    if (!isPolicyAllowed('allow_remote_control')) {
-      exitWithError("Error: Remote Control is disabled by your organization's policy.");
-    }
-
-    await bridgeMain(args.slice(1));
     return;
   }
 

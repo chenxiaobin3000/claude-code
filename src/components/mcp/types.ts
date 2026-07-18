@@ -1,7 +1,6 @@
 import type {
   ConfigScope,
   MCPServerConnection,
-  McpClaudeAIProxyServerConfig,
   McpHTTPServerConfig,
   McpSSEServerConfig,
   McpStdioServerConfig,
@@ -34,19 +33,11 @@ export type HTTPServerInfo = ServerInfoBase & {
   config: McpHTTPServerConfig // HTTP 端点配置
 }
 
-/** Claude.ai 代理型 MCP 端点。 */
-export type ClaudeAIServerInfo = ServerInfoBase & {
-  transport: 'claudeai-proxy' // 经 Claude.ai 的代理通道
-  isAuthenticated: boolean | undefined // 代理侧鉴权展示用
-  config: McpClaudeAIProxyServerConfig // 代理 id/url 等
-}
-
 /** 非 agent 声明的、已连接 MCP 在 UI 中的判别联合。 */
 export type ServerInfo =
   | StdioServerInfo
   | SSEServerInfo
   | HTTPServerInfo
-  | ClaudeAIServerInfo
 
 /**
  * 从 Agent frontmatter 提取、用于 `/mcp`「Agents」分组的 MCP 声明。

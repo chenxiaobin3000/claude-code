@@ -2,7 +2,6 @@ import React, { useEffect, useMemo } from 'react';
 import type { CommandResultDisplay } from '../../commands.js';
 import { ClaudeAuthProvider } from '../../services/mcp/auth.js';
 import type {
-  McpClaudeAIProxyServerConfig,
   McpHTTPServerConfig,
   McpSSEServerConfig,
   McpStdioServerConfig,
@@ -50,7 +49,6 @@ export function MCPSettings({ onComplete }: Props): React.ReactNode {
           const scope = client.config.scope;
           const isSSE = client.config.type === 'sse';
           const isHTTP = client.config.type === 'http';
-          const isClaudeAIProxy = client.config.type === 'claudeai-proxy';
           let isAuthenticated: boolean | undefined;
 
           if (isSSE || isHTTP) {
@@ -75,14 +73,7 @@ export function MCPSettings({ onComplete }: Props): React.ReactNode {
             scope,
           };
 
-          if (isClaudeAIProxy) {
-            return {
-              ...baseInfo,
-              transport: 'claudeai-proxy' as const,
-              isAuthenticated: false,
-              config: client.config as McpClaudeAIProxyServerConfig,
-            };
-          } else if (isSSE) {
+          if (isSSE) {
             return {
               ...baseInfo,
               transport: 'sse' as const,
@@ -148,7 +139,7 @@ export function MCPSettings({ onComplete }: Props): React.ReactNode {
     case 'server-menu': {
       const serverTools = filterToolsByServer(mcp.tools, viewState.server.name);
 
-      const defaultTab = viewState.server.transport === 'claudeai-proxy' ? 'claude.ai' : 'Claude Code';
+      const defaultTab = 'Claude Code';
 
       if (viewState.server.transport === 'stdio') {
         return (

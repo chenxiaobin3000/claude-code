@@ -1,4 +1,3 @@
-import type { BetaMessageStreamParams } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import { realpathSync } from 'fs'
 import sumBy from 'lodash-es/sumBy.js'
 import { cwd } from 'process'
@@ -75,8 +74,6 @@ type State = {
   flagSettingsInline: Record<string, unknown> | null
   allowedSettingSources: SettingSource[]
   sessionIngressToken: string | null | undefined
-  oauthTokenFromFd: string | null | undefined
-  apiKeyFromFd: string | null | undefined
   statsStore: { observe(name: string, value: number): void } | null
   sessionId: SessionId
   // Parent session ID for tracking session lineage (e.g., plan mode -> implementation)
@@ -84,14 +81,6 @@ type State = {
   // Agent color state
   agentColorMap: Map<string, AgentColorName>
   agentColorIndex: number
-  // Last API request for bug reports
-  lastAPIRequest: Omit<BetaMessageStreamParams, 'messages'> | null
-  // Messages from the last API request (ant-only; reference, not clone).
-  // Captures the exact post-compaction, CLAUDE.md-injected message set sent
-  // to the API so /share's serialized_conversation.json reflects reality.
-  lastAPIRequestMessages: BetaMessageStreamParams['messages'] | null
-  // Last auto-mode classifier request(s) for /share transcript
-  lastClassifierRequests: unknown[] | null
   // CLAUDE.md content cached by context.ts for the auto-mode classifier.
   // Breaks the yoloClassifier → claudemd → filesystem → permissions cycle.
   cachedClaudeMdContent: string | null
@@ -273,8 +262,6 @@ function getInitialState(): State {
     sessionSource: undefined,
     questionPreviewFormat: undefined,
     sessionIngressToken: undefined,
-    oauthTokenFromFd: undefined,
-    apiKeyFromFd: undefined,
     flagSettingsPath: undefined,
     flagSettingsInline: null,
     allowedSettingSources: [
@@ -290,11 +277,6 @@ function getInitialState(): State {
     // Agent color state
     agentColorMap: new Map(),
     agentColorIndex: 0,
-    // Last API request for bug reports
-    lastAPIRequest: null,
-    lastAPIRequestMessages: null,
-    // Last auto-mode classifier request(s) for /share transcript
-    lastClassifierRequests: null,
     cachedClaudeMdContent: null,
     // In-memory error log for recent errors
     inMemoryErrorLog: [],
@@ -977,55 +959,6 @@ export function getSessionIngressToken(): string | null | undefined {
 
 export function setSessionIngressToken(token: string | null): void {
   STATE.sessionIngressToken = token
-}
-
-export function getOauthTokenFromFd(): string | null | undefined {
-  return STATE.oauthTokenFromFd
-}
-
-export function setOauthTokenFromFd(token: string | null): void {
-  STATE.oauthTokenFromFd = token
-}
-
-export function getApiKeyFromFd(): string | null | undefined {
-  return STATE.apiKeyFromFd
-}
-
-export function setApiKeyFromFd(key: string | null): void {
-  STATE.apiKeyFromFd = key
-}
-
-export function setLastAPIRequest(
-  params: Omit<BetaMessageStreamParams, 'messages'> | null,
-): void {
-  STATE.lastAPIRequest = params
-}
-
-export function getLastAPIRequest(): Omit<
-  BetaMessageStreamParams,
-  'messages'
-> | null {
-  return STATE.lastAPIRequest
-}
-
-export function setLastAPIRequestMessages(
-  messages: BetaMessageStreamParams['messages'] | null,
-): void {
-  STATE.lastAPIRequestMessages = messages
-}
-
-export function getLastAPIRequestMessages():
-  | BetaMessageStreamParams['messages']
-  | null {
-  return STATE.lastAPIRequestMessages
-}
-
-export function setLastClassifierRequests(requests: unknown[] | null): void {
-  STATE.lastClassifierRequests = requests
-}
-
-export function getLastClassifierRequests(): unknown[] | null {
-  return STATE.lastClassifierRequests
 }
 
 export function setCachedClaudeMdContent(content: string | null): void {
