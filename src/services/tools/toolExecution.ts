@@ -20,7 +20,6 @@ import {
 } from 'src/services/analytics/metadata.js'
 import {
   addToToolDuration,
-  getCodeEditToolDecisionCounter,
   getStatsStore,
 } from '../../bootstrap/state.js'
 import {
@@ -50,7 +49,6 @@ import {
 } from '@claude-code-best/builtin-tools/tools/SearchExtraToolsTool/prompt.js'
 import { getAllBaseTools } from '../../tools.js'
 import type { HookProgress } from '../../types/hooks.js'
-import { recordToolObservation } from '../langfuse/index.js'
 import type {
   AssistantMessage,
   AttachmentMessage,
@@ -1007,15 +1005,6 @@ async function checkPermissionsAndCallTool(
       tool_name: sanitizeToolNameForAnalytics(tool.name),
     })
 
-    // Increment code-edit tool decision counter for headless mode
-    if (isCodeEditingTool(tool.name)) {
-      void buildCodeEditToolAttributes(
-        tool,
-        processedInput,
-        decision,
-        source,
-      ).then(attributes => getCodeEditToolDecisionCounter()?.add(1, attributes))
-    }
   }
 
   // Add message if permission was granted/denied by PermissionRequest hook
@@ -1174,7 +1163,7 @@ async function checkPermissionsAndCallTool(
   }
 
   // Prepare tool parameters for logging in tool_result event.
-  // Gated by OTEL_LOG_TOOL_DETAILS — tool parameters can contain sensitive
+  // Detailed remote tool logging is disabled; tool parameters may be sensitive.
   // content (bash commands, MCP server names, etc.) so they're opt-in only.
   const telemetryToolInput = extractToolInputForTelemetry(processedInput)
   let toolParameters: Record<string, unknown> = {}
@@ -1350,17 +1339,6 @@ async function checkPermissionsAndCallTool(
         ? jsonStringify(result.data)
         : String(result.data ?? '')
     endToolSpan(toolResultStr)
-
-    // Record tool observation in Langfuse (no-op if not configured)
-    recordToolObservation(toolUseContext.langfuseTrace ?? null, {
-      toolName: tool.name,
-      toolUseId: toolUseID,
-      input: processedInput,
-      output: toolResultStr,
-      startTime: new Date(startTime),
-      isError: false,
-      parentBatchSpan: toolUseContext.langfuseBatchSpan,
-    })
 
     // Map the tool result to API format once and cache it. This block is reused
     // by addToolResult (skipping the remap) and measured here for analytics.
@@ -1670,17 +1648,6 @@ async function checkPermissionsAndCallTool(
       error: errorMessage(error),
     })
     endToolSpan()
-
-    // Record error observation in Langfuse (no-op if not configured)
-    recordToolObservation(toolUseContext.langfuseTrace ?? null, {
-      toolName: tool?.name ?? 'unknown',
-      toolUseId: toolUseID,
-      input: processedInput ?? input,
-      output: errorMessage(error),
-      startTime: new Date(startTime),
-      isError: true,
-      parentBatchSpan: toolUseContext.langfuseBatchSpan,
-    })
 
     // Handle MCP auth errors by updating the client status to 'needs-auth'
     // This updates the /mcp display to show the server needs re-authorization

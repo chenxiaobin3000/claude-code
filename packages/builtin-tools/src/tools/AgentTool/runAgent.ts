@@ -57,12 +57,6 @@ import { clearSessionHooks } from 'src/utils/hooks/sessionHooks.js'
 import { executeSubagentStartHooks } from 'src/utils/hooks.js'
 import { createUserMessage } from 'src/utils/messages.js'
 import { getAgentModel } from 'src/utils/model/agent.js'
-import { getAPIProvider } from 'src/utils/model/providers.js'
-import {
-  createSubagentTrace,
-  endTrace,
-  isLangfuseEnabled,
-} from 'src/services/langfuse/index.js'
 import type { ModelAlias } from 'src/utils/model/aliases.js'
 import {
   clearAgentTranscriptSubdir,
@@ -78,11 +72,6 @@ import {
   asSystemPrompt,
   type SystemPrompt,
 } from 'src/utils/systemPromptType.js'
-import {
-  isPerfettoTracingEnabled,
-  registerAgent as registerPerfettoAgent,
-  unregisterAgent as unregisterPerfettoAgent,
-} from 'src/utils/telemetry/perfettoTracing.js'
 import type { ContentReplacementState } from 'src/utils/toolResultStorage.js'
 import { createAgentId } from 'src/utils/uuid.js'
 import { resolveAgentTools } from './agentToolUtils.js'
@@ -359,12 +348,6 @@ export async function* runAgent({
   // (e.g. workflow subagents write to subagents/workflows/<runId>/).
   if (transcriptSubdir) {
     setAgentTranscriptSubdir(agentId, transcriptSubdir)
-  }
-
-  // Register agent in Perfetto trace for hierarchy visualization
-  if (isPerfettoTracingEnabled()) {
-    const parentId = toolUseContext.agentId ?? getSessionId()
-    registerPerfettoAgent(agentId, agentDefinition.agentType, parentId)
   }
 
   // Log API calls path for subagents (ant-only)
@@ -753,25 +736,6 @@ export async function* runAgent({
   // Track the last recorded message UUID for parent chain continuity
   let lastRecordedUuid: UUID | null = initialMessages.at(-1)?.uuid ?? null
 
-  // Create Langfuse sub-agent trace (no-op if not configured).
-  // Sub-agent trace shares the same sessionId as the parent, so Langfuse
-  // groups them under the same Session view.
-  const subTrace = isLangfuseEnabled()
-    ? createSubagentTrace({
-        sessionId: getSessionId(),
-        agentType: agentDefinition.agentType,
-        agentId,
-        model: resolvedAgentModel,
-        provider: getAPIProvider(),
-        input: initialMessages,
-      })
-    : null
-
-  // Attach sub-agent trace to toolUseContext so query() reuses it
-  if (subTrace) {
-    agentToolUseContext.langfuseTrace = subTrace
-  }
-
   try {
     for await (const message of query({
       messages: initialMessages,
@@ -842,8 +806,6 @@ export async function* runAgent({
       agentDefinition.callback()
     }
   } finally {
-    // End Langfuse sub-agent trace (no-op if not configured)
-    endTrace(subTrace)
     // Clean up agent-specific MCP servers (runs on normal completion, abort, or error)
     await mcpCleanup()
     // Clean up agent's session hooks
@@ -858,8 +820,6 @@ export async function* runAgent({
     agentToolUseContext.readFileState.clear()
     // Release the cloned fork context messages
     initialMessages.length = 0
-    // Release perfetto agent registry entry
-    unregisterPerfettoAgent(agentId)
     // Release transcript subdir mapping
     clearAgentTranscriptSubdir(agentId)
     // Release this agent's todos entry. Without this, every subagent that

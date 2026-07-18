@@ -19,7 +19,6 @@ import {
   getBashPermissionSources,
   getDangerousEnvVarsSources,
   getHooksSources,
-  getOtelHeadersHelperSources,
 } from './utils.js';
 
 type Props = {
@@ -44,9 +43,6 @@ export function TrustDialog({ onDone, commands }: Props): React.ReactNode {
   // Check for apiKeyHelper which executes arbitrary commands
   const apiKeyHelperSources = getApiKeyHelperSources();
   const hasApiKeyHelper = apiKeyHelperSources.length > 0;
-  // Check for otelHeadersHelper which executes arbitrary commands
-  const otelHeadersHelperSources = getOtelHeadersHelperSources();
-  const hasOtelHeadersHelper = otelHeadersHelperSources.length > 0;
   // Check for dangerous environment variables (not in SAFE_ENV_VARS)
   const dangerousEnvVarsSources = getDangerousEnvVarsSources();
   const hasDangerousEnvVars = dangerousEnvVarsSources.length > 0;
@@ -96,10 +92,9 @@ export function TrustDialog({ onDone, commands }: Props): React.ReactNode {
       hasHooks,
       hasBashExecution: hasAnyBashExecution,
       hasApiKeyHelper,
-      hasOtelHeadersHelper,
       hasDangerousEnvVars,
     });
-  }, [hasMcpServers, hasHooks, hasAnyBashExecution, hasApiKeyHelper, hasOtelHeadersHelper, hasDangerousEnvVars]);
+  }, [hasMcpServers, hasHooks, hasAnyBashExecution, hasApiKeyHelper, hasDangerousEnvVars]);
 
   function onChange(value: 'enable_all' | 'exit') {
     if (value === 'exit') {
@@ -120,7 +115,6 @@ export function TrustDialog({ onDone, commands }: Props): React.ReactNode {
       hasHooks,
       hasBashExecution: hasAnyBashExecution,
       hasApiKeyHelper,
-      hasOtelHeadersHelper,
       hasDangerousEnvVars,
     });
 

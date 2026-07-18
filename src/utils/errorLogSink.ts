@@ -20,7 +20,6 @@ import { logForDebugging } from './debug.js'
 import { getFsImplementation } from './fsOperations.js'
 import { attachErrorLogSink, dateToFilename } from './log.js'
 import { jsonStringify } from './slowOperations.js'
-import { captureException } from './sentry.js'
 
 const DATE = dateToFilename(new Date())
 
@@ -173,8 +172,6 @@ function logErrorImpl(error: Error): void {
     error: `${context}${errorStr}`,
   })
 
-  // Also report to Sentry (no-op if not initialized)
-  captureException(error)
 }
 
 /**
@@ -222,7 +219,7 @@ function logMCPDebugImpl(serverName: string, message: string): void {
  * Call this during app startup to attach the error logging backend.
  * Any errors logged before this is called will be queued and drained.
  *
- * Should be called BEFORE initializeAnalyticsSink() in the startup sequence.
+ * Should be called during startup before errors can be emitted.
  *
  * Idempotent: safe to call multiple times (subsequent calls are no-ops).
  */

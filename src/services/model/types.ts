@@ -15,7 +15,6 @@ import type { QuerySource } from '../../constants/querySource.js'
 import type { Notification } from '../../context/notifications.js'
 import type { AgentId } from '../../types/ids.js'
 import type { EffortValue } from '../../utils/effort.js'
-import type { LangfuseSpan } from '../langfuse/index.js'
 import type { Message } from '../../types/message.js'
 import type { SystemPrompt } from '../../utils/systemPromptType.js'
 import type { ThinkingConfig } from '../../utils/thinking.js'
@@ -48,7 +47,6 @@ export type ModelQueryOptions = {
   advisorModel?: string
   addNotification?: (notification: Notification) => void
   taskBudget?: { total: number; remaining?: number }
-  langfuseTrace?: LangfuseSpan | null
 }
 
 /** Shared preprocessing output. Provider implementations must not normalize it again. */

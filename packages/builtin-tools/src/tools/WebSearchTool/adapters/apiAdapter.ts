@@ -9,13 +9,6 @@ import type {
 } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
 import { queryModelWithStreaming } from 'src/services/model/query.js'
-import {
-  createTrace,
-  endTrace,
-  isLangfuseEnabled,
-} from 'src/services/langfuse/index.js'
-import { getSessionId } from 'src/bootstrap/state.js'
-import { getAPIProvider } from 'src/utils/model/providers.js'
 import { createUserMessage } from 'src/utils/messages.js'
 import { getMainLoopModel, getSmallFastModel } from 'src/utils/model/model.js'
 import { jsonParse } from 'src/utils/slowOperations.js'
@@ -49,15 +42,6 @@ export class ApiSearchAdapter implements WebSearchAdapter {
       false,
     )
     const model = useHaiku ? getSmallFastModel() : getMainLoopModel()
-    const langfuseTrace = isLangfuseEnabled()
-      ? createTrace({
-          sessionId: getSessionId(),
-          model,
-          provider: getAPIProvider(),
-          name: 'web-search-tool',
-        })
-      : null
-
     const queryStream = queryModelWithStreaming({
       messages: [userMessage],
       systemPrompt: asSystemPrompt([
@@ -89,7 +73,6 @@ export class ApiSearchAdapter implements WebSearchAdapter {
         mcpTools: [],
         agentId: undefined,
         effortValue: undefined,
-        langfuseTrace,
       },
     })
 
@@ -182,8 +165,6 @@ export class ApiSearchAdapter implements WebSearchAdapter {
         }
       }
     }
-
-    endTrace(langfuseTrace)
 
     // Extract SearchResult[] from content blocks
     return extractSearchResults(allContentBlocks)

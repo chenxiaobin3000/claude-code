@@ -34,7 +34,6 @@ const runtimeBoundaryFiles = [
   'src/utils/model/model.ts',
   'src/utils/model/providers.ts',
   'src/utils/status.tsx',
-  'src/services/langfuse/tracing.ts',
   'src/entrypoints/sdk/coreSchemas.ts',
   'src/cli/print.ts',
   'package.json',

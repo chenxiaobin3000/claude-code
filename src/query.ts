@@ -123,12 +123,6 @@ import {
 } from './bootstrap/state.js'
 import { createBudgetTracker, checkTokenBudget } from './query/tokenBudget.js'
 import { count } from './utils/array.js'
-import {
-  createTrace,
-  endTrace,
-  flushLangfuse,
-  isLangfuseEnabled,
-} from './services/langfuse/index.js'
 import { getAPIProvider } from './utils/model/providers.js'
 import {
   createCacheWarningMessage,
@@ -286,39 +280,12 @@ export async function* query(
   const consumedCommandUuids: string[] = []
   const consumedAutonomyCommands: QueuedCommand[] = []
 
-  // Create Langfuse trace for this query turn (no-op if not configured).
-  // When called as a sub-agent, langfuseTrace is already set by runAgent()
-  // — reuse it instead of creating an independent trace.
-  const ownsTrace = !params.toolUseContext.langfuseTrace
-  logForDebugging(
-    `[query] ownsTrace=${ownsTrace} incoming langfuseTrace=${params.toolUseContext.langfuseTrace ? 'present' : 'null/undefined'} isLangfuseEnabled=${isLangfuseEnabled()}`,
-  )
-  const langfuseTrace =
-    params.toolUseContext.langfuseTrace ??
-    (isLangfuseEnabled()
-      ? createTrace({
-          sessionId: getSessionId(),
-          model: params.toolUseContext.options.mainLoopModel,
-          provider: getAPIProvider(),
-          input: params.messages,
-          querySource: params.querySource,
-        })
-      : null)
-
-  // Attach trace to toolUseContext so tool execution can record observations
-  const paramsWithTrace: QueryParams = langfuseTrace
-    ? {
-        ...params,
-        toolUseContext: { ...params.toolUseContext, langfuseTrace },
-      }
-    : params
-
   let terminal: Terminal | undefined
   let didThrow = false
   let thrownError: unknown
   try {
     terminal = yield* queryLoop(
-      paramsWithTrace,
+      params,
       consumedCommandUuids,
       consumedAutonomyCommands,
     )
@@ -342,32 +309,6 @@ export async function* query(
       })
       .catch(logError)
 
-    // Only end the trace if we created it — sub-agents own their traces
-    if (ownsTrace) {
-      const isAborted =
-        terminal?.reason === 'aborted_streaming' ||
-        terminal?.reason === 'aborted_tools'
-      endTrace(langfuseTrace, undefined, isAborted ? 'interrupted' : undefined)
-      // Flush the processor to release span data (including serialized
-      // conversation history stored as langfuse.observation.input). Without
-      // this, SpanImpl objects retain hundreds of KB of JSON until the
-      // processor's batch timer fires (default 10s).
-      await flushLangfuse()
-    }
-
-    // Break the closure chain: toolUseContext captures langfuseTrace which
-    // holds SpanImpl → otperformance (the 571MB Performance object). Nulling
-    // these after endTrace allows GC to reclaim the span tree.
-    if (paramsWithTrace !== params) {
-      paramsWithTrace.toolUseContext.langfuseTrace = null
-      paramsWithTrace.toolUseContext.langfuseRootTrace = null
-      paramsWithTrace.toolUseContext.langfuseBatchSpan = null
-    }
-
-    // Clear JSC's native Performance buffers. OTel (otperformance) references
-    // globalThis.performance which stores marks/measures/resource timings in a
-    // C++ Vector that never shrinks. Long-running sessions accumulate hundreds
-    // of MB of dead capacity even after spans are flushed and nullified.
     const gPerf = globalThis.performance
     if (gPerf && typeof gPerf.clearMarks === 'function') {
       try {
@@ -944,7 +885,6 @@ async function* queryLoop(
                   }),
                 },
               }),
-              langfuseTrace: toolUseContext.langfuseTrace,
             },
           })) {
             // We won't use the tool_calls from the first attempt

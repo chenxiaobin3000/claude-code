@@ -77,14 +77,10 @@ export function sanitizeToolNameForAnalytics(
 }
 
 /**
- * Check if detailed tool name logging is enabled for OTLP events.
- * When enabled, MCP server/tool names and Skill names are logged.
- * Disabled by default to protect PII (user-specific server configurations).
- *
- * Enable with OTEL_LOG_TOOL_DETAILS=1
+ * Remote detailed tool logging was removed with observability support.
  */
 export function isToolDetailsLoggingEnabled(): boolean {
-  return isEnvTruthy(process.env.OTEL_LOG_TOOL_DETAILS)
+  return false
 }
 
 /**
@@ -286,7 +282,7 @@ function truncateToolInputValue(value: unknown, depth = 0): unknown {
  * Serialize a tool's input arguments for the OTel tool_result event.
  * Truncates long strings and deep nesting to keep the output bounded while
  * preserving forensically useful fields like file paths, URLs, and MCP args.
- * Returns undefined when OTEL_LOG_TOOL_DETAILS is not enabled.
+ * Returns undefined because remote detailed tool logging is disabled.
  */
 export function extractToolInputForTelemetry(
   input: unknown,

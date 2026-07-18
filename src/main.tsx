@@ -32,7 +32,6 @@ import {
 } from './cli/modes/helpers.js';
 import { getInputPrompt } from './cli/startup/input.js';
 import { executeStartup, isSshRemoteEnabled, startupRuntimeState } from './cli/startup/prepareStartup.js';
-import { logManagedSettings, logSessionTelemetry, logStartupTelemetry } from './cli/startup/telemetry.js';
 
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 profileCheckpoint('main_tsx_imports_loaded');
@@ -55,9 +54,6 @@ async function run(): Promise<CommanderCommand> {
       pendingSSH: startupRuntimeState.pendingSSH,
       isSshRemoteEnabled,
       getInputPrompt,
-      logManagedSettings,
-      logSessionTelemetry,
-      logStartupTelemetry,
       logTenguInit,
       maybeActivateProactive,
       maybeActivateBrief,

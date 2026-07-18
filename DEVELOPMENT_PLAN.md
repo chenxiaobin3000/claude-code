@@ -151,7 +151,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 ### 5.4 模型诊断安全边界
 
-请求开始、首 Token、成功和失败事件只记录请求 ID、Provider、模型、无凭据 endpoint、消息/字符/工具数量、Token 上限、TTFT、总耗时、Usage、停止原因、错误分类、HTTP 状态、错误码和 Provider 请求 ID。禁止把请求体、Headers、system/user Prompt、工具参数、工具返回值或原始错误对象传入诊断日志。`logForDebugging` 在最终写入前统一清理 Authorization、Bearer/Basic、API Key、OAuth/JWT、敏感 URL 参数和 URL 用户凭据，并截断超长内容；OpenAI 错误还会按本次请求实际使用的 API Key 和消息文本做精确替换。Langfuse LLM observation 仅保留输入、输出和工具的类型、数量、角色分布与序列化长度摘要，不再保存原文。
+本地诊断日志只记录请求 ID、Provider、模型、无凭据 endpoint、消息/字符/工具数量、Token 上限、TTFT、总耗时、Usage、停止原因、错误分类、HTTP 状态、错误码和 Provider 请求 ID。禁止把请求体、Headers、system/user Prompt、工具参数、工具返回值或原始错误对象传入诊断日志。`logForDebugging` 在最终写入前统一清理 Authorization、Bearer/Basic、API Key、OAuth/JWT、敏感 URL 参数和 URL 用户凭据，并截断超长内容；OpenAI 错误还会按本次请求实际使用的 API Key 和消息文本做精确替换。诊断内容只写本地调试输出，不接入远程遥测或可观测性后端。
 
 `scripts/validation/model-diagnostics.ts` 使用固定伪 API Key、OAuth JWT、URL 凭据和唯一 Prompt 标记验证脱敏、endpoint 清理、错误截断及摘要输出，并已并入唯一的 `bun run verify` 流程。2026-07-16 使用本地 llama.cpp 完成 Bun bundle、Vite/Node bundle 和 Windows x64 EXE 的模型与 `Read` 工具全矩阵验证，新增脱敏检查同时通过，总耗时 66.0 秒；另以 `--debug-file` 执行真实请求，落盘得到请求开始、首 Token、成功三类结构化事件，Prompt 标记未写入日志。
 
@@ -203,8 +203,8 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 - [x] 完整移除 Artifact 能力及 Cloud Artifacts 客户端和服务端实现（2026-07-18 已删除 Artifact/ReviewArtifact Tool、`/artifacts`、`use-artifacts`、权限 UI、Prompt、客户端、Cloudflare Worker/R2 服务端、默认域名和共享 Token、TTL/公开页面及远程 Mermaid/Highlight.js 加载；未保留本地生成、上传、分享或公开 URL 替代分支。新增 `artifact-boundary.ts` 和构建产物标记扫描，防止能力、域名、环境变量和 CDN 加载被恢复；17 个 workspace 全流程及 `bun run verify --ci` 均通过，完整验证用时 113.0 秒）。
 - [x] 移除远程 Plugin Marketplace 能力（2026-07-18 已删除官方 Marketplace CDN、GitHub 安装量统计、远程浏览/添加/安装命令与 UI、Git/HTTPS 克隆和缓存、启动安装、插件推荐、自动更新及旧 Marketplace 设置 Schema；MCPB 收敛为仅加载本地 `.mcpb`/`.dxt` 文件）。`/plugin` 现仅列出本地目录和内置 Plugin，并保留本地清单校验；`--plugin-dir`、Skill、Hook、插件 MCP/LSP 配置及内置 Plugin 加载链继续保留。新增 `plugin-distribution-boundary.ts` 与构建产物标记扫描，防止远程入口、域名和下载函数恢复；17 个 workspace 全流程及 `bun run verify --ci` 全部通过，最终完整验证用时 109.5 秒。
-- [ ] 移除全部遥测和可观测性上报：Anthropic 1P Event Logging、BigQuery Metrics、GrowthBook 远程配置、Sentry、Datadog、Langfuse、OpenTelemetry OTLP 和 Beta Tracing；先把影响运行行为的远程 Feature Flag 固化到 `scripts/feature-policy.ts` 或本地显式配置，再删除 SDK、初始化、刷新、缓存、失败队列、环境变量和关闭/flush 路径。
-- [ ] 清理 `~/.claude/telemetry` 中只服务于已移除上报链的失败队列与缓存读取逻辑；不得自动删除用户已有文件，迁移只停止读取和新增写入，并在发布说明中说明可由用户自行清理。
+- [x] 移除全部遥测和可观测性上报（2026-07-18 已移除 Anthropic 1P Event Logging、BigQuery Metrics、GrowthBook 远程配置、Sentry、Datadog、Langfuse、OpenTelemetry OTLP、Beta Tracing 与本地 Perfetto 上报链；运行 Feature Flag 固化到 `scripts/feature-policy.ts`，支持 `CLAUDE_LOCAL_FEATURE_OVERRIDES` 和 `localFeatureOverrides` 显式本地覆盖。已删除相关 SDK、初始化/刷新、Provider 状态、缓存、失败队列、环境变量、退出 flush 和纯遥测启动扫描，并新增 `observability-boundary.ts` 防止依赖、环境变量和实现入口恢复；17 个 workspace、三类构建产物及 `bun run verify --ci` 全部通过，最终完整验证用时 126.6 秒）。
+- [x] 停止读取和写入 `~/.claude/telemetry` 中只服务于旧上报链的失败队列与缓存（2026-07-18 已随 exporter、instrumentation 和事件 logger 删除完成；未自动删除用户已有文件，用户可自行清理历史目录）。
 - [ ] 移除全部 Anthropic 云服务接口，包括事件日志、指标与组织开关、Feedback/Transcript Share、Public Files API、Claude Remote Control/Bridge、Remote Trigger、Trusted Device、Claude OAuth/API Key/角色接口和依赖 Claude 账号的推送/附件链路；自托管 RCS/ACP 若不依赖 Anthropic 域名、Claude OAuth 或服务端下发凭据，可作为独立能力保留并单独验证。
 - [ ] 保留 `@anthropic-ai/sdk` 作为本地消息、工具、流事件和 Usage 类型兼容层，禁止清理工作把 SDK 类型引用误判为 Anthropic 网络 Provider；继续执行 `ANTHROPIC_SDK_COMPATIBILITY.md` 的边界规则。
 - [ ] 删除无调用入口或已失效的接口实现：ChatGPT `auth.openai.com`/`chatgpt.com/backend-api/codex/responses`、Anthropic 官方 MCP Registry 预取、旧国内模型供应商引导表、内部 GitHub Webhook/KAIROS 分支，以及与已移除云接口绑定的常量、设置项、Feature Flag、UI、命令和依赖。

@@ -72,33 +72,6 @@ export function getBashPermissionSources(): string[] {
 }
 
 /**
- * Check if settings have otelHeadersHelper configured
- */
-function hasOtelHeadersHelper(settings: SettingsJson | null): boolean {
-  return !!settings?.otelHeadersHelper
-}
-
-/**
- * Get which setting sources have otelHeadersHelper configured.
- * Returns an array of file paths that have otelHeadersHelper.
- */
-export function getOtelHeadersHelperSources(): string[] {
-  const sources: string[] = []
-
-  const projectSettings = getSettingsForSource('projectSettings')
-  if (hasOtelHeadersHelper(projectSettings)) {
-    sources.push('.claude/settings.json')
-  }
-
-  const localSettings = getSettingsForSource('localSettings')
-  if (hasOtelHeadersHelper(localSettings)) {
-    sources.push('.claude/settings.local.json')
-  }
-
-  return sources
-}
-
-/**
  * Check if settings have apiKeyHelper configured
  */
 function hasApiKeyHelper(settings: SettingsJson | null): boolean {

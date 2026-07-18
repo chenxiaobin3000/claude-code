@@ -32,7 +32,6 @@ import {
   isOfficialMarketplaceName,
   parsePluginIdentifier,
 } from 'src/utils/plugins/pluginIdentifier.js'
-import { buildPluginCommandTelemetryFields } from 'src/utils/telemetry/pluginTelemetry.js'
 import { z } from 'zod/v4'
 import {
   addInvokedSkill,
@@ -198,7 +197,6 @@ async function executeForkedSkill(
       plugin_repository: (isOfficialSkill
         ? command.pluginInfo.repository
         : 'third-party') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      ...buildPluginCommandTelemetryFields(command.pluginInfo),
     }),
   })
 
@@ -725,7 +723,6 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
           plugin_repository: (isOfficialSkill
             ? command.pluginInfo.repository
             : 'third-party') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          ...buildPluginCommandTelemetryFields(command.pluginInfo),
         }),
     })
 

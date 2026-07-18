@@ -2,13 +2,10 @@ import {
   buildComputerUseTools,
   createComputerUseMcpServer,
 } from '@ant/computer-use-mcp'
-import { initializeAnalyticsSink } from '../../services/analytics/sink.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { homedir } from 'os'
 
-import { shutdownDatadog } from '../../services/analytics/datadog.js'
-import { shutdown1PEventLogging } from '../../services/analytics/firstPartyEventLogger.js'
 
 import { enableConfigs } from '../config.js'
 import { logForDebugging } from '../debug.js'
@@ -85,7 +82,6 @@ export async function createComputerUseMcpServerForCli(): Promise<
  */
 export async function runComputerUseMcpServer(): Promise<void> {
   enableConfigs()
-  initializeAnalyticsSink()
 
   const server = await createComputerUseMcpServerForCli()
   const transport = new StdioServerTransport()
@@ -94,7 +90,6 @@ export async function runComputerUseMcpServer(): Promise<void> {
   const shutdownAndExit = async (): Promise<void> => {
     if (exiting) return
     exiting = true
-    await Promise.all([shutdown1PEventLogging(), shutdownDatadog()])
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(0)
   }

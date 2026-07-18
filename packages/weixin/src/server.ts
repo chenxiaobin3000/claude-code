@@ -24,9 +24,6 @@ import type { ChannelPermissionRequestParams } from './permissions.js'
 
 export interface WeixinServerDeps {
   enableConfigs(): void
-  initializeAnalyticsSink(): void
-  shutdownDatadog(): Promise<void>
-  shutdown1PEventLogging(): Promise<void>
   logForDebugging(message: string): void
   registerPermissionHandler(
     server: Server,
@@ -239,14 +236,12 @@ export async function runWeixinMcpServer(
   deps: WeixinServerDeps,
 ): Promise<void> {
   deps.enableConfigs()
-  deps.initializeAnalyticsSink()
 
   const account = loadAccount()
   if (!account) {
     process.stderr.write(
       '[weixin] No account configured. Run `ccb weixin login` to connect your WeChat account.\n',
     )
-    await Promise.all([deps.shutdown1PEventLogging(), deps.shutdownDatadog()])
     process.exit(1)
   }
 
@@ -297,7 +292,6 @@ export async function runWeixinMcpServer(
     if (!controller.signal.aborted) {
       controller.abort()
     }
-    await Promise.all([deps.shutdown1PEventLogging(), deps.shutdownDatadog()])
     process.exit(0)
   }
 

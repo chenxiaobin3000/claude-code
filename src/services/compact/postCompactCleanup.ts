@@ -7,7 +7,6 @@ import { clearClassifierApprovals } from '../../utils/classifierApprovals.js'
 import { resetGetMemoryFilesCache } from '../../utils/claudemd.js'
 import { logError } from '../../utils/log.js'
 import { clearSessionMessagesCache } from '../../utils/sessionStorage.js'
-import { clearBetaTracingState } from '../../utils/telemetry/betaSessionTracing.js'
 import { resetMicrocompactState } from './microCompact.js'
 
 /**
@@ -79,7 +78,6 @@ export function runPostCompactCleanup(querySource?: QuerySource): void {
   // model still has SkillTool in schema, invoked_skills preserves used
   // skills, and dynamic additions are handled by skillChangeDetector /
   // cacheUtils resets. See compactConversation() for full rationale.
-  clearBetaTracingState()
   if (feature('COMMIT_ATTRIBUTION')) {
     // Intentionally fire-and-forget: the file-content cache sweep is a
     // best-effort memory release whose completion no caller depends on.

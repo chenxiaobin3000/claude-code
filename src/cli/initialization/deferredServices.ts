@@ -1,6 +1,5 @@
 import { getIsNonInteractiveSession } from '../../bootstrap/state.js'
 import { getSystemContext, getUserContext } from '../../context.js'
-import { initializeAnalyticsGates } from '../../services/analytics/sink.js'
 import { getRelevantTips } from '../../services/tips/tipRegistry.js'
 import { checkHasTrustDialogAccepted } from '../../utils/config.js'
 import { getCwd } from '../../utils/cwd.js'
@@ -39,7 +38,6 @@ export function startDeferredPrefetches(): void {
   prefetchSystemContextIfSafe()
   void getRelevantTips()
   void countFilesRoundedRg(getCwd(), AbortSignal.timeout(3000), [])
-  void initializeAnalyticsGates()
   void settingsChangeDetector.initialize()
   if (!isBareMode()) void skillChangeDetector.initialize()
 

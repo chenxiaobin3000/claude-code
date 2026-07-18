@@ -1,6 +1,5 @@
 import * as React from 'react';
 import { Box, Text } from '@anthropic/ink';
-import { captureException } from 'src/utils/sentry.js';
 import { logError } from 'src/utils/log.js';
 
 interface Props {
@@ -38,10 +37,6 @@ export class SentryErrorBoundary extends React.Component<Props, State> {
     console.error(lines.join('\n'));
 
     logError(error);
-    captureException(error, {
-      componentBoundary: boundary,
-      componentStack: errorInfo.componentStack,
-    });
   }
 
   render(): React.ReactNode {

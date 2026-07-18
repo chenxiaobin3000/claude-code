@@ -15,18 +15,6 @@ import { logEvent } from '../services/analytics/index.js'
 import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../services/analytics/metadata.js'
 import { getAPIMetadata } from '../services/model/metadata.js'
 import { getAnthropicClient } from '../services/api/client.js'
-import {
-  createTrace,
-  createChildSpan,
-  endTrace,
-  recordLLMObservation,
-} from '../services/langfuse/index.js'
-import type { LangfuseSpan } from '../services/langfuse/index.js'
-import {
-  convertMessagesToLangfuse,
-  convertOutputToLangfuse,
-  convertToolsToLangfuse,
-} from '../services/langfuse/convert.js'
 import { getModelBetas, modelSupportsStructuredOutputs } from './betas.js'
 import { logForDebugging } from './debug.js'
 import { errorMessage } from './errors.js'
@@ -93,10 +81,7 @@ export type SideQueryOptions = {
   stop_sequences?: string[]
   /** Attributes this call in tengu_api_success for COGS joining against reporting.sampling_calls. */
   querySource: QuerySource
-  /** Parent Langfuse span to nest this side query under the main agent trace. */
-  parentSpan?: LangfuseSpan | null
-  /** When true, API failures are recorded as WARNING instead of ERROR in Langfuse.
-   *  Use for optional/best-effort queries where failure is expected and handled gracefully. */
+  /** Marks an optional/best-effort query whose failure is handled by its caller. */
   optional?: boolean
 }
 
@@ -241,43 +226,7 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
 
   const normalizedModel = normalizeModelStringForAPI(model)
   const start = Date.now()
-  const traceName = `side-query:${opts.querySource}`
-
-  // When parentSpan is provided, create a child span nested under the
-  // main agent trace; otherwise create a standalone root trace.
-  const _ps = opts.parentSpan
-  // eslint-disable-next-line no-constant-condition
-  if (opts.querySource === 'auto_mode') {
-    logForDebugging(
-      `[sideQuery] auto_mode parentSpan=${_ps ? `id=${(_ps as unknown as Record<string, unknown>).id ?? 'present'}` : 'null/undefined'} querySource=${opts.querySource}`,
-    )
-  }
-  // When parentSpan is provided, create a child span nested under the
-  // main agent trace. For auto_mode queries, we must always nest under
-  // a parent span — never create a standalone root trace (agent type),
-  // as auto_mode observations should appear as spans within the parent.
-  // For other query sources without a parent, create a standalone trace.
-  const langfuseTrace = _ps
-    ? createChildSpan(_ps, {
-        name: traceName,
-        sessionId: getSessionId(),
-        model: normalizedModel,
-        provider,
-        querySource: opts.querySource,
-      })
-    : opts.querySource === 'auto_mode'
-      ? null
-      : createTrace({
-          sessionId: getSessionId(),
-          model: normalizedModel,
-          provider,
-          name: traceName,
-          querySource: opts.querySource,
-        })
-
-  let response: BetaMessage
-  try {
-    response = await client.beta.messages.create(
+  const response: BetaMessage = await client.beta.messages.create(
       {
         model: normalizedModel,
         max_tokens,
@@ -294,14 +243,6 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
       },
       { signal },
     )
-  } catch (error) {
-    endTrace(
-      langfuseTrace,
-      { error: errorMessage(error) },
-      opts.optional ? 'interrupted' : 'error',
-    )
-    throw error
-  }
 
   const requestId =
     (response as { _request_id?: string | null })._request_id ?? undefined
@@ -323,49 +264,6 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
       lastCompletion !== null ? now - lastCompletion : undefined,
   })
   setLastApiCompletionTimestamp(now)
-
-  // Record LLM observation in Langfuse (no-op if not configured).
-  // Wrap SDK types into the internal message format expected by converters.
-  const wrappedInput = messages.map(m => ({
-    type: m.role === 'assistant' ? ('assistant' as const) : ('user' as const),
-    message: { role: m.role, content: m.content },
-  })) as unknown as Parameters<typeof convertMessagesToLangfuse>[0]
-  const wrappedOutput = [
-    {
-      type: 'assistant' as const,
-      message: { role: 'assistant' as const, content: response.content },
-    },
-  ] as unknown as Parameters<typeof convertOutputToLangfuse>[0]
-  recordLLMObservation(langfuseTrace, {
-    model: normalizedModel,
-    provider,
-    input: convertMessagesToLangfuse(
-      wrappedInput,
-      systemBlocks.length > 0 ? systemBlocks.map(b => b.text) : undefined,
-    ),
-    output: convertOutputToLangfuse(wrappedOutput),
-    usage: {
-      input_tokens: response.usage.input_tokens,
-      output_tokens: response.usage.output_tokens,
-      cache_creation_input_tokens:
-        response.usage.cache_creation_input_tokens ?? undefined,
-      cache_read_input_tokens:
-        response.usage.cache_read_input_tokens ?? undefined,
-    },
-    startTime: new Date(start),
-    endTime: new Date(),
-    ...(tools && { tools: convertToolsToLangfuse(tools as unknown[]) }),
-    ...(thinkingConfig &&
-      thinkingConfig.type !== 'disabled' && {
-        thinking: {
-          type: thinkingConfig.type,
-          ...(thinkingConfig.type === 'enabled' && {
-            budgetTokens: thinkingConfig.budget_tokens,
-          }),
-        },
-      }),
-  })
-  endTrace(langfuseTrace)
 
   return response
 }

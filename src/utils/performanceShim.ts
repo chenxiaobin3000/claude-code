@@ -9,7 +9,7 @@
  *
  * This shim keeps performance.now() on the native object (fast, no memory cost)
  * but redirects mark/measure/getEntries operations to a plain JS Map that the GC
- * can reclaim. Third-party code (React reconciler, OTel/Langfuse) uses
+ * can reclaim. Third-party code may use
  * performance.now() for timing — that stays native. The accumulating operations
  * go to GC-able JS memory instead.
  *

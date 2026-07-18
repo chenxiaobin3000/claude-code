@@ -1,11 +1,8 @@
 import { profileCheckpoint } from '../utils/startupProfiler.js'
 import '../bootstrap/state.js'
 import '../utils/config.js'
-import type { Attributes, MetricOptions } from '@opentelemetry/api'
 import memoize from 'lodash-es/memoize.js'
 import { getIsNonInteractiveSession } from 'src/bootstrap/state.js'
-import type { AttributedCounter } from '../bootstrap/state.js'
-import { getSessionCounter, setMeter } from '../bootstrap/state.js'
 import { shutdownLspServerManager } from '../services/lsp/manager.js'
 import {
   initializePolicyLimitsLoadingPromise,
@@ -48,22 +45,13 @@ import {
 // ~400KB of OpenTelemetry + protobuf modules until telemetry is actually initialized.
 // gRPC exporters (~700KB via @grpc/grpc-js) are further lazy-loaded within instrumentation.ts.
 import { configureGlobalAgents } from '../utils/proxy.js'
-import { isBetaTracingEnabled } from '../utils/telemetry/betaSessionTracing.js'
-import { getTelemetryAttributes } from '../utils/telemetryAttributes.js'
 import { setShellIfWindows } from '../utils/windowsPaths.js'
-import { initSentry } from '../utils/sentry.js'
 import { initUser } from '../utils/user.js'
-import { initLangfuse, shutdownLangfuse } from '../services/langfuse/index.js'
 import { setThemeConfigCallbacks } from '@anthropic/ink'
 import {
   getValidThemeSetting,
   loadUserCustomThemes,
 } from '../utils/customThemes.js'
-
-// initialize1PEventLogging is dynamically imported to defer OpenTelemetry sdk-logs/resources
-
-// Track if telemetry has been initialized to prevent double initialization
-let telemetryInitialized = false
 
 export const init = memoize(async (): Promise<void> => {
   const initStartTime = Date.now()
@@ -103,24 +91,6 @@ export const init = memoize(async (): Promise<void> => {
     // Make sure things get flushed on exit
     setupGracefulShutdown()
     profileCheckpoint('init_after_graceful_shutdown')
-
-    // Initialize 1P event logging (no security concerns, but deferred to avoid
-    // loading OpenTelemetry sdk-logs at startup). growthbook.js is already in
-    // the module cache by this point (firstPartyEventLogger imports it), so the
-    // second dynamic import adds no load cost.
-    void Promise.all([
-      import('../services/analytics/firstPartyEventLogger.js'),
-      import('../services/analytics/growthbook.js'),
-    ]).then(([fp, gb]) => {
-      fp.initialize1PEventLogging()
-      // Rebuild the logger provider if tengu_1p_event_batch_config changes
-      // mid-session. Change detection (isEqual) is inside the handler so
-      // unchanged refreshes are no-ops.
-      gb.onGrowthBookRefresh(() => {
-        void fp.reinitialize1PEventLoggingIfConfigChanged()
-      })
-    })
-    profileCheckpoint('init_after_1p_event_logging')
 
     // Start balance polling (no-op unless a provider is configured via env).
     void import('../services/providerUsage/balance/poller.js').then(m =>
@@ -171,14 +141,8 @@ export const init = memoize(async (): Promise<void> => {
     logForDebugging('[init] configureGlobalAgents complete')
     profileCheckpoint('init_network_configured')
 
-    // Initialize Sentry for error reporting (no-op if SENTRY_DSN not set)
-    initSentry()
-
-    // Initialize Langfuse tracing (no-op if keys not configured)
-    // Pre-warm user email cache so Langfuse traces include userId
+    // Populate local user metadata used by non-observability features.
     await initUser()
-    initLangfuse()
-    registerCleanup(shutdownLangfuse)
 
     // Preconnect to the Anthropic API — overlap TCP+TLS handshake
     // (~100-200ms) with the ~100ms of action-handler work before the API
@@ -279,114 +243,3 @@ export const init = memoize(async (): Promise<void> => {
   }
 })
 
-/**
- * Initialize telemetry after trust has been granted.
- * For remote-settings-eligible users, waits for settings to load (non-blocking),
- * then re-applies env vars (to include remote settings) before initializing telemetry.
- * For non-eligible users, initializes telemetry immediately.
- * This should only be called once, after the trust dialog has been accepted.
- */
-export function initializeTelemetryAfterTrust(): void {
-  if (isEligibleForRemoteManagedSettings()) {
-    // For SDK/headless mode with beta tracing, initialize eagerly first
-    // to ensure the tracer is ready before the first query runs.
-    // The async path below will still run but doInitializeTelemetry() guards against double init.
-    if (getIsNonInteractiveSession() && isBetaTracingEnabled()) {
-      void doInitializeTelemetry().catch(error => {
-        logForDebugging(
-          `[3P telemetry] Eager telemetry init failed (beta tracing): ${errorMessage(error)}`,
-          { level: 'error' },
-        )
-      })
-    }
-    logForDebugging(
-      '[3P telemetry] Waiting for remote managed settings before telemetry init',
-    )
-    void waitForRemoteManagedSettingsToLoad()
-      .then(async () => {
-        logForDebugging(
-          '[3P telemetry] Remote managed settings loaded, initializing telemetry',
-        )
-        // Re-apply env vars to pick up remote settings before initializing telemetry.
-        applyConfigEnvironmentVariables()
-        await doInitializeTelemetry()
-      })
-      .catch(error => {
-        logForDebugging(
-          `[3P telemetry] Telemetry init failed (remote settings path): ${errorMessage(error)}`,
-          { level: 'error' },
-        )
-      })
-  } else {
-    void doInitializeTelemetry().catch(error => {
-      logForDebugging(
-        `[3P telemetry] Telemetry init failed: ${errorMessage(error)}`,
-        { level: 'error' },
-      )
-    })
-  }
-}
-
-async function doInitializeTelemetry(): Promise<void> {
-  if (telemetryInitialized) {
-    // Already initialized, nothing to do
-    return
-  }
-
-  // Skip entire OTel initialization when telemetry is not enabled.
-  // Prevents PerformanceMeasure accumulation in long-running sessions.
-  if (!isEnvTruthy(process.env.CLAUDE_CODE_ENABLE_TELEMETRY)) {
-    telemetryInitialized = true
-    logForDebugging(
-      '[3P telemetry] Skipped — CLAUDE_CODE_ENABLE_TELEMETRY not set',
-    )
-    return
-  }
-
-  // Set flag before init to prevent double initialization
-  telemetryInitialized = true
-  try {
-    await setMeterState()
-  } catch (error) {
-    // Reset flag on failure so subsequent calls can retry
-    telemetryInitialized = false
-    throw error
-  }
-}
-
-async function setMeterState(): Promise<void> {
-  // Lazy-load instrumentation to defer ~400KB of OpenTelemetry + protobuf
-  const { initializeTelemetry } = await import(
-    '../utils/telemetry/instrumentation.js'
-  )
-  // Initialize customer OTLP telemetry (metrics, logs, traces)
-  const meter = await initializeTelemetry()
-  if (meter) {
-    // Create factory function for attributed counters
-    const createAttributedCounter = (
-      name: string,
-      options: MetricOptions,
-    ): AttributedCounter => {
-      const counter = meter?.createCounter(name, options)
-
-      return {
-        add(value: number, additionalAttributes: Attributes = {}) {
-          // Always fetch fresh telemetry attributes to ensure they're up to date
-          const currentAttributes = getTelemetryAttributes()
-          const mergedAttributes = {
-            ...currentAttributes,
-            ...additionalAttributes,
-          }
-          counter?.add(value, mergedAttributes)
-        },
-      }
-    }
-
-    setMeter(meter, createAttributedCounter)
-
-    // Increment session counter here because the startup telemetry path
-    // runs before this async initialization completes, so the counter
-    // would be null there.
-    getSessionCounter()?.add(1)
-  }
-}

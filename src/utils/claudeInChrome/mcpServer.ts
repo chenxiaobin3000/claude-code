@@ -5,11 +5,8 @@ import {
   type LoggerDetail,
   type PermissionMode,
 } from '@ant/claude-for-chrome-mcp'
-import { initializeAnalyticsSink } from '../../services/analytics/sink.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { format } from 'util'
-import { shutdownDatadog } from '../../services/analytics/datadog.js'
-import { shutdown1PEventLogging } from '../../services/analytics/firstPartyEventLogger.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -249,7 +246,6 @@ export function createChromeContext(
 
 export async function runClaudeInChromeMcpServer(): Promise<void> {
   enableConfigs()
-  initializeAnalyticsSink()
   const context = createChromeContext()
 
   const server = createClaudeForChromeMcpServer(context)
@@ -263,8 +259,6 @@ export async function runClaudeInChromeMcpServer(): Promise<void> {
       return
     }
     exiting = true
-    await shutdown1PEventLogging()
-    await shutdownDatadog()
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(0)
   }

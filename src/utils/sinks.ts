@@ -1,9 +1,7 @@
 import { initializeErrorLogSink } from './errorLogSink.js'
-import { initializeAnalyticsSink } from '../services/analytics/sink.js'
 
 /**
- * Attach error log and analytics sinks, draining any events queued before
- * attachment. Both inits are idempotent. Called from setup() for the default
+ * Attach the local error log sink. Called from setup() for the default
  * command; other entrypoints (subcommands, daemon, bridge) call this directly
  * since they bypass setup().
  *
@@ -12,5 +10,4 @@ import { initializeAnalyticsSink } from '../services/analytics/sink.js'
  */
 export function initSinks(): void {
   initializeErrorLogSink()
-  initializeAnalyticsSink()
 }

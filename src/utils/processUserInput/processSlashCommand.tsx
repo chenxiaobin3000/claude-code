@@ -73,7 +73,6 @@ import { parseSlashCommand } from '../slashCommandParsing.js';
 import { sleep } from '../sleep.js';
 import { recordSkillUsage } from '../suggestions/skillUsageTracking.js';
 import { logOTelEvent, redactIfDisabled } from '../telemetry/events.js';
-import { buildPluginCommandTelemetryFields } from '../telemetry/pluginTelemetry.js';
 import { getAssistantMessageContentLength } from '../tokens.js';
 import { createAgentId } from '../uuid.js';
 import { finalizeAutonomyRunCompleted, finalizeAutonomyRunFailed } from '../autonomyRuns.js';
@@ -127,7 +126,6 @@ async function executeForkedSlashCommand(
       ...(pluginMarketplace && {
         _PROTO_marketplace_name: pluginMarketplace as AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
       }),
-      ...buildPluginCommandTelemetryFields(command.pluginInfo),
     }),
   });
 
@@ -570,7 +568,6 @@ export async function processSlashCommand(
       if (isOfficial && pluginManifest.version) {
         eventData.plugin_version = pluginManifest.version as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS;
       }
-      Object.assign(eventData, buildPluginCommandTelemetryFields(returnedCommand.pluginInfo));
     }
 
     logEvent('tengu_input_command', {
@@ -649,7 +646,6 @@ export async function processSlashCommand(
     if (isOfficial && pluginManifest.version) {
       eventData.plugin_version = pluginManifest.version as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS;
     }
-    Object.assign(eventData, buildPluginCommandTelemetryFields(returnedCommand.pluginInfo));
   }
 
   logEvent('tengu_input_command', {

@@ -16,12 +16,6 @@ import {
   resolveOpenAIMaxTokens,
   buildOpenAIRequestBody,
 } from './requestBody.js'
-import { recordLLMObservation } from '../../../services/langfuse/tracing.js'
-import {
-  convertMessagesToLangfuse,
-  convertOutputToLangfuse,
-  convertToolsToLangfuse,
-} from '../../../services/langfuse/convert.js'
 export {
   isOpenAIThinkingEnabled,
   resolveOpenAIMaxTokens,
@@ -188,27 +182,6 @@ export async function* queryModelOpenAI(
       toolCallCount,
     })
 
-    // Record LLM observation in Langfuse (no-op if not configured)
-    recordLLMObservation(options.langfuseTrace ?? null, {
-      model: openaiModel,
-      provider: 'openai',
-      input: convertMessagesToLangfuse(
-        openaiMessages as Parameters<typeof convertMessagesToLangfuse>[0],
-      ),
-      output: convertOutputToLangfuse(collectedMessages),
-      usage: {
-        input_tokens: usage.input_tokens,
-        output_tokens: usage.output_tokens,
-        cache_creation_input_tokens: usage.cache_creation_input_tokens,
-        cache_read_input_tokens: usage.cache_read_input_tokens,
-      },
-      startTime: new Date(requestStartedAt),
-      endTime: new Date(),
-      completionStartTime:
-        ttftMs > 0 ? new Date(requestStartedAt + ttftMs) : undefined,
-      tools: convertToolsToLangfuse(toolSchemas as unknown[]),
-      ...(enableThinking && { thinking: { type: 'enabled' } }),
-    })
   } catch (error) {
     if (signal.aborted) throw new APIUserAbortError()
     const classifiedError = classifyOpenAIError(error, {

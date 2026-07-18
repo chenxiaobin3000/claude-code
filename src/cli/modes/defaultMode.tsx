@@ -7,7 +7,6 @@ import uniqBy from 'lodash-es/uniqBy.js';
 import { getOauthConfig } from '../../constants/oauth.js';
 import { getRemoteSessionUrl } from '../../constants/product.js';
 import { getSystemContext, getUserContext } from '../../context.js';
-import { initializeTelemetryAfterTrust } from '../../entrypoints/init.js';
 import { addToHistory } from '../../history.js';
 import type { Root } from '@anthropic/ink';
 import { launchRepl } from '../../replLauncher.js';
@@ -197,7 +196,6 @@ import {
   parseMcpConfigFromFilePath,
 } from 'src/services/mcp/config.js';
 import { excludeCommandsByServer, excludeResourcesByServer } from 'src/services/mcp/utils.js';
-import { logContextMetrics } from 'src/utils/api.js';
 import { CLAUDE_IN_CHROME_MCP_SERVER_NAME, isClaudeInChromeMCPServer } from 'src/utils/claudeInChrome/common.js';
 import { registerCleanup } from 'src/utils/cleanupRegistry.js';
 import { createEmptyAttributionState } from 'src/utils/commitAttribution.js';
@@ -269,9 +267,6 @@ export interface DefaultModeDependencies {
   pendingSSH: any;
   isSshRemoteEnabled: () => boolean;
   getInputPrompt: (...args: any[]) => Promise<string | AsyncIterable<string>>;
-  logManagedSettings: () => void;
-  logSessionTelemetry: (...args: any[]) => void;
-  logStartupTelemetry: () => Promise<void>;
   logTenguInit: (...args: any[]) => Promise<void>;
   maybeActivateProactive: (...args: any[]) => void;
   maybeActivateBrief: (...args: any[]) => void;
@@ -300,9 +295,6 @@ export async function runDefaultMode(
     pendingSSH: _pendingSSH,
     isSshRemoteEnabled,
     getInputPrompt,
-    logManagedSettings,
-    logSessionTelemetry,
-    logStartupTelemetry,
     logTenguInit,
     maybeActivateProactive,
     maybeActivateBrief,
@@ -1357,8 +1349,7 @@ export async function runDefaultMode(
     process.env.USER_TYPE === 'ant' &&
     explicitModel &&
     explicitModel !== 'default' &&
-    !hasGrowthBookEnvOverride('tengu_ant_model_override') &&
-    getGlobalConfig().cachedGrowthBookFeatures?.['tengu_ant_model_override'] == null
+    !hasGrowthBookEnvOverride('tengu_ant_model_override')
   ) {
     await initializeGrowthBook();
   }
@@ -1905,11 +1896,9 @@ export async function runDefaultMode(
   });
 
   // Log context metrics once at initialization
-  void logContextMetrics(regularMcpConfigs, toolPermissionContext);
 
   void logPermissionContextForAnts(null, 'initialization');
 
-  logManagedSettings();
 
   // Register PID file for concurrent-session detection (~/.claude/sessions/)
   // and fire multi-clauding telemetry. Lives here (not init.ts) so only the
@@ -1954,7 +1943,6 @@ export async function runDefaultMode(
 
     // Initialize telemetry after env vars are applied so OTEL endpoint env vars and
     // otelHeadersHelper (which requires trust to execute) are available.
-    initializeTelemetryAfterTrust();
 
     // Kick SessionStart hooks now so the subprocess spawn overlaps with
     // MCP connect + plugin init + print.ts import below. loadInitialMessages
@@ -2169,7 +2157,6 @@ export async function runDefaultMode(
       }
     }
 
-    logSessionTelemetry();
     profileCheckpoint('before_print_import');
     const { runHeadless } = await import('src/cli/print.js');
     profileCheckpoint('after_print_import');
@@ -2414,8 +2401,6 @@ export async function runDefaultMode(
     numStartups: (current.numStartups ?? 0) + 1,
   }));
   setImmediate(() => {
-    void logStartupTelemetry();
-    logSessionTelemetry();
   });
 
   // Set up per-turn session environment data uploader (ant-only build).
