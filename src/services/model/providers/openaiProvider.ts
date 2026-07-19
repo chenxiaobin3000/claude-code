@@ -1,4 +1,5 @@
 import type { BetaToolUnion } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
+import type { ChatCompletionChunk } from 'openai/resources/chat/completions/completions.mjs'
 import { randomUUID } from 'node:crypto'
 import {
   adaptOpenAIStreamToAnthropic,
@@ -105,7 +106,7 @@ export const openAIProvider: ModelProvider = {
       fetchOverride: request.options.fetchOverride as unknown as typeof fetch,
       source: request.options.querySource,
     })
-    let stream: Awaited<ReturnType<typeof client.chat.completions.create>>
+    let stream: AsyncIterable<ChatCompletionChunk>
     try {
       stream = await client.chat.completions.create(
         buildOpenAIRequestBody({

@@ -40,10 +40,6 @@ const MonitorTool = feature('MONITOR_TOOL')
   ? require('@claude-code-best/builtin-tools/tools/MonitorTool/MonitorTool.js')
       .MonitorTool
   : null
-const SubscribePRTool = feature('KAIROS_GITHUB_WEBHOOKS')
-  ? require('@claude-code-best/builtin-tools/tools/SubscribePRTool/SubscribePRTool.js')
-      .SubscribePRTool
-  : null
 /* eslint-enable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
 import { TaskOutputTool } from '@claude-code-best/builtin-tools/tools/TaskOutputTool/TaskOutputTool.js'
 import { WebSearchTool } from '@claude-code-best/builtin-tools/tools/WebSearchTool/WebSearchTool.js'
@@ -237,7 +233,6 @@ export function getAllBaseTools(): Tools {
     ...cronTools,
     ...(MonitorTool ? [MonitorTool] : []),
     BriefTool,
-    ...(SubscribePRTool ? [SubscribePRTool] : []),
     ...(getPowerShellTool() ? [getPowerShellTool()] : []),
     ...(SnipTool ? [SnipTool] : []),
     ...(DiscoverSkillsTool ? [DiscoverSkillsTool] : []),

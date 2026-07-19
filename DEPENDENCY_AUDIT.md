@@ -28,7 +28,7 @@ Only packages directly resolved by scripts shipped outside the bundle remain in 
 
 `devDependencies` contains three categories:
 
-1. Runtime source inputs embedded in the bundles, including OpenAI/Anthropic compatibility types and clients, Ink/React, telemetry, LSP, archive, network, parsing, and terminal packages.
+1. Runtime source inputs embedded in the bundles, including the project-owned lightweight OpenAI-compatible Chat Completions Client, the small Anthropic SDK error-class compatibility allowlist, Ink/React, LSP, archive, network, parsing, and terminal packages. The `openai` package is retained for compile-time Chat Completions protocol types only; its runtime Client and bundled Workload Identity OAuth implementation do not enter production artifacts.
 2. Workspace source packages embedded by the root build. `@claude-code-best/workflow-engine` is now declared explicitly because root source imports it directly.
 3. Build and verification tools such as Bun/Node type declarations, TypeScript, Biome, Vite, Rollup, Knip, and package-specific type declarations.
 

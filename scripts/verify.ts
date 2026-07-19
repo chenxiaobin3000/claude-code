@@ -16,6 +16,7 @@ const modelTimeoutMs = 180_000
 const ciMode = process.argv.includes('--ci')
 const validationScripts = [
   'scripts/validation/anthropic-boundary.ts',
+  'scripts/validation/third-party-interface-boundary.ts',
   'scripts/validation/vertex-boundary.ts',
   'scripts/validation/foundry-boundary.ts',
   'scripts/validation/sdk-compat-boundary.ts',
@@ -36,6 +37,7 @@ const validationScripts = [
   'scripts/validation/session-transcript.ts',
   'scripts/validation/hook-protocol.ts',
   'scripts/validation/openai-stream.ts',
+  'scripts/validation/openai-client.ts',
   'scripts/validation/openai-errors.ts',
   'scripts/validation/model-stream.ts',
   'scripts/validation/model-usage.ts',

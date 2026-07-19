@@ -1,4 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk'
+import type { ChatCompletion } from 'openai/resources/chat/completions/completions.mjs'
 import type { BetaToolUnion } from '@anthropic-ai/sdk/resources/beta/messages.js'
 import {
   getLastApiCompletionTimestamp,
@@ -346,9 +347,7 @@ async function sideQueryViaOpenAICompatible(
     target.apiKey,
     ...collectSensitiveStrings(openaiMessages),
   ]
-  let response: Awaited<
-    ReturnType<typeof client.chat.completions.create>
-  >
+  let response: ChatCompletion
   try {
     response = await client.chat.completions.create(
       requestParams,

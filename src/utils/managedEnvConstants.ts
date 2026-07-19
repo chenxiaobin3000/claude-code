@@ -16,7 +16,6 @@ const PROVIDER_MANAGED_ENV_VARS = new Set([
   // The flag itself — settings can't unset it once the host set it
   'CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST',
   // OpenAI provider specific
-  'OPENAI_AUTH_MODE',
   'OPENAI_API_KEY',
   'CLAUDE_CODE_SUBAGENT_MODEL',
 ])
@@ -58,7 +57,6 @@ export const DANGEROUS_SHELL_SETTINGS = [
 export const SAFE_ENV_VARS = new Set([
   // OpenAI provider specific
   'OPENAI_API_KEY',
-  'OPENAI_AUTH_MODE',
   'OPENAI_MAX_TOKENS',
   'OPENAI_ORG_ID',
   'OPENAI_PROJECT_ID',

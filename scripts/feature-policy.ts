@@ -64,7 +64,6 @@ export const FEATURE_POLICY: Record<string, FeatureDefinition> = {
   KAIROS: internal(),
   KAIROS_BRIEF: internal(['KAIROS']),
   KAIROS_CHANNELS: internal(['KAIROS']),
-  KAIROS_GITHUB_WEBHOOKS: internal(['KAIROS']),
   LAN_PIPES: internal(['UDS_INBOX']),
   LODESTONE: experimental(),
   MCP_RICH_OUTPUT: experimental(),

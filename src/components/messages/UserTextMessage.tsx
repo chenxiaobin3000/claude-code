@@ -79,22 +79,6 @@ export function UserTextMessage({
     );
   }
 
-  // GitHub webhook events (check_run, review comments, pushes) delivered via
-  // bound-session routing after /subscribe-pr. The tag constant is stripped
-  // from external builds — inline the literal so the import doesn't fail.
-  // The require() below DCEs when both flags are off. startsWith (not
-  // includes) and before the includes-checks below: defense-in-depth if
-  // the sanitizer were ever weakened.
-  if (feature('KAIROS_GITHUB_WEBHOOKS')) {
-    if (param.text.startsWith('<github-webhook-activity>')) {
-      /* eslint-disable @typescript-eslint/no-require-imports */
-      const { UserGitHubWebhookMessage } =
-        require('./UserGitHubWebhookMessage.js') as typeof import('./UserGitHubWebhookMessage.js');
-      /* eslint-enable @typescript-eslint/no-require-imports */
-      return <UserGitHubWebhookMessage addMargin={addMargin} param={param} />;
-    }
-  }
-
   // Bash inputs!
   if (param.text.includes('<bash-input>')) {
     return <UserBashInputMessage addMargin={addMargin} param={param} />;

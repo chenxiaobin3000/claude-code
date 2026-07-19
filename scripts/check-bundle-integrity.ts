@@ -173,6 +173,16 @@ async function main() {
       'CLAUDE_CODE_PLUGIN_SEED_DIR',
       'autoUpdateMarketplacesAndPluginsInBackground',
       'installPluginsForHeadless',
+      'auth.openai.com',
+      'chatgpt.com/backend-api/codex/responses',
+      'openai-chatgpt-auth.json',
+      'ChatGPT-Account-Id',
+      'OPENAI_AUTH_MODE',
+      'KAIROS_GITHUB_WEBHOOKS',
+      'github-webhook-activity',
+      'pr-subscriptions.json',
+      'SubscribePRTool',
+      'registry.modelcontextprotocol.io',
     ]) {
       if (content.includes(marker)) {
         findings.push({
