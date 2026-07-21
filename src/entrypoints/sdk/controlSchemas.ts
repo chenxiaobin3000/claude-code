@@ -82,7 +82,9 @@ export const SDKControlInitializeResponseSchema = lazySchema(() =>
       output_style: z.string(),
       available_output_styles: z.array(z.string()),
       models: z.array(ModelInfoSchema()),
-      account: AccountInfoSchema(),
+      account: AccountInfoSchema().describe(
+        'Legacy wire field containing local provider metadata only.',
+      ),
       pid: z
         .number()
         .optional()
@@ -90,7 +92,7 @@ export const SDKControlInitializeResponseSchema = lazySchema(() =>
       fast_mode_state: FastModeStateSchema().optional(),
     })
     .describe(
-      'Response from session initialization with available commands, models, and account info.',
+      'Response from session initialization with available commands, models, and local provider metadata.',
     ),
 )
 

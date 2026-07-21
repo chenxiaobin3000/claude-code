@@ -54,6 +54,8 @@
     "check": "biome check .",
     "check:fix": "biome check --fix .",
     "check:bundle": "bun run scripts/check-bundle-integrity.ts",
+    "check:exe": "bun run scripts/check-exe-integrity.ts",
+    "schema:settings": "bun run scripts/print-settings-schema.ts",
     "workspaces:verify": "bun run scripts/verify-workspaces.ts",
     "verify": "bun run scripts/verify.ts",
     "check:unused": "knip-bun",

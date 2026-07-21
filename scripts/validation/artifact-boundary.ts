@@ -54,6 +54,7 @@ for (const scanRoot of scanRoots) {
     const path = `${scanRoot}/${relativePath}`.replaceAll('\\', '/')
     if (
       path === 'scripts/validation/artifact-boundary.ts' ||
+      path === 'scripts/removed-cloud-markers.ts' ||
       path === 'scripts/check-bundle-integrity.ts'
     )
       continue

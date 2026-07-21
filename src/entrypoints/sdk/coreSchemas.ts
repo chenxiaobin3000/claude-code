@@ -55,7 +55,11 @@ export const OutputFormatSchema = lazySchema(() =>
 // ============================================================================
 
 export const ApiKeySourceSchema = lazySchema(() =>
-  z.enum(['user', 'project', 'org', 'temporary', 'oauth']),
+  z
+    .string()
+    .describe(
+      'Name of the environment variable selected by the active models.json entry, or a local no-credential sentinel.',
+    ),
 )
 
 export const ConfigScopeSchema = lazySchema(() =>
@@ -1074,19 +1078,16 @@ export const ModelInfoSchema = lazySchema(() =>
 export const AccountInfoSchema = lazySchema(() =>
   z
     .object({
-      email: z.string().optional(),
-      organization: z.string().optional(),
-      subscriptionType: z.string().optional(),
-      tokenSource: z.string().optional(),
-      apiKeySource: z.string().optional(),
       apiProvider: z
-        .enum(['firstParty', 'openai'])
+        .literal('openai')
         .optional()
         .describe(
-          'Legacy Anthropic API backend identifier. Runtime model inference uses the OpenAI-compatible provider path.',
+          'OpenAI-compatible runtime provider identifier.',
         ),
     })
-    .describe("Information about the logged in user's account."),
+    .describe(
+      'Legacy SDK response slot retained for wire compatibility; it contains provider metadata only and does not represent a logged-in account.',
+    ),
 )
 
 // ============================================================================
@@ -1479,7 +1480,7 @@ export const SDKSystemMessageSchema = lazySchema(() =>
           .string()
           .optional()
           .describe(
-            '@internal Plugin source identifier in "name\\@marketplace" format. Sentinels: "name\\@inline" for --plugin-dir, "name\\@builtin" for built-in plugins.',
+            '@internal source-qualified Plugin identifier. Sentinels: "name\\@inline" for --plugin-dir and "name\\@builtin" for built-in plugins.',
           ),
       }),
     ),

@@ -45,11 +45,10 @@ export const FEATURE_POLICY: Record<string, FeatureDefinition> = {
   CONNECTOR_TEXT: stable(['message-conversion', 'sdk-compat']),
   CONTEXT_COLLAPSE: experimental(),
   COORDINATOR_MODE: internal(),
-  COWORKER_TYPE_TELEMETRY: internal(),
+  LOCAL_COWORKER_METADATA: internal(),
   DAEMON: internal(),
   DIRECT_CONNECT: internal(),
   DUMP_SYSTEM_PROMPT: internal(),
-  ENHANCED_TELEMETRY_BETA: experimental(),
   EXPERIMENTAL_SEARCH_EXTRA_TOOLS: experimental(['EXPERIMENTAL_SKILL_SEARCH']),
   EXPERIMENTAL_SKILL_SEARCH: experimental(),
   EXTRACT_MEMORIES: experimental(),
@@ -68,12 +67,11 @@ export const FEATURE_POLICY: Record<string, FeatureDefinition> = {
   LODESTONE: experimental(),
   MCP_RICH_OUTPUT: experimental(),
   MCP_SKILLS: experimental(),
-  MEMORY_SHAPE_TELEMETRY: internal(),
+  LOCAL_MEMORY_SHAPE_DIAGNOSTICS: internal(),
   MESSAGE_ACTIONS: experimental(),
   MONITOR_TOOL: stable(['tool-call', 'shell-parsers']),
   NATIVE_CLIPBOARD_IMAGE: experimental(),
   NEW_INIT: experimental(),
-  PERFETTO_TRACING: internal(),
   PIPE_IPC: internal(['UDS_INBOX']),
   POOR: {
     ...stable(['model-request']),
@@ -116,7 +114,7 @@ export const DEFAULT_BUILD_FEATURES = Object.freeze(
     .map(([name]) => name),
 )
 
-/** Source-controlled runtime values formerly supplied by remote Feature Flags. */
+/** Source-controlled local runtime values. No remote fetch or refresh exists. */
 export const RUNTIME_FEATURE_DEFAULTS: Readonly<Record<string, unknown>> = Object.freeze({
   tengu_keybinding_customization_release: true,
   tengu_streaming_tool_execution2: true,

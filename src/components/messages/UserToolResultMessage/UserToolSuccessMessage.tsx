@@ -1,7 +1,7 @@
 import { feature } from 'bun:bundle';
 import figures from 'figures';
 import * as React from 'react';
-import { SentryErrorBoundary } from 'src/components/SentryErrorBoundary.js';
+import { LocalErrorBoundary } from 'src/components/LocalErrorBoundary.js';
 import { Box, Text, useTheme } from '@anthropic/ink';
 import { useAppState } from '../../../state/AppState.js';
 import { filterToolProgressMessages, type Tool, type Tools } from '../../../Tool.js';
@@ -129,7 +129,7 @@ export function UserToolSuccessMessage({
             )
           : null}
       </Box>
-      <SentryErrorBoundary>
+      <LocalErrorBoundary>
         <HookProgressMessage
           hookEvent="PostToolUse"
           lookups={lookups}
@@ -137,7 +137,7 @@ export function UserToolSuccessMessage({
           verbose={verbose}
           isTranscriptMode={isTranscriptMode}
         />
-      </SentryErrorBoundary>
+      </LocalErrorBoundary>
     </Box>
   );
 }

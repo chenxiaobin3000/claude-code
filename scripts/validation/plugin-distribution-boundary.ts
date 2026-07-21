@@ -75,7 +75,12 @@ for (const scanRoot of ['src', 'packages', 'scripts']) {
   const glob = new Bun.Glob('**/*.{ts,tsx,js,mjs,cjs,json,jsonc,toml,md}')
   for await (const relative of glob.scan({ cwd: join(root, scanRoot), onlyFiles: true })) {
     const path = `${scanRoot}/${relative}`.replaceAll('\\', '/')
-    if (path === 'scripts/validation/plugin-distribution-boundary.ts' || path === 'scripts/check-bundle-integrity.ts') continue
+    if (
+      path === 'scripts/validation/plugin-distribution-boundary.ts' ||
+      path === 'scripts/removed-cloud-markers.ts' ||
+      path === 'scripts/check-bundle-integrity.ts'
+    )
+      continue
     const source = await readFile(join(root, path), 'utf8')
     for (const marker of forbiddenMarkers) {
       if (source.includes(marker)) throw new Error(`[plugin-distribution-boundary] ${path} contains remote distribution marker ${marker}`)

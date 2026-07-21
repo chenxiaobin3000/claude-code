@@ -1,6 +1,6 @@
 # Root dependency audit
 
-Audit date: 2026-07-19
+Audit date: 2026-07-22
 
 ## Packaging model
 
@@ -28,7 +28,7 @@ Only packages directly resolved by scripts shipped outside the bundle remain in 
 
 `devDependencies` contains three categories:
 
-1. Runtime source inputs embedded in the bundles, including the project-owned lightweight OpenAI-compatible Chat Completions Client, the small Anthropic SDK error-class compatibility allowlist, Ink/React, LSP, archive, network, parsing, and terminal packages. The `openai` package is retained for compile-time Chat Completions protocol types only; its runtime Client and bundled Workload Identity OAuth implementation do not enter production artifacts.
+1. Runtime source inputs embedded in the bundles, including the project-owned lightweight OpenAI-compatible Chat Completions Client, the small Anthropic SDK error-class compatibility allowlist, Ink/React, LSP, archive, network, parsing, and terminal packages. The `openai` package is retained for compile-time Chat Completions protocol types only; its runtime Client and bundled Workload Identity OAuth implementation do not enter production artifacts. `@anthropic-ai/sdk` remains an internal message/tool/stream/Usage compatibility dependency: type imports are unrestricted, while runtime values are limited by `sdk-compat-boundary.ts` to the four local error classes documented in `ANTHROPIC_SDK_COMPATIBILITY.md`. Runtime error imports must use the narrow `@anthropic-ai/sdk/error` export so the SDK model client, default domain, and credential discovery code cannot enter production bundles.
 2. Workspace source packages embedded by the root build. `@claude-code-best/workflow-engine` is now declared explicitly because root source imports it directly.
 3. Build and verification tools such as Bun/Node type declarations, TypeScript, Biome, Vite, Rollup, Knip, and package-specific type declarations.
 
@@ -36,6 +36,10 @@ The audit removed unused direct entries `@smithy/core`, `@types/sharp`, and `@ty
 
 ## Enforced boundary
 
-`scripts/validation/dependency-boundary.ts` verifies the production dependency allowlist, bundle configuration, published-script consumers, explicit workspace declaration, and removed direct packages. It runs inside the single `bun run verify` pipeline. `scripts/check-bundle-integrity.ts` remains the artifact-level proof that Bun and Vite outputs do not contain undeclared third-party imports.
+`scripts/validation/dependency-boundary.ts` verifies the production dependency allowlist, bundle configuration, published-script consumers, explicit workspace declaration, and removed direct packages. It runs inside the single `bun run verify` pipeline. `scripts/check-bundle-integrity.ts` checks the Bun and Vite/Node outputs for unresolved third-party imports and removed cloud-interface markers; `scripts/check-exe-integrity.ts` applies the equivalent marker policy to the standalone executable.
+
+No production dependency is retained for Anthropic account login or hosted APIs, ChatGPT account OAuth, remote Plugin Marketplace distribution, automatic self-update, remote Feature Flag delivery, Sentry, Datadog, Langfuse, OpenTelemetry export, or official MCP Registry discovery. MCP OAuth remains part of the user-configured MCP protocol and is not a CLI account dependency. Self-hosted RCS/ACP, GitHub, Weixin, search, WebFetch, HTTP Hooks, and OpenAI-compatible endpoints are separate explicit network surfaces and remain in scope.
+
+The artifact audit is performed immediately after each build so a later build cannot overwrite the evidence from an earlier chain. Bun and Vite outputs are scanned as JavaScript dependency graphs; the standalone EXE is scanned as binary ASCII/UTF-16 content and then exercised with `--version` and `--help`.
 
 `bun.lock` is explicitly exempted from the repository-wide `*.lock` ignore rule. This makes the existing `bun install --frozen-lockfile` CI step reproducible from a clean checkout instead of relying on an untracked local lock file.

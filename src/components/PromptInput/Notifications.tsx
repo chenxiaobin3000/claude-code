@@ -22,7 +22,7 @@ import { tokenCountFromLastAPIResponse } from '../../utils/tokens.js';
 import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js';
 import { IdeStatusIndicator } from '../IdeStatusIndicator.js';
 import { MemoryUsageIndicator } from '../MemoryUsageIndicator.js';
-import { SentryErrorBoundary } from '../SentryErrorBoundary.js';
+import { LocalErrorBoundary } from '../LocalErrorBoundary.js';
 import { TokenWarning } from '../TokenWarning.js';
 import { SandboxPromptFooterHint } from './SandboxPromptFooterHint.js';
 
@@ -115,7 +115,7 @@ export function Notifications({
   }, [shouldShowExternalEditorHint, editor, addNotification, removeNotification]);
 
   return (
-    <SentryErrorBoundary>
+    <LocalErrorBoundary>
       <Box flexDirection="column" alignItems={isNarrow ? 'flex-start' : 'flex-end'} flexShrink={0} overflowX="hidden">
         <NotificationContent
           ideSelection={ideSelection}
@@ -128,7 +128,7 @@ export function Notifications({
           mainLoopModel={mainLoopModel}
         />
       </Box>
-    </SentryErrorBoundary>
+    </LocalErrorBoundary>
   );
 }
 

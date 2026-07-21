@@ -102,6 +102,14 @@ for (const path of [...(await sourceFiles('src')), ...(await sourceFiles('packag
         }
       }
     }
+    if (
+      runtimeNames.length > 0 &&
+      statement.moduleSpecifier.text !== '@anthropic-ai/sdk/error'
+    ) {
+      fail(
+        `${path} must import SDK runtime error classes from @anthropic-ai/sdk/error so the model client cannot enter production bundles`,
+      )
+    }
     for (const name of runtimeNames) {
       if (!allowedRuntimeImports.has(name)) {
         unexpectedRuntimeImports.push(`${path}:${name}`)

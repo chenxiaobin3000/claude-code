@@ -2,13 +2,15 @@
 
 Feature Flag 的唯一机器可读清单位于 `scripts/feature-policy.ts`。构建脚本、开发入口和 Vite 插件均通过 `resolveBuildFeatures()` 解析同一份策略，不允许各自维护默认列表。
 
+所有构建和运行时 Feature 值均来自源码、本地配置或显式环境变量。项目不连接远程 Feature Flag 服务，不执行远程拉取、用户分群、缓存刷新或退出上报。`RUNTIME_FEATURE_DEFAULTS` 是本地行为默认值；`CLAUDE_LOCAL_FEATURE_OVERRIDES` 和 `localFeatureOverrides` 只在当前机器解析。
+
 ## 支持级别
 
 | 级别 | 用途 | 默认构建 | 显式启用条件 |
 | --- | --- | --- | --- |
 | `stable` | 已有固定验收覆盖、允许常规发布的能力 | 仅启用 `default: true` 的项目 | `FEATURE_<NAME>=1` |
 | `experimental` | 接口或行为仍可能变化的开发能力 | 不启用 | `ALLOW_EXPERIMENTAL_FEATURES=1` 且 `FEATURE_<NAME>=1` |
-| `internal` | 内部服务、部署拓扑、遥测或专用运行模式 | 不启用 | `ALLOW_INTERNAL_FEATURES=1` 且 `FEATURE_<NAME>=1` |
+| `internal` | 本地诊断、部署拓扑或专用运行模式 | 不启用 | `ALLOW_INTERNAL_FEATURES=1` 且 `FEATURE_<NAME>=1` |
 
 稳定项只有声明至少一个 `acceptance` 验收目标后才能进入默认集合。默认构建不会因为源码中存在 Flag 而自动开启实验或内部能力。
 

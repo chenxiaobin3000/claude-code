@@ -4,7 +4,6 @@ import { SandboxSettingsSchema } from '../../entrypoints/sandboxTypes.js'
 import { isEnvTruthy } from '../envUtils.js'
 import { lazySchema } from '../lazySchema.js'
 import { PERMISSION_MODES } from '../permissions/PermissionMode.js'
-import { CLAUDE_CODE_SETTINGS_SCHEMA_URL } from './constants.js'
 import { PermissionRuleSchema } from './permissionValidation.js'
 
 // Re-export hook schemas and types from centralized location for backward compatibility
@@ -221,9 +220,11 @@ export const SettingsSchema = lazySchema(() =>
   z
     .object({
       $schema: z
-        .literal(CLAUDE_CODE_SETTINGS_SCHEMA_URL)
+        .string()
         .optional()
-        .describe('JSON Schema reference for Claude Code settings'),
+        .describe(
+          'Optional JSON Schema reference. The project-owned schema is generated from this runtime definition.',
+        ),
       apiKeyHelper: z
         .string()
         .optional()
@@ -339,9 +340,7 @@ export const SettingsSchema = lazySchema(() =>
         .record(z.string(), z.string())
         .optional()
         .describe(
-          'Override mapping from Anthropic model ID (e.g. "claude-opus-4-6") to provider-specific ' +
-            'provider model ID. Typically set in managed settings by ' +
-            'enterprise administrators.',
+          'Optional local override mapping for built-in model labels. Direct model IDs and endpoints are configured in ~/.claude/models.json.',
         ),
       // Whether to automatically approve all MCP servers in the project
       enableAllProjectMcpServers: z
@@ -510,7 +509,7 @@ export const SettingsSchema = lazySchema(() =>
         .describe(
           'Whether to render the fork built-in status line (model + ctx + 5h/7d limits + cost + cache pill). Toggled with /statusline.',
         ),
-      // Enabled plugins using marketplace-first format
+      // Enabled local or built-in plugins keyed by their source-qualified ID.
       enabledPlugins: z
         .record(
           z.string(),
@@ -518,20 +517,8 @@ export const SettingsSchema = lazySchema(() =>
         )
         .optional()
         .describe(
-          'Enabled plugins using plugin-id@marketplace-id format. Example: { "formatter@anthropic-tools": true }. Also supports extended format with version constraints.',
+          'Enabled local or built-in plugins keyed by source-qualified plugin ID. Remote discovery, download, and update are not supported.',
         ),
-      // Force a specific login method: 'claudeai' for Claude Pro/Max, 'console' for Console billing
-      forceLoginMethod: z
-        .enum(['claudeai', 'console'])
-        .optional()
-        .describe(
-          'Force a specific login method: "claudeai" for Claude Pro/Max, "console" for Console billing',
-        ),
-      // Organization UUID to use for OAuth login (will be added as URL param to authorization URL)
-      forceLoginOrgUUID: z
-        .string()
-        .optional()
-        .describe('Organization UUID to use for OAuth login'),
       outputStyle: z
         .string()
         .optional()
@@ -549,12 +536,11 @@ export const SettingsSchema = lazySchema(() =>
           'Skip the WebFetch blocklist check for enterprise environments with restrictive security policies',
         ),
       webSearchAdapter: z
-        .enum(['api', 'bing', 'brave', 'exa', 'tavily'])
+        .enum(['bing', 'brave', 'exa', 'tavily'])
         .optional()
         .describe(
           'Web search backend adapter. "tavily" uses Tavily Search API (default), ' +
-            '"api" uses Anthropic server-side search, "bing" scrapes Bing HTML, ' +
-            '"brave" uses Brave Search API, "exa" uses Exa AI.',
+            '"bing" scrapes Bing HTML, "brave" uses Brave Search API, and "exa" uses Exa AI.',
         ),
       webFetchAdapter: z
         .enum(['tavily', 'http'])
@@ -597,14 +583,6 @@ export const SettingsSchema = lazySchema(() =>
           'Custom Exa AI MCP endpoint URL. Defaults to https://mcp.exa.ai/mcp.',
         ),
       sandbox: SandboxSettingsSchema().optional(),
-      feedbackSurveyRate: z
-        .number()
-        .min(0)
-        .max(1)
-        .optional()
-        .describe(
-          'Probability (0–1) that the session quality survey appears when eligible. 0.05 is a reasonable starting point.',
-        ),
       spinnerTipsEnabled: z
         .boolean()
         .optional()

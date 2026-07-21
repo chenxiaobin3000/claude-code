@@ -32,7 +32,7 @@ import {
 const teamMemPaths = feature('TEAMMEM')
   ? (require('../memdir/teamMemPaths.js') as typeof import('../memdir/teamMemPaths.js'))
   : null
-const memoryShapeTelemetry = feature('MEMORY_SHAPE_TELEMETRY')
+const memoryShapeTelemetry = feature('LOCAL_MEMORY_SHAPE_DIAGNOSTICS')
   ? (require('../memdir/memoryShapeTelemetry.js') as typeof import('../memdir/memoryShapeTelemetry.js'))
   : null
 
@@ -205,7 +205,7 @@ async function handleSessionFileAccess(
     }
   }
 
-  if (feature('MEMORY_SHAPE_TELEMETRY') && filePath) {
+  if (feature('LOCAL_MEMORY_SHAPE_DIAGNOSTICS') && filePath) {
     const scope = memoryScopeForPath(filePath)
     if (
       scope !== null &&

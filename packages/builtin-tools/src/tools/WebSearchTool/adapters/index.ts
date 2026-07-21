@@ -8,7 +8,6 @@
  */
 
 import { getSettings_DEPRECATED } from 'src/utils/settings/settings.js'
-import { ApiSearchAdapter } from './apiAdapter.js'
 import { BingSearchAdapter } from './bingAdapter.js'
 import { BraveSearchAdapter } from './braveAdapter.js'
 import { ExaSearchAdapter } from './exaAdapter.js'
@@ -22,7 +21,7 @@ export type {
   WebSearchAdapter,
 } from './types.js'
 
-export type SearchAdapterKey = 'api' | 'bing' | 'brave' | 'exa' | 'tavily'
+export type SearchAdapterKey = 'bing' | 'brave' | 'exa' | 'tavily'
 
 let cachedAdapter: WebSearchAdapter | null = null
 let cachedAdapterKey: SearchAdapterKey | null = null
@@ -34,14 +33,12 @@ export function createAdapter(): WebSearchAdapter {
   const settingsAdapter = getSettings_DEPRECATED().webSearchAdapter
 
   const adapterKey: SearchAdapterKey =
-    envAdapter === 'api' ||
     envAdapter === 'bing' ||
     envAdapter === 'brave' ||
     envAdapter === 'exa' ||
     envAdapter === 'tavily'
       ? envAdapter
-      : settingsAdapter === 'api' ||
-          settingsAdapter === 'bing' ||
+      : settingsAdapter === 'bing' ||
           settingsAdapter === 'brave' ||
           settingsAdapter === 'exa' ||
           settingsAdapter === 'tavily'
@@ -51,9 +48,6 @@ export function createAdapter(): WebSearchAdapter {
   if (cachedAdapter && cachedAdapterKey === adapterKey) return cachedAdapter
 
   switch (adapterKey) {
-    case 'api':
-      cachedAdapter = new ApiSearchAdapter()
-      break
     case 'bing':
       cachedAdapter = new BingSearchAdapter()
       break

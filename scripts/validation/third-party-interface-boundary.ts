@@ -44,6 +44,7 @@ const removedPaths = [
   'src/commands/subscribe-pr.ts',
   'packages/builtin-tools/src/tools/SubscribePRTool/SubscribePRTool.ts',
   'src/components/messages/UserGitHubWebhookMessage.tsx',
+  'packages/builtin-tools/src/tools/WebSearchTool/adapters/apiAdapter.ts',
 ]
 for (const path of removedPaths) {
   if (await exists(path)) fail(`removed interface path was restored: ${path}`)
@@ -63,11 +64,14 @@ const forbiddenMarkers = [
   'pr-subscriptions.json',
   'SubscribePRTool',
   'registry.modelcontextprotocol.io',
+  'Anthropic server-side web search',
 ]
 for (const dir of ['src', 'packages', 'scripts']) {
   for (const path of await sourceFiles(dir)) {
     if (
       path === 'scripts/validation/third-party-interface-boundary.ts' ||
+      path === 'scripts/validation/product-surface-boundary.ts' ||
+      path === 'scripts/removed-cloud-markers.ts' ||
       path === 'scripts/check-bundle-integrity.ts'
     ) {
       continue

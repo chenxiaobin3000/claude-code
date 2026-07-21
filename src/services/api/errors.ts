@@ -2,7 +2,7 @@ import {
   APIConnectionError,
   APIConnectionTimeoutError,
   APIError,
-} from '@anthropic-ai/sdk'
+} from '@anthropic-ai/sdk/error'
 import type {
   BetaMessage,
   BetaStopReason,

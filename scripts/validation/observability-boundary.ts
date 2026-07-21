@@ -4,6 +4,7 @@ import { join, relative, resolve } from 'node:path'
 const root = resolve(import.meta.dir, '../..')
 
 const removedPaths = [
+  'src/components/SentryErrorBoundary.tsx',
   'src/services/analytics/datadog.ts',
   'src/services/analytics/firstPartyEventLogger.ts',
   'src/services/analytics/firstPartyEventLoggingExporter.ts',
@@ -60,6 +61,8 @@ async function sourceFiles(path: string): Promise<string[]> {
 }
 
 const forbidden = [
+  /SentryErrorBoundary/,
+  /anthropic\.sentry\.io/,
   /from\s+['"]@growthbook\//,
   /from\s+['"]@langfuse\//,
   /from\s+['"]@opentelemetry\//,

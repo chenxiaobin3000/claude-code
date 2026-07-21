@@ -50,6 +50,7 @@
 - CLI 不具备自安装或自更新能力：根级 `install`、`update`、`rollback`（包括 `ccb update`）以及 native/local installer、自动更新器、版本锁和更新频道配置均已移除。版本升级只能由外部分发渠道替换产物。远程插件安装和自动更新同样已移除：本地目录插件仅通过 `--plugin-dir` 按会话加载，由用户替换文件后重启或执行 `/reload-plugins`；内置插件只能随新版 CLI 产物更新。SSH 远端部署和 standalone EXE 构建不受影响。包管理器来源检测已迁为只读 Doctor 能力；2026-07-16 执行 `bun run verify -- --ci` 全矩阵通过，耗时 120.3 秒，最终 EXE 帮助中不存在上述三个根命令。
 - Provider 调度、共享请求预处理、OpenAI 请求、流事件适配和 Usage 统计已分层到 `src/services/model`；`src/services/api/claude.ts` 仅保留兼容重导出。模型主路径固定为 OpenAI-compatible，Anthropic SDK 仅承担内部消息、工具、流事件和 Usage 类型兼容，保留范围及删除规则见 `ANTHROPIC_SDK_COMPATIBILITY.md`。SDK 在根包、model-provider 和 workflow-engine 中统一精确锁定为 `0.81.0`，默认只允许类型导入；运行时值仅白名单保留 `APIUserAbortError`、`APIConnectionError`、`APIConnectionTimeoutError` 和 `APIError` 四个本地错误类。`sdk-compat-boundary.ts` 使用 TypeScript AST 检查版本、关键适配器、OpenAI 调用链及运行时导入，`anthropic-boundary.ts` 独立禁止账号、凭据、域名和模型 Client，防止把 SDK 类型误判为网络 Provider。2026-07-19 `bun run verify -- --ci` 全矩阵通过（108.5 秒）；普通 `bun run verify` 使用本地 llama.cpp 的 `Qwen3.5-9B-Q6_K` 对 Bun bundle、Vite/Node bundle 和 Windows standalone EXE 完成真实单轮请求及 `Read` 工具调用（120.0 秒）。Anthropic 账号及官方直连、Bedrock、Vertex 和 Foundry 专用传输与鉴权不得恢复。
 - 2026-07-20 已删除无入口或失效的第三方接口遗留：ChatGPT Device OAuth、Token 刷新和 `chatgpt.com/backend-api/codex/responses` 适配器，ChatGPT Codex 模型菜单与 `OPENAI_AUTH_MODE`，独立国内模型供应商引导表，以及 KAIROS GitHub Webhook 的 `/subscribe-pr`、SubscribePR Tool、消息 UI、持久化文件和 Feature Flag。Anthropic 官方 MCP Registry 实现保持删除状态；用户显式配置 MCP Server 的通用资源预取不属于官方 Registry，继续保留。为消除 `openai` SDK Client 隐式打包的未使用 Workload Identity OAuth，运行时传输已收敛为项目内轻量 Chat Completions HTTP/SSE Client，`openai` 包仅提供编译期协议类型。`third-party-interface-boundary.ts`、`openai-client.ts` 和构建产物标记扫描共同防止失效路径、域名、环境变量、命令和运行时 SDK Client 回流；`bun run verify -- --ci` 全矩阵通过（112.8 秒）。
+- 2026-07-22 已完成第三方云接口收敛的产品表面验收：README、帮助文本、依赖审计、Feature Policy、项目生成的 Settings Schema 和独立环境变量说明均只描述当前保留能力；移除 Anthropic 托管 Web Search 适配器及其 `api` 配置值，账号、订阅、强制登录和反馈抽样等失效 Schema 字段不再导出。Anthropic SDK 继续作为类型与本地错误兼容层，但运行时错误值统一从 `@anthropic-ai/sdk/error` 窄入口导入，避免把 SDK Client、官方域名和凭据发现逻辑带入发布产物。`product-surface-boundary.ts`、`observability-boundary.ts` 和共享云接口标记清单持续约束源码、文档与构建产物。
 - `src/main.tsx` 已收口为薄入口，启动阶段、参数注册、运行模式和服务初始化分别由 `src/cli/startup`、`arguments`、`modes`、`initialization` 承担。`src/screens/REPL.tsx` 同样为稳定入口，会话、输入、Agent、查询、运行时、视图和交互职责分布在 `src/screens/repl` 对应子层；入口和遗留 Runtime 均受只减不增的结构边界约束。
 - `src/utils/messages.ts`、`sessionStorage.ts`、`hooks.ts` 已收口为稳定薄入口；纯消息处理、Transcript 链与投影、Hook 匹配和输出协议分别迁入 `utils/messages/`、`utils/sessionStorage/`、`utils/hooks/`。遗留运行时编排由同目录 `*Runtime.ts` 承接并设置只减不增的行数上限，新代码必须直接引用聚焦模块。
 - 根包依赖按“发布后外部解析”与“构建时嵌入 Bundle”划分：生产依赖仅保留 `fflate`、`undici` 和 `ws`，其余源码及 workspace 输入归入 `devDependencies`；第三方 Chrome MCP bridge、默认服务配置和安装脚本已移除。完整职责与审计规则见 `DEPENDENCY_AUDIT.md`。`bun.lock` 必须纳入版本控制，并由冻结安装检查保证干净检出可复现。
@@ -70,6 +71,7 @@
 - `bun run typecheck`、`bun run lint`、三条构建链的完整性检查、CLI 启动、模型请求和工具调用必须持续通过，不允许把已修复问题重新定义为长期允许失败的状态。
 - Feature Flag 已统一登记在 `scripts/feature-policy.ts`，按稳定、实验、内部/部署专用三组提供机器可读的默认值、验收目标、依赖和冲突关系。默认构建当前只启用 19 个具有验收覆盖标识的稳定能力；实验与内部能力分别要求显式授权，未知 Flag、非法值、缺失依赖和冲突组合在开发或构建启动时直接失败。Bun bundle、Vite/Node bundle、standalone EXE 与 `bun run dev` 共用同一解析器，规则说明见 `FEATURE_FLAGS.md`。
 - 工程结构防回归由 `provider-boundary`、`sdk-compat-boundary`、各已移除 Provider boundary、`main-boundary`、`repl-boundary`、`utility-modules-boundary`、`dependency-boundary` 和 `feature-flags` 等轻量脚本持续执行；它们共同约束 Provider 主路径、兼容层保留范围、巨石入口规模与依赖方向、workspace/依赖契约及 Feature Policy。2026-07-17 Windows x64 `bun run verify -- --ci` 完整验收通过，18/18 workspace、全部轻量边界、Bun bundle、Vite/Node bundle、standalone EXE、版本和启动冒烟均通过，总耗时 114.5 秒。
+- 三类发布产物共用 `removed-cloud-markers.ts` 禁止清单：Bun bundle 与 Vite/Node bundle 扫描全部标记，Windows standalone EXE 额外扫描二进制中的 Latin-1/UTF-16 字符串。EXE 仅排除 Bun 编译器自身原生模块注册表内的 `@sentry/` 固有字符串，项目源码、依赖和两个 JavaScript bundle 对该标记仍保持零容忍。2026-07-22 `bun run verify -- --ci` 全矩阵通过（130.0 秒）；普通 `bun run verify` 使用本地 llama.cpp 的 `Qwen3.5-9B-Q6_K`，对三类产物完成真实流式单轮请求及 `Read` 工具调用（145.9 秒）。
 
 ## 3. 与官方 v2.1.210 的主要差异
 
@@ -195,26 +197,6 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - 失败时能定位 Provider、模型注册与解析、鉴权或流解析阶段。
 
 ## 6. 后续开发路线图
-
-### P0：第三方云接口收敛与遗留清理
-
-状态：进行中。已完成的条目按实际验证结果标记，其余条目仍描述目标状态。
-
-目标：移除不属于独立 OpenAI-compatible CLI 核心能力的远程市场、遥测和 Anthropic 云依赖，缩小发布包网络面、凭据面及供应链审计范围。
-
-- [x] 移除远程 Plugin Marketplace 能力（2026-07-18 已删除官方 Marketplace CDN、GitHub 安装量统计、远程浏览/添加/安装命令与 UI、Git/HTTPS 克隆和缓存、启动安装、插件推荐、自动更新及旧 Marketplace 设置 Schema；MCPB 收敛为仅加载本地 `.mcpb`/`.dxt` 文件）。`/plugin` 现仅列出本地目录和内置 Plugin，并保留本地清单校验；`--plugin-dir`、Skill、Hook、插件 MCP/LSP 配置及内置 Plugin 加载链继续保留。新增 `plugin-distribution-boundary.ts` 与构建产物标记扫描，防止远程入口、域名和下载函数恢复；17 个 workspace 全流程及 `bun run verify --ci` 全部通过，最终完整验证用时 109.5 秒。
-- [x] 移除全部遥测和可观测性上报（2026-07-18 已移除 Anthropic 1P Event Logging、BigQuery Metrics、GrowthBook 远程配置、Sentry、Datadog、Langfuse、OpenTelemetry OTLP、Beta Tracing 与本地 Perfetto 上报链；运行 Feature Flag 固化到 `scripts/feature-policy.ts`，支持 `CLAUDE_LOCAL_FEATURE_OVERRIDES` 和 `localFeatureOverrides` 显式本地覆盖。已删除相关 SDK、初始化/刷新、Provider 状态、缓存、失败队列、环境变量、退出 flush 和纯遥测启动扫描，并新增 `observability-boundary.ts` 防止依赖、环境变量和实现入口恢复；17 个 workspace、三类构建产物及 `bun run verify --ci` 全部通过，最终完整验证用时 126.6 秒）。
-- [x] 停止读取和写入 `~/.claude/telemetry` 中只服务于旧上报链的失败队列与缓存（2026-07-18 已随 exporter、instrumentation 和事件 logger 删除完成；未自动删除用户已有文件，用户可自行清理历史目录）。
-- [x] 移除全部 Anthropic 云服务接口（2026-07-18 已删除事件日志、指标与组织开关、Feedback/Transcript Share、Public Files API、Claude Remote Control/Bridge、Remote Trigger、Trusted Device、Claude OAuth/API Key/角色接口，以及依赖 Claude 账号的推送、附件、SSH 凭据转发和桌面云端交接链路；同时移除会话分享专用的完整请求与分类器快照保留）。本地 Chrome 仅保留 Native Messaging，自托管 RCS 改为显式 `CLAUDE_CODE_RCS_AUTH_TOKEN`，ACP 使用部署方提供的 RCS URL/Token 与本地 OpenAI-compatible Provider 配置，三者均不读取 Anthropic 域名、Claude OAuth 或服务端下发凭据。新增并接入 `anthropic-boundary.ts`，分别扫描主源码和自托管 RCS/ACP 边界；Chrome 本地注册改为显式执行，不再由依赖安装修改或校验用户注册表。17 个 workspace、全部源码边界、Bun/Node 构建、bundle 完整性和 Windows standalone EXE 均通过，最终 `bun run verify --ci` 用时 110.8 秒。
-- [x] 移除第三方 `mcp-chrome`（2026-07-19 已删除普通启动时硬编码的 `127.0.0.1:12306/mcp` 服务、固定 Bearer Token、默认禁用名单、`@claude-code-best/mcp-chrome-bridge` 生产依赖、发布安装脚本和 CI 遗留开关）。通用 MCP 客户端、用户显式配置的浏览器 MCP 以及条件启用的本地 `claude-in-chrome` 保持不变；`dependency-boundary.ts` 防止默认服务、依赖和发布脚本恢复。17 个 workspace、全部轻量边界、Bun bundle、Vite/Node bundle、Windows standalone EXE、版本和启动冒烟均通过，最终 `bun run verify -- --ci` 用时 113.9 秒。
-- [ ] 更新 README、依赖审计、Feature Policy、帮助文本、配置 Schema、环境变量说明和三类构建完整性检查，确保删除后的产物不再宣传或暗示上述云能力。
-
-验收标准：
-
-- `bun run verify -- --ci` 和普通 `bun run verify` 全部通过，OpenAI-compatible 模型、微信、GitHub、搜索、本地 Plugin、用户配置 MCP/WebFetch/HTTP Hook 及保留的自托管 RCS/ACP 能力不回归。
-- 三类构建产物不包含已禁止的域名、接口路径、客户端初始化代码或仅服务于这些能力的生产依赖；启动和退出阶段不产生遥测、Feature Flag 拉取、远程 Marketplace 或 Anthropic 云请求。
-- 未设置任何环境变量时，除显式模型请求和用户主动调用的保留工具外，CLI 不主动连接第三方服务。
-- 删除远程 Marketplace、遥测或 Anthropic 账号配置后，旧设置必须被安全忽略并给出一次性迁移说明，不得导致启动失败或泄露旧 Token。
 
 ### P0：权限、Sandbox 和 Worktree 安全
 

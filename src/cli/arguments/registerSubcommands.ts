@@ -285,7 +285,7 @@ export function registerSubcommands(
       .command('ssh <host> [dir]')
       .description(
         'Run Claude Code on a remote host over SSH. Deploys the binary and ' +
-          'tunnels API auth back through your local machine — no remote setup needed.',
+          'forwards the explicitly configured model connection through your local machine.',
       )
       .option(
         '--permission-mode <mode>',
@@ -312,8 +312,8 @@ export function registerSubcommands(
         process.stderr.write(
           'Usage: claude ssh <user@host | ssh-config-alias> [dir]\n\n' +
             "Runs Claude Code on a remote Linux host. You don't need to install\n" +
-            'anything on the remote or run `claude auth login` there — the binary is\n' +
-            'deployed over SSH and API auth tunnels back through your local machine.\n',
+            'anything on the remote — the binary and explicitly configured model credentials are\n' +
+            'deployed over SSH and the configured model connection is forwarded through your local machine.\n',
         )
         process.exit(1)
       })

@@ -170,7 +170,7 @@ export function buildSettingSourcesProperties(): Property[] {
   });
 
   // Map internal names to user-friendly names
-  // For policySettings, distinguish between remote and local (or skip if neither exists)
+  // For policySettings, distinguish the supported local managed-setting sources.
   const sourceNames = sourcesWithSettings
     .map(source => {
       if (source === 'policySettings') {
@@ -240,21 +240,18 @@ export function buildAccountProperties(): Property[] {
 export function buildAPIProviderProperties(): Property[] {
   const apiProvider = getAPIProvider();
 
-  const properties: Property[] = [];
-
-  if (apiProvider !== 'firstParty') {
-    const providerLabel = 'OpenAI API';
-    properties.push({
-      label: 'API provider',
-      value: providerLabel,
-    });
-  }
+  const properties: Property[] = [
+    {
+      label: 'Model protocol',
+      value: 'OpenAI-compatible Chat Completions',
+    },
+  ];
 
   if (apiProvider === 'openai') {
     try {
       const target = resolveModelTarget();
       properties.push({ label: 'Default model', value: target.model });
-      properties.push({ label: 'OpenAI base URL', value: target.baseUrl });
+      properties.push({ label: 'Model endpoint', value: target.baseUrl });
     } catch {
       properties.push({ label: 'Model configuration', value: getModelsConfigPath() });
     }

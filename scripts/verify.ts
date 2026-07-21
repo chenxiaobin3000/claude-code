@@ -24,6 +24,7 @@ const validationScripts = [
   'scripts/validation/main-boundary.ts',
   'scripts/validation/artifact-boundary.ts',
   'scripts/validation/plugin-distribution-boundary.ts',
+  'scripts/validation/product-surface-boundary.ts',
   'scripts/validation/observability-boundary.ts',
   'scripts/validation/self-update-boundary.ts',
   'scripts/validation/dependency-boundary.ts',
@@ -328,6 +329,11 @@ async function main(): Promise<void> {
       bunExecutable,
       'run',
       'build:exe',
+    ])
+    await runStep('Windows x64 standalone EXE integrity', [
+      bunExecutable,
+      'run',
+      'check:exe',
     ])
     const exeArtifact: CliArtifact = {
       label: 'Windows x64 standalone EXE',

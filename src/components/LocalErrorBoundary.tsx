@@ -14,7 +14,7 @@ interface State {
   errorInfo: React.ErrorInfo | null;
 }
 
-export class SentryErrorBoundary extends React.Component<Props, State> {
+export class LocalErrorBoundary extends React.Component<Props, State> {
   constructor(props: Props) {
     super(props);
     this.state = { hasError: false, error: null, errorInfo: null };
@@ -28,7 +28,7 @@ export class SentryErrorBoundary extends React.Component<Props, State> {
     this.setState({ errorInfo });
 
     // Log to stderr so the diagnostic info is visible even in production builds
-    const boundary = this.props.name || 'SentryErrorBoundary';
+    const boundary = this.props.name || 'LocalErrorBoundary';
     const lines = ['', `[ErrorBoundary:${boundary}] React rendering error caught`, `  Message: ${error.message}`];
     if (errorInfo.componentStack) {
       lines.push(`  Component stack:\n${errorInfo.componentStack}`);

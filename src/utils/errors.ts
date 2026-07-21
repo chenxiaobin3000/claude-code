@@ -1,4 +1,4 @@
-import { APIUserAbortError } from '@anthropic-ai/sdk'
+import { APIUserAbortError } from '@anthropic-ai/sdk/error'
 
 export class ClaudeError extends Error {
   constructor(message: string) {

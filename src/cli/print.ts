@@ -4190,7 +4190,7 @@ async function handleInitializeRequest(
     available_output_styles: Object.keys(availableOutputStyles),
     models: modelInfos as unknown as SDKControlInitializeResponse['models'],
     account: {
-      apiProvider: getAPIProvider() as 'firstParty' | 'openai',
+      apiProvider: 'openai',
     },
     pid: process.pid,
   }

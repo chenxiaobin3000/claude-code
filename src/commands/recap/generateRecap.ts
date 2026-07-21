@@ -10,7 +10,7 @@
  * polluting the main session log or creating unnecessary cache entries.
  */
 
-import { APIUserAbortError } from '@anthropic-ai/sdk'
+import { APIUserAbortError } from '@anthropic-ai/sdk/error'
 import { logForDebugging } from '../../utils/debug.js'
 import {
   getLastCacheSafeParams,

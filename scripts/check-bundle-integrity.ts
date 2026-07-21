@@ -15,6 +15,7 @@
 import { readdir, readFile } from 'fs/promises'
 import { dirname, join, normalize, relative, resolve } from 'path'
 import { fileURLToPath } from 'url'
+import { REMOVED_CLOUD_ARTIFACT_MARKERS } from './removed-cloud-markers.js'
 
 // ─── 从 package.json 读取 dependencies 作为白名单 ────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -140,50 +141,7 @@ async function main() {
     const content = await readFile(filePath, 'utf-8')
     const lines = content.split('\n')
 
-    for (const marker of [
-      '@anthropic-ai/vertex-sdk',
-      'google-auth-library',
-      'gcp-metadata',
-      'AnthropicVertex',
-      'ANTHROPIC_VERTEX_PROJECT_ID',
-      'CLAUDE_CODE_SKIP_VERTEX_AUTH',
-      'VERTEX_REGION_CLAUDE_',
-      '@anthropic-ai/foundry-sdk',
-      '@azure/identity',
-      'AnthropicFoundry',
-      'DefaultAzureCredential',
-      'getBearerTokenProvider',
-      'cognitiveservices.azure.com/.default',
-      'ANTHROPIC_FOUNDRY_BASE_URL',
-      'ANTHROPIC_FOUNDRY_RESOURCE',
-      'CLAUDE_CODE_SKIP_FOUNDRY_AUTH',
-      'cloud-artifacts.claude-code-best.win',
-      'CLAUDE_ARTIFACTS_TOKEN',
-      'CLAUDE_ARTIFACTS_URL',
-      'ArtifactTool',
-      'ReviewArtifact',
-      'REVIEW_ARTIFACT',
-      'use-artifacts',
-      'unpkg.com/mermaid',
-      'unpkg.com/@highlightjs/cdn-assets',
-      'downloads.claude.ai/claude-code-releases/plugins',
-      'plugin-installs.json',
-      'anthropics/claude-plugins-official',
-      'CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS',
-      'CLAUDE_CODE_PLUGIN_SEED_DIR',
-      'autoUpdateMarketplacesAndPluginsInBackground',
-      'installPluginsForHeadless',
-      'auth.openai.com',
-      'chatgpt.com/backend-api/codex/responses',
-      'openai-chatgpt-auth.json',
-      'ChatGPT-Account-Id',
-      'OPENAI_AUTH_MODE',
-      'KAIROS_GITHUB_WEBHOOKS',
-      'github-webhook-activity',
-      'pr-subscriptions.json',
-      'SubscribePRTool',
-      'registry.modelcontextprotocol.io',
-    ]) {
+    for (const marker of REMOVED_CLOUD_ARTIFACT_MARKERS) {
       if (content.includes(marker)) {
         findings.push({
           type: 'forbidden-provider-artifact',

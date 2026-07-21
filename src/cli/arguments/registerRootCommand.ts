@@ -51,7 +51,7 @@ export function registerRootCommand(
     )
     .option(
       '--bare',
-      'Minimal mode: skip hooks, LSP, plugin sync, attribution, auto-memory, background prefetches, keychain reads, and CLAUDE.md auto-discovery. Sets CLAUDE_CODE_SIMPLE=1. Provider credentials are read from environment variables or --settings; account OAuth is unavailable. Skills still resolve via /skill-name. Explicitly provide context via: --system-prompt[-file], --append-system-prompt[-file], --add-dir (CLAUDE.md dirs), --mcp-config, --settings, --agents, --plugin-dir.',
+      'Minimal mode: skip hooks, LSP, plugin sync, attribution, auto-memory, background prefetches, keychain reads, and CLAUDE.md auto-discovery. Sets CLAUDE_CODE_SIMPLE=1. Model credentials are read from the environment variable named by models.json. Skills still resolve via /skill-name. Explicitly provide context via: --system-prompt[-file], --append-system-prompt[-file], --add-dir (CLAUDE.md dirs), --mcp-config, --settings, --agents, --plugin-dir.',
       () => true,
     )
     .addOption(
@@ -333,7 +333,7 @@ export function registerRootCommand(
     )
     .option(
       '--betas <betas...>',
-      'Beta headers to include in API requests (API key users only)',
+      'Local compatibility beta identifiers used by supported runtime features',
     )
     .option(
       '--fallback-model <model>',

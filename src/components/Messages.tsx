@@ -1,6 +1,6 @@
 import { feature } from 'bun:bundle';
 import chalk from 'chalk';
-import { SentryErrorBoundary } from './SentryErrorBoundary.js';
+import { LocalErrorBoundary } from './LocalErrorBoundary.js';
 import type { UUID } from 'crypto';
 import type { RefObject } from 'react';
 import * as React from 'react';
@@ -885,7 +885,7 @@ const MessagesImpl = ({
   );
 
   return (
-    <SentryErrorBoundary name="MessagesBoundary">
+    <LocalErrorBoundary name="MessagesBoundary">
       {/* Logo */}
       {!hideLogo && !(renderRange && renderRange[0] > 0) && <LogoHeader agentDefinitions={agentDefinitions} />}
 
@@ -972,7 +972,7 @@ const MessagesImpl = ({
           />
         </Box>
       )}
-    </SentryErrorBoundary>
+    </LocalErrorBoundary>
   );
 };
 
