@@ -193,6 +193,7 @@ export function createPermissionRequestMessage(
       case 'workingDir':
         return decisionReason.reason
       case 'safetyCheck':
+      case 'destructiveOperation':
       case 'other':
         return decisionReason.reason
       case 'mode': {
@@ -529,8 +530,9 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
       // through to the classifier — the fast-paths below naturally don't fire
       // because the tool's own checkPermissions still returns 'ask'.
       if (
-        result.decisionReason?.type === 'safetyCheck' &&
-        !result.decisionReason.classifierApprovable
+        result.decisionReason?.type === 'destructiveOperation' ||
+        (result.decisionReason?.type === 'safetyCheck' &&
+          !result.decisionReason.classifierApprovable)
       ) {
         if (appState.toolPermissionContext.shouldAvoidPermissionPrompts) {
           return {
@@ -1149,7 +1151,8 @@ export async function checkRuleBasedPermissions(
   // allow. checkPathSafetyForAutoEdit returns {type:'safetyCheck'} for these.
   if (
     toolPermissionResult?.behavior === 'ask' &&
-    toolPermissionResult.decisionReason?.type === 'safetyCheck'
+    (toolPermissionResult.decisionReason?.type === 'safetyCheck' ||
+      toolPermissionResult.decisionReason?.type === 'destructiveOperation')
   ) {
     return toolPermissionResult
   }
@@ -1257,7 +1260,8 @@ async function hasPermissionsToUseToolInner(
   // checkPathSafetyForAutoEdit returns {type:'safetyCheck'} for these paths.
   if (
     toolPermissionResult?.behavior === 'ask' &&
-    toolPermissionResult.decisionReason?.type === 'safetyCheck'
+    (toolPermissionResult.decisionReason?.type === 'safetyCheck' ||
+      toolPermissionResult.decisionReason?.type === 'destructiveOperation')
   ) {
     return toolPermissionResult
   }

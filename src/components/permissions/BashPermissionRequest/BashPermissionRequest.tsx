@@ -3,7 +3,6 @@ import figures from 'figures';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useTheme } from '@anthropic/ink';
 import { useKeybinding } from '../../../keybindings/useKeybinding.js';
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../../services/analytics/growthbook.js';
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
@@ -15,7 +14,7 @@ import {
   getFirstWordPrefix,
   getSimpleCommandPrefix,
 } from '@claude-code-best/builtin-tools/tools/BashTool/bashPermissions.js';
-import { getDestructiveCommandWarning } from '@claude-code-best/builtin-tools/tools/BashTool/destructiveCommandWarning.js';
+import { getDestructiveOperationWarning } from '@claude-code-best/builtin-tools/tools/destructiveOperations.js';
 import { parseSedEditCommand } from '@claude-code-best/builtin-tools/tools/BashTool/sedEditParser.js';
 import { shouldUseSandbox } from '@claude-code-best/builtin-tools/tools/BashTool/shouldUseSandbox.js';
 import { getCompoundCommandPrefixesStatic } from '../../../utils/bash/prefix.js';
@@ -250,9 +249,7 @@ function BashPermissionRequestInner({
   // prove side-effect freedom), so this useMemo still guards against any
   // re-render source (e.g. Inner state updates). Same pattern as PR#20730.
   const { destructiveWarning, sandboxingEnabled, isSandboxed } = useMemo(() => {
-    const destructiveWarning = getFeatureValue_CACHED_MAY_BE_STALE('tengu_destructive_command_warning', false)
-      ? getDestructiveCommandWarning(command)
-      : null;
+    const destructiveWarning = getDestructiveOperationWarning(toolUseConfirm.permissionResult.decisionReason);
 
     const sandboxingEnabled = SandboxManager.isSandboxingEnabled();
     const isSandboxed = sandboxingEnabled && shouldUseSandbox(toolUseConfirm.input);

@@ -24,7 +24,6 @@ import {
   suggestionForExactCommand as sharedSuggestionForExactCommand,
 } from 'src/utils/permissions/shellRuleMatching.js'
 import {
-  classifyCommandName,
   deriveSecurityFlags,
   getAllCommandNames,
   getFileRedirections,
@@ -56,6 +55,7 @@ import {
   resolveToCanonical,
 } from './readOnlyValidation.js'
 import { POWERSHELL_TOOL_NAME } from './toolName.js'
+import { classifyDestructiveArgv } from '../destructiveOperations.js'
 
 // Matches `$var = `, `$var += `, `$env:X = `, `$x ??= ` etc. Used to strip
 // nested assignment prefixes in the parse-failed fallback path.
@@ -722,40 +722,6 @@ export async function powershellToolHasPermission(
     }
   }
 
-  // 2c. Exact allow rules short-circuit here ONLY when parsing failed AND
-  // no pre-parse ask (2b prefix or UNC) is pending. Converting 2b/UNC from
-  // early-return to deferred-assign meant 2c
-  // fired before L648 consumed preParseAskDecision — silently overriding the
-  // ask with allow. Parse-succeeded path enforces ask > allow via the reduce
-  // (L917); without this guard, parse-failed was inconsistent.
-  // This ensures user-configured exact allow rules work even when pwsh is
-  // unavailable. When parsing succeeds, the exact allow check is deferred to
-  // after step 4.4 (sub-command deny/ask) — matching BashTool's ordering where
-  // the main-flow exact allow at bashPermissions.ts:1520 runs after sub-command
-  // deny checks (1442-1458). Without this, an exact allow on a compound command
-  // would bypass deny rules on sub-commands.
-  //
-  // SECURITY (parse-failed branch): the nameType guard in step 5 lives
-  // inside the sub-command loop, which only runs when parsed.valid.
-  // This is the !parsed.valid escape hatch. Input-side stripModulePrefix
-  // is unconditional — `scripts\build.exe --flag` strips to `build.exe`,
-  // canonicalCommand matches exact allow, and without this guard we'd
-  // return allow here and execute the local script. classifyCommandName
-  // is a pure string function (no AST needed). `scripts\build.exe` →
-  // 'application' (has `\`). Same tradeoff as step 5: `build.exe` alone
-  // also classifies 'application' (has `.`) so legitimate executable
-  // exact-allows downgrade to ask when pwsh is degraded — fail-safe.
-  // Module-qualified cmdlets (Module\Cmdlet) also classify 'application'
-  // (same `\`); same fail-safe over-fire.
-  if (
-    exactMatchResult.behavior === 'allow' &&
-    !parsed.valid &&
-    preParseAskDecision === null &&
-    classifyCommandName(command.split(/\s+/)[0] ?? '') !== 'application'
-  ) {
-    return exactMatchResult
-  }
-
   // 0. Check if command can be parsed - if not, require approval but don't suggest persisting
   // This matches Bash behavior: invalid syntax triggers a permission prompt but we don't
   // recommend saving invalid commands to settings
@@ -899,9 +865,55 @@ export async function powershellToolHasPermission(
 
   const decisions: PermissionResult[] = []
 
-  // Decision: deferred pre-parse ask (2b prefix ask or UNC path).
-  // Pushed first so its message wins over later asks (first-of-behavior wins),
-  // but the reduce ensures any deny in decisions[] still beats it.
+  const destructiveOperation = allSubCommands
+    .map(({ element }) => {
+      const normalizedArgs = element.args.map((arg, index) => {
+        if (element.elementTypes?.[index + 1] !== 'Parameter') return arg
+        if (PS_TOKENIZER_DASH_CHARS.has(arg[0] ?? '')) return `-${arg.slice(1)}`
+
+        // Windows PowerShell 5.1 can transcode Unicode dash Extent.Text into
+        // replacement characters (en dash → "�C", horizontal bar → "�D").
+        // Parameter is established by the native AST, so normalize that known
+        // encoding artifact without treating ordinary string arguments as flags.
+        let name = arg.replace(/^�+/, '')
+        if (/^[A-Z][A-Z][a-z]/.test(name)) name = name.slice(1)
+        return `-${name}`
+      })
+      return classifyDestructiveArgv([
+        resolveToCanonical(element.name),
+        ...normalizedArgs,
+      ])
+    })
+    .find(result => result !== null)
+  if (destructiveOperation) {
+    const decisionReason: PermissionDecisionReason = {
+      type: 'destructiveOperation',
+      operation: destructiveOperation.operation,
+      reason: destructiveOperation.reason,
+      severity: destructiveOperation.severity,
+    }
+    decisions.push(
+      destructiveOperation.severity === 'hard-deny'
+        ? {
+            behavior: 'deny',
+            decisionReason,
+            message: destructiveOperation.reason,
+          }
+        : {
+            behavior: 'ask',
+            decisionReason,
+            message: createPermissionRequestMessage(
+              POWERSHELL_TOOL_NAME,
+              decisionReason,
+            ),
+            suggestions: [],
+          },
+    )
+  }
+
+  // A destructive-operation ask is intentionally collected before ordinary
+  // ask rules so the result remains non-persistable and retains its structured
+  // risk reason. Explicit deny decisions are collected below and still win.
   if (preParseAskDecision !== null) {
     decisions.push(preParseAskDecision)
   }

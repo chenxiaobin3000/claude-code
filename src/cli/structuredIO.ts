@@ -86,6 +86,7 @@ function serializeDecisionReason(
     case 'sandboxOverride':
     case 'workingDir':
     case 'safetyCheck':
+    case 'destructiveOperation':
     case 'other':
       return reason.reason
   }

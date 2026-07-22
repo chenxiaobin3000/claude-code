@@ -87,6 +87,8 @@ function decisionReasonToString(
       return `Working Directory: ${decisionReason.reason}`
     case 'safetyCheck':
       return `Safety check: ${decisionReason.reason}`
+    case 'destructiveOperation':
+      return `Destructive operation (${decisionReason.operation}): ${decisionReason.reason}`
     case 'other':
       return `Other: ${decisionReason.reason}`
     default:

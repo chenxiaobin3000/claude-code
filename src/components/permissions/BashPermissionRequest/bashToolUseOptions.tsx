@@ -127,7 +127,8 @@ export function bashToolUseOptions({
       onClassifierDescriptionChange &&
       !initialClassifierDescriptionEmpty &&
       !descriptionAlreadyExists(classifierDescription ?? '', existingAllowDescriptions) &&
-      decisionReason?.type !== 'classifier'
+      decisionReason?.type !== 'classifier' &&
+      decisionReason?.type !== 'destructiveOperation'
     ) {
       options.push({
         type: 'input',

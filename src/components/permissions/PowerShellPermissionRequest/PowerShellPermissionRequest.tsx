@@ -1,13 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useTheme } from '@anthropic/ink';
 import { useKeybinding } from '../../../keybindings/useKeybinding.js';
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../../services/analytics/growthbook.js';
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../../../services/analytics/index.js';
 import { sanitizeToolNameForAnalytics } from '../../../services/analytics/metadata.js';
-import { getDestructiveCommandWarning } from '@claude-code-best/builtin-tools/tools/PowerShellTool/destructiveCommandWarning.js';
+import { getDestructiveOperationWarning } from '@claude-code-best/builtin-tools/tools/destructiveOperations.js';
 import { PowerShellTool } from '@claude-code-best/builtin-tools/tools/PowerShellTool/PowerShellTool.js';
 import { isAllowlistedCommand } from '@claude-code-best/builtin-tools/tools/PowerShellTool/readOnlyValidation.js';
 import type { PermissionUpdate } from '../../../utils/permissions/PermissionUpdateSchema.js';
@@ -54,9 +53,7 @@ export function PowerShellPermissionRequest(props: PermissionRequestProps): Reac
     onReject,
     explainerVisible: explainerState.visible,
   });
-  const destructiveWarning = getFeatureValue_CACHED_MAY_BE_STALE('tengu_destructive_command_warning', false)
-    ? getDestructiveCommandWarning(command)
-    : null;
+  const destructiveWarning = getDestructiveOperationWarning(toolUseConfirm.permissionResult.decisionReason);
 
   const [showPermissionDebug, setShowPermissionDebug] = useState(false);
 

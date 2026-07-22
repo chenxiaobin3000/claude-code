@@ -18,10 +18,7 @@ import {
   mcpToolDetailsForAnalytics,
   sanitizeToolNameForAnalytics,
 } from 'src/services/analytics/metadata.js'
-import {
-  addToToolDuration,
-  getStatsStore,
-} from '../../bootstrap/state.js'
+import { addToToolDuration, getStatsStore } from '../../bootstrap/state.js'
 import {
   buildCodeEditToolAttributes,
   isCodeEditingTool,
@@ -267,6 +264,7 @@ function decisionReasonToOTelSource(
     case 'sandboxOverride':
     case 'workingDir':
     case 'safetyCheck':
+    case 'destructiveOperation':
     case 'other':
       return 'config'
     default: {
@@ -1003,7 +1001,6 @@ async function checkPermissionsAndCallTool(
       source,
       tool_name: sanitizeToolNameForAnalytics(tool.name),
     })
-
   }
 
   // Add message if permission was granted/denied by PermissionRequest hook

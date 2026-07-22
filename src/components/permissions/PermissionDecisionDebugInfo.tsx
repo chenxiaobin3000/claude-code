@@ -37,6 +37,7 @@ function decisionReasonDisplayString(
     case 'workingDir':
       return decisionReason.reason;
     case 'safetyCheck':
+    case 'destructiveOperation':
     case 'other':
       return decisionReason.reason;
     case 'permissionPromptTool':

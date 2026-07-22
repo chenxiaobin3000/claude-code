@@ -68,6 +68,7 @@ import { checkPermissionMode } from './modeValidation.js'
 import { checkPathConstraints } from './pathValidation.js'
 import { checkSedConstraints } from './sedValidation.js'
 import { shouldUseSandbox } from './shouldUseSandbox.js'
+import { classifyDestructiveArgv } from '../destructiveOperations.js'
 
 // DCE cliff: Bun's feature() evaluator has a per-function complexity budget.
 // bashToolHasPermission is right at the limit. `import { X as Y }` aliases
@@ -1686,6 +1687,37 @@ export async function bashToolHasPermission(
     astSubcommands = astResult.commands.map(c => c.text)
     astRedirects = astResult.commands.flatMap(c => c.redirects)
     astCommands = astResult.commands
+  }
+
+  const destructiveOperation = astCommands
+    ?.map(command => classifyDestructiveArgv(command.argv))
+    .find(result => result !== null)
+  if (destructiveOperation) {
+    const earlyExit = checkSemanticsDeny(
+      input,
+      appState.toolPermissionContext,
+      astCommands!,
+    )
+    if (earlyExit !== null) return earlyExit
+    const decisionReason: PermissionDecisionReason = {
+      type: 'destructiveOperation',
+      operation: destructiveOperation.operation,
+      reason: destructiveOperation.reason,
+      severity: destructiveOperation.severity,
+    }
+    if (destructiveOperation.severity === 'hard-deny') {
+      return {
+        behavior: 'deny',
+        decisionReason,
+        message: destructiveOperation.reason,
+      }
+    }
+    return {
+      behavior: 'ask',
+      decisionReason,
+      message: createPermissionRequestMessage(BashTool.name, decisionReason),
+      suggestions: [],
+    }
   }
 
   // Check sandbox auto-allow (which respects explicit deny/ask rules)

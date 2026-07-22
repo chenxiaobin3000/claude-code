@@ -45,6 +45,7 @@ const validationScripts = [
   'scripts/validation/tool-permissions.ts',
   'scripts/validation/shell-parsers.ts',
   'scripts/validation/bash-authoritative-parser.ts',
+  'scripts/validation/destructive-permissions.ts',
   'scripts/validation/model-diagnostics.ts',
   'scripts/validation/themes.ts',
 ]

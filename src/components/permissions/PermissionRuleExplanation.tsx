@@ -57,6 +57,7 @@ function stringsForDecisionReason(
       };
     }
     case 'safetyCheck':
+    case 'destructiveOperation':
     case 'other':
       return {
         reasonString: reason.reason,

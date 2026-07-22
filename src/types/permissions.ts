@@ -320,6 +320,12 @@ export type PermissionDecisionReason =
       classifierApprovable: boolean
     }
   | {
+      type: 'destructiveOperation'
+      operation: string
+      reason: string
+      severity: 'mandatory-ask' | 'hard-deny'
+    }
+  | {
       type: 'other'
       reason: string
     }
