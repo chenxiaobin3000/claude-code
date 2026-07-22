@@ -100,8 +100,11 @@ export async function getPowerShellEdition(): Promise<PowerShellEdition | null> 
 }
 
 /**
- * Resets the cached PowerShell path. Only for testing.
+ * Resets the cached PowerShell path. Passing null forces the unavailable
+ * result so validation can exercise fail-closed behavior on hosts that have
+ * PowerShell installed. Only for testing.
  */
-export function resetPowerShellCache(): void {
-  cachedPowerShellPath = null
+export function resetPowerShellCache(forcedPath?: string | null): void {
+  cachedPowerShellPath =
+    forcedPath === undefined ? null : Promise.resolve(forcedPath)
 }
