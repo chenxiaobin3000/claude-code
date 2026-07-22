@@ -20,7 +20,14 @@
 
 import { SHELL_KEYWORDS } from './bashParser.js'
 import type { Node } from './parser.js'
-import { PARSE_ABORTED, parseCommandRaw } from './parser.js'
+import {
+  PARSE_ABORTED,
+  type ParseFailure,
+  PARSE_TOO_LONG,
+  PARSE_UNAVAILABLE,
+  parseCommandRaw,
+  parseCommandRawSync,
+} from './parser.js'
 
 export type Redirect = {
   op: '>' | '>>' | '<' | '<<' | '>&' | '>|' | '<&' | '&>' | '&>>' | '<<<'
@@ -42,7 +49,6 @@ export type SimpleCommand = {
 export type ParseForSecurityResult =
   | { kind: 'simple'; commands: SimpleCommand[] }
   | { kind: 'too-complex'; reason: string; nodeType?: string }
-  | { kind: 'parse-unavailable' }
 
 /**
  * Structural node types that represent composition of commands. We recurse
@@ -376,8 +382,8 @@ const DOLLAR = String.fromCharCode(0x24)
 /**
  * Parse a bash command string and extract a flat list of simple commands.
  * Returns 'too-complex' if the command uses any shell feature we can't
- * statically analyze. Returns 'parse-unavailable' if tree-sitter WASM isn't
- * loaded — caller should fall back to conservative behavior.
+ * statically analyze. Parser startup or resource failures are represented as
+ * too-complex so callers always fail closed.
  */
 export async function parseForSecurity(
   cmd: string,
@@ -385,11 +391,18 @@ export async function parseForSecurity(
   // parseCommandRaw('') returns null (falsy check), so short-circuit here.
   // Don't use .trim() — it strips Unicode whitespace (\u00a0 etc.) which the
   // pre-checks in parseForSecurityFromAst need to see and reject.
-  if (cmd === '') return { kind: 'simple', commands: [] }
+  if (cmd === '') {
+    const root = await parseCommandRaw(cmd)
+    if (typeof root === 'symbol') return parseForSecurityFromAst(cmd, root)
+    return { kind: 'simple', commands: [] }
+  }
   const root = await parseCommandRaw(cmd)
-  return root === null
-    ? { kind: 'parse-unavailable' }
-    : parseForSecurityFromAst(cmd, root)
+  return parseForSecurityFromAst(cmd, root)
+}
+
+/** Synchronous variant used by BashTool read-only and concurrency checks. */
+export function parseForSecuritySync(cmd: string): ParseForSecurityResult {
+  return parseForSecurityFromAst(cmd, parseCommandRawSync(cmd))
 }
 
 /**
@@ -400,7 +413,7 @@ export async function parseForSecurity(
  */
 export function parseForSecurityFromAst(
   cmd: string,
-  root: Node | typeof PARSE_ABORTED,
+  root: Node | ParseFailure,
 ): ParseForSecurityResult {
   // Pre-checks: characters that cause tree-sitter and bash to disagree on
   // word boundaries. These run before tree-sitter because they're the known
@@ -439,16 +452,37 @@ export function parseForSecurityFromAst(
 
   const trimmed = cmd.trim()
   if (trimmed === '') {
+    if (typeof root === 'symbol') {
+      return {
+        kind: 'too-complex',
+        reason: 'Bash parser is unavailable',
+        nodeType: 'PARSE_UNAVAILABLE',
+      }
+    }
     return { kind: 'simple', commands: [] }
+  }
+
+  if (root === PARSE_TOO_LONG) {
+    return {
+      kind: 'too-complex',
+      reason: 'Command exceeds the authoritative parser length limit',
+      nodeType: 'PARSE_TOO_LONG',
+    }
+  }
+
+  if (root === PARSE_UNAVAILABLE) {
+    return {
+      kind: 'too-complex',
+      reason: 'Bash parser is unavailable',
+      nodeType: 'PARSE_UNAVAILABLE',
+    }
   }
 
   if (root === PARSE_ABORTED) {
     // SECURITY: module loaded but parse aborted (timeout / node budget /
     // panic). Adversarially triggerable — `(( a[0][0]... ))` with ~2800
     // subscripts hits PARSE_TIMEOUT_MICROS under the 10K length limit.
-    // Previously indistinguishable from module-not-loaded → routed to
-    // legacy (parse-unavailable), which lacks EVAL_LIKE_BUILTINS — `trap`,
-    // `enable`, `hash` leaked with Bash(*). Fail closed: too-complex → ask.
+    // Fail closed: too-complex → ask. No secondary parser may upgrade it.
     return {
       kind: 'too-complex',
       reason:

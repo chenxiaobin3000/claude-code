@@ -85,7 +85,6 @@
 | 模块 | 官方现状 | 本地状态 | 主要差异 |
 | --- | --- | --- | --- |
 | 运行时 | 平台原生可执行文件 | 部分 | 本地仍以 TypeScript、Bun/Node 为主 |
-| Safe Mode | `--safe-mode` 禁用项目自定义能力排障 | 缺失 | 未发现完整 safe-mode 开关 |
 | 会话迁移 | `/cd` 保留会话迁移到新目录 | 缺失 | 没有官方同等语义的会话迁移 |
 | Shell 模式 | `! command` 后模型主动分析输出 | 缺失 | 未发现 `respondToBashCommands` |
 | Sandbox | 凭据文件和秘密环境变量隔离 | 缺失 | 未发现 `sandbox.credentials` |
@@ -95,7 +94,7 @@
 | Worktree 隔离 | 持续修复跨工作树写入和 Git 命令逃逸 | 部分 | 需要专项安全审计和回归 |
 | Plugin | prune、依赖检查、最低版本、搜索和动态重载 | 部分 | 未发现 `plugin prune`、`requiredMinimumVersion` 等完整能力 |
 | MCP | CLI OAuth 登录、启动重试、审批状态和会话重连 | 部分 | 基础能力存在，需按最新协议逐项核对 |
-| Doctor | 完整配置检查和修复建议 | 部分 | 本地有 Doctor 页面，但检查项较旧 |
+| Doctor | 安装健康、设置、MCP 和上下文诊断 | 已有 | 本地已覆盖官方核心诊断范围，不扩展 Provider、凭据、模型或完整权限检查 |
 | 浏览器 | Claude in Chrome GA、Desktop 内置浏览器 | 外部依赖 | 本地工具不能等同于官方浏览器集成和登录态共享 |
 | Desktop | Windows、macOS、Linux Desktop | 外部依赖 | 不属于当前 CLI 仓库的直接开发目标 |
 | 性能稳定性 | 持续优化 CPU、内存、网络重试、后台服务 | 部分 | 本地混合多个逆向版本，缺少完整回归保障 |
@@ -202,9 +201,12 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 目标：优先补齐最新版最重要的安全差异。
 
-- [x] 审计 Bash、PowerShell 命令解析与权限分类（2026-07-19 完成源码级审计）。两条主链均遵循显式 deny 优先、无法解析时转人工审批、复杂结构不自动放行的总体方向；PowerShell 使用原生 AST，并对解析失败、动态命令名、别名/模块前缀、Unicode 参数前缀、脚本块、子表达式、Splatting、`--%`、Provider/UNC、嵌套 PowerShell、`Start-Process`、WMI/CIM、模块加载和路径变化做了专项处理。Bash 已有 Tree-sitter AST、语义检查、子命令 fanout 上限和遗留正则防线，但默认构建中 `TREE_SITTER_BASH` 仍属实验能力，实际权威路径仍是 `shell-quote`、字符串拆分和正则组合；`CLAUDE_CODE_DISABLE_COMMAND_INJECTION_CHECK` 还能关闭关键误解析检查。现有 `shell-parsers.ts` 与 `tool-permissions.ts` 只验证解析片段和规则匹配，没有调用完整 `bashToolHasPermission`/`powershellToolHasPermission` 决策链。危险 Git、文件删除、数据库和基础设施命令的多数识别当前只生成审批 UI 警告，不构成独立于 allow 规则和模式的权限约束。
-- [ ] 将 Bash Tree-sitter 权威解析路径升为稳定默认能力：先补齐与真实 Bash/Git Bash 的差分样例，覆盖解析不可用、超长、超时、节点预算、未知 AST 节点和语义拒绝；任何无法证明为简单命令的输入必须返回 `ask`，不得回落到更宽松的自动允许路径。升为稳定后删除仅用于 Shadow/GrowthBook 的分支和重复遗留解析层，保留最小故障兜底。
-- [ ] 收紧 `CLAUDE_CODE_DISABLE_COMMAND_INJECTION_CHECK`：默认和发布构建不得允许普通环境变量关闭命令注入防线；若保留诊断开关，只能让命令统一降级为 `ask`，不得跳过 AST、误解析、路径、重定向或子命令 deny 检查。
+- [x] 审计 Bash、PowerShell 命令解析与权限分类（2026-07-19 完成源码级审计；2026-07-22 完成 Bash 审计问题整改）。PowerShell 使用原生 AST，并对解析失败、动态命令名、别名/模块前缀、Unicode 参数前缀、脚本块、子表达式、Splatting、`--%`、Provider/UNC、嵌套 PowerShell、`Start-Process`、WMI/CIM、模块加载和路径变化做了专项处理。Bash 已将 Tree-sitter 兼容 AST 固化为无条件权威入口，完整权限链对解析不可用、资源限制、未知节点和语义拒绝统一返回 `ask`；显式 deny 仍优先，allow、Sandbox、模式、只读和 classifier 均不能覆盖失败关闭结果。危险 Git、文件删除、数据库和基础设施命令从 UI 提示提升为不可绕过权限约束仍属于后续独立任务。
+- [x] 将 Bash Tree-sitter 权威解析路径升为稳定默认能力（2026-07-22 完成）：补齐与真实 Bash/Git Bash 的差分样例，覆盖解析不可用、超长、超时、节点预算、未知 AST 节点和语义拒绝；任何无法证明为简单命令的输入均返回 `ask`，不回落到更宽松的自动允许路径。已删除仅用于 Shadow/GrowthBook 的分支和安全决策链中的重复遗留解析层，仅保留解析失败直接审批的最小故障兜底。
+  - [x] 阶段一（2026-07-22）：新增 `bash-authoritative-parser.ts`，使用真实 Bash/Git Bash 校验语法与 argv 差分，并对解析不可用、超长、确定性超时、节点预算、未知 AST 节点、解析中止和语义拒绝执行完整 `bashToolHasPermission` 验证；确认即使存在精确 allow 也返回 `ask`，不生成持久 allow 建议或 classifier 自动批准，同时保留显式 deny 优先。
+  - [x] 阶段二（2026-07-22）：将权威 AST 路径改为无条件稳定默认，移除 Shadow、GrowthBook killswitch 和关闭注入检查的环境变量入口。
+  - [x] 阶段三（2026-07-22）：权限、只读、路径、Sandbox、sed 与 operator 共享 AST/argv；安全决策链不再使用 `shell-quote`、正则或字符串拆分作为权威 fallback，解析失败只会直接进入 `ask`。
+- [x] 收紧 `CLAUDE_CODE_DISABLE_COMMAND_INJECTION_CHECK`（2026-07-22 随 Bash 权威解析整改完成）：已删除该关闭入口，并由验证脚本防止其在权限主链中恢复。
 - [ ] 将危险操作从“UI 提示”提升为权限分类约束。至少覆盖 `git reset --hard`、`git clean -f/-fd/-fdx`、`git checkout/restore -- .`、`git stash drop/clear`、`git branch -D`、强制 push、危险 `rm`/`Remove-Item`、`Clear-Disk`、`Format-Volume`、`terraform destroy`、`kubectl delete` 和无条件数据库删除；规则必须基于解析后的命令与参数，而不是仅靠展示层正则。涉及用户未明确授权的数据丢失、远端历史覆盖或系统级破坏时，即使存在宽泛 allow 规则也必须重新审批；系统根目录、用户主目录和关键配置路径继续保持硬拒绝或不可持久化审批。
 - [ ] 统一 Bash 与 PowerShell 的决策优先级为：硬安全拒绝 > 显式 deny > 不可绕过安全审批 > 显式 ask > 精确 allow > 受约束的模式/只读自动允许 > 默认 ask。复核整条命令、每个管道段、控制流/嵌套命令、包装器解包、别名/模块限定名、路径型可执行文件和解析失败降级分支，确保前序 `ask`/`allow` 不会遮蔽后续 deny，工具级 `Bash(*)`/`PowerShell(*)` 不会覆盖硬安全结果。
 - [ ] 在 `scripts/validation` 增加完整权限决策脚本，直接调用 `bashToolHasPermission` 和 `powershellToolHasPermission`，使用固定 `ToolUseContext`、规则集合、cwd 和预期 `allow`/`ask`/`deny` 判定，不引入测试框架。Bash 样例覆盖包装器、管道/控制符、命令/进程替换、变量、`eval`/`source`/嵌套 shell、heredoc、重定向、控制字符、Unicode、超过 50 个子命令、cwd 变化和符号链接；PowerShell 样例覆盖别名和模块前缀、动态调用、EncodedCommand、`Invoke-Expression`、`Start-Process`、脚本块、Splatting、Provider/UNC、Unicode dash、`--%`、变量路径、cwd 变化和链接创建。Linux 无 PowerShell 时必须验证解析失败安全降级，Windows CI 额外执行真实 PowerShell 5.1/7 AST 判定。
@@ -227,8 +229,6 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 目标：降低复杂配置导致的启动和会话故障。
 
-- [ ] 实现 `--safe-mode`，禁用 CLAUDE.md、Skill、Plugin、Hook、MCP 和自定义 Agent。
-- [ ] 扩展 `/doctor`，检查运行时、Provider、凭据、MCP、Plugin、Hook、模型和权限配置。
 - [ ] 实现 `/cd`，明确新目录信任、CLAUDE.md 加载和 Session 存储迁移语义。
 - [ ] 实现 `respondToBashCommands`，让 `! command` 可配置是否触发模型响应。
 - [ ] 支持 `/rewind` 跨 `/clear` 恢复。
@@ -236,7 +236,6 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 验收标准：
 
-- Safe Mode 能在用户配置损坏时正常启动和调用基础工具。
 - `/cd` 后当前会话可继续，并能由 `--resume` 正确找到。
 - Shell 命令响应行为可由设置显式控制。
 
@@ -308,7 +307,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 1. 第三方云接口收敛：先固化远程 Feature Flag，再移除远程 Marketplace、遥测、Anthropic 云接口和无调用入口残留。
 2. 核心巨石文件和 workspace 工程结构治理。
 3. 权限、Sandbox、Worktree 安全。
-4. Safe Mode、Doctor、会话迁移。
+4. 会话迁移。
 5. Agent 和后台任务状态统一。
 6. Hook、Plugin、Skill、MCP 本地扩展协议。
 7. 性能优化及可选产品能力。

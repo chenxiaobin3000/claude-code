@@ -599,6 +599,7 @@ type ParseState = {
   /** True when byte offsets == char indices (no multi-byte UTF-8) */
   isAscii: boolean
   nodeCount: number
+  maxNodes: number
   deadline: number
   aborted: boolean
   /** Depth of backtick nesting — inside `...`, ` terminates words */
@@ -607,7 +608,11 @@ type ParseState = {
   stopToken: string | null
 }
 
-function parseSource(source: string, timeoutMs?: number): TsNode | null {
+function parseSource(
+  source: string,
+  timeoutMs?: number,
+  maxNodes = MAX_NODES,
+): TsNode | null {
   const L = makeLexer(source)
   const srcBytes = byteLengthUtf8(source)
   const P: ParseState = {
@@ -616,6 +621,7 @@ function parseSource(source: string, timeoutMs?: number): TsNode | null {
     srcBytes,
     isAscii: srcBytes === source.length,
     nodeCount: 0,
+    maxNodes,
     deadline: performance.now() + (timeoutMs ?? PARSE_TIMEOUT_MS),
     aborted: false,
     inBacktick: 0,
@@ -646,7 +652,7 @@ function byteLengthUtf8(s: string): number {
 
 function checkBudget(P: ParseState): void {
   P.nodeCount++
-  if (P.nodeCount > MAX_NODES) {
+  if (P.nodeCount > P.maxNodes) {
     P.aborted = true
     throw new Error('budget')
   }
@@ -654,6 +660,14 @@ function checkBudget(P: ParseState): void {
     P.aborted = true
     throw new Error('timeout')
   }
+}
+
+/** Deterministic parser resource-limit seam used by validation scripts. */
+export function parseBashForTesting(
+  source: string,
+  limits: { timeoutMs?: number; maxNodes?: number },
+): TsNode | null {
+  return parseSource(source, limits.timeoutMs, limits.maxNodes ?? MAX_NODES)
 }
 
 /** Build a node. Slices text from source by byte range via char-index lookup. */

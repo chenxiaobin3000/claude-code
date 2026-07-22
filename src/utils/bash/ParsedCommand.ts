@@ -1,8 +1,4 @@
 import memoize from 'lodash-es/memoize.js'
-import {
-  extractOutputRedirections,
-  splitCommandWithOperators,
-} from './commands.js'
 import type { Node } from './parser.js'
 import {
   analyzeCommand,
@@ -15,8 +11,7 @@ export type OutputRedirection = {
 }
 
 /**
- * Interface for parsed command implementations.
- * Both tree-sitter and regex fallback implementations conform to this.
+ * Interface for commands backed by the authoritative Bash AST.
  */
 export interface IParsedCommand {
   readonly originalCommand: string
@@ -25,77 +20,9 @@ export interface IParsedCommand {
   withoutOutputRedirections(): string
   getOutputRedirections(): OutputRedirection[]
   /**
-   * Returns tree-sitter analysis data if available.
-   * Returns null for the regex fallback implementation.
+   * Returns analysis data derived from the authoritative Bash AST.
    */
   getTreeSitterAnalysis(): TreeSitterAnalysis | null
-}
-
-/**
- * @deprecated Legacy regex/shell-quote path. Only used when tree-sitter is
- * unavailable. The primary gate is parseForSecurity (ast.ts).
- *
- * Regex-based fallback implementation using shell-quote parser.
- * Used when tree-sitter is not available.
- * Exported for testing purposes.
- */
-export class RegexParsedCommand_DEPRECATED implements IParsedCommand {
-  readonly originalCommand: string
-
-  constructor(command: string) {
-    this.originalCommand = command
-  }
-
-  toString(): string {
-    return this.originalCommand
-  }
-
-  getPipeSegments(): string[] {
-    try {
-      const parts = splitCommandWithOperators(this.originalCommand)
-      const segments: string[] = []
-      let currentSegment: string[] = []
-
-      for (const part of parts) {
-        if (part === '|') {
-          if (currentSegment.length > 0) {
-            segments.push(currentSegment.join(' '))
-            currentSegment = []
-          }
-        } else {
-          currentSegment.push(part)
-        }
-      }
-
-      if (currentSegment.length > 0) {
-        segments.push(currentSegment.join(' '))
-      }
-
-      return segments.length > 0 ? segments : [this.originalCommand]
-    } catch {
-      return [this.originalCommand]
-    }
-  }
-
-  withoutOutputRedirections(): string {
-    if (!this.originalCommand.includes('>')) {
-      return this.originalCommand
-    }
-    const { commandWithoutRedirections, redirections } =
-      extractOutputRedirections(this.originalCommand)
-    return redirections.length > 0
-      ? commandWithoutRedirections
-      : this.originalCommand
-  }
-
-  getOutputRedirections(): OutputRedirection[] {
-    const { redirections } = extractOutputRedirections(this.originalCommand)
-    return redirections
-  }
-
-  getTreeSitterAnalysis(): TreeSitterAnalysis | null {
-    return null
-  }
 }
 
 type RedirectionNode = OutputRedirection & {
@@ -280,17 +207,13 @@ async function doParse(command: string): Promise<IParsedCommand | null> {
         // nothing to free — extract directly.
         return buildParsedCommandFromRoot(command, data.rootNode)
       }
-    } catch {
-      // Fall through to regex implementation
-    }
+    } catch {}
   }
 
-  // Fallback to regex implementation
-  return new RegexParsedCommand_DEPRECATED(command)
+  return null
 }
 
-// Single-entry cache: legacy callers (bashCommandIsSafeAsync,
-// buildSegmentWithoutRedirections) may call ParsedCommand.parse repeatedly
+// Single-entry cache: operator helpers may call ParsedCommand.parse repeatedly
 // with the same command string. Each parse() is ~1 native.parse + ~6 tree
 // walks, so caching the most recent command skips the redundant work.
 // Size-1 bound avoids leaking TreeSitterParsedCommand instances.
@@ -299,8 +222,7 @@ let lastResult: Promise<IParsedCommand | null> | undefined
 
 /**
  * ParsedCommand provides methods for working with shell commands.
- * Uses tree-sitter when available for quote-aware parsing,
- * falls back to regex-based parsing otherwise.
+ * Uses the authoritative Bash AST parser; parse failure returns null.
  */
 export const ParsedCommand = {
   /**

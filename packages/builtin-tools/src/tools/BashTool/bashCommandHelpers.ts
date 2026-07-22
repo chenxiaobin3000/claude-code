@@ -1,23 +1,19 @@
 import type { z } from 'zod/v4'
-import {
-  isUnsafeCompoundCommand_DEPRECATED,
-  splitCommand_DEPRECATED,
-} from 'src/utils/bash/commands.js'
+import type { SimpleCommand } from 'src/utils/bash/ast.js'
 import {
   buildParsedCommandFromRoot,
   type IParsedCommand,
   ParsedCommand,
 } from 'src/utils/bash/ParsedCommand.js'
-import { type Node, PARSE_ABORTED } from 'src/utils/bash/parser.js'
+import type { Node } from 'src/utils/bash/parser.js'
 import type { PermissionResult } from 'src/utils/permissions/PermissionResult.js'
 import type { PermissionUpdate } from 'src/utils/permissions/PermissionUpdateSchema.js'
 import { createPermissionRequestMessage } from 'src/utils/permissions/permissions.js'
 import { BashTool } from './BashTool.js'
-import { bashCommandIsSafeAsync_DEPRECATED } from './bashSecurity.js'
 
 type CommandIdentityCheckers = {
-  isNormalizedCdCommand: (command: string) => boolean
-  isNormalizedGitCommand: (command: string) => boolean
+  isNormalizedCdCommand: (command: string, argv: readonly string[]) => boolean
+  isNormalizedGitCommand: (command: string, argv: readonly string[]) => boolean
 }
 
 async function segmentedCommandPermissionResult(
@@ -27,12 +23,12 @@ async function segmentedCommandPermissionResult(
     input: z.infer<typeof BashTool.inputSchema>,
   ) => Promise<PermissionResult>,
   checkers: CommandIdentityCheckers,
+  astCommands: readonly SimpleCommand[],
 ): Promise<PermissionResult> {
   // Check for multiple cd commands across all segments
-  const cdCommands = segments.filter(segment => {
-    const trimmed = segment.trim()
-    return checkers.isNormalizedCdCommand(trimmed)
-  })
+  const cdCommands = astCommands.filter(command =>
+    checkers.isNormalizedCdCommand(command.text.trim(), command.argv),
+  )
   if (cdCommands.length > 1) {
     const decisionReason = {
       type: 'other' as const,
@@ -53,20 +49,12 @@ async function segmentedCommandPermissionResult(
   // Each pipe segment can itself be a compound command (e.g., "cd sub && echo"),
   // so we split each segment into subcommands before checking.
   {
-    let hasCd = false
-    let hasGit = false
-    for (const segment of segments) {
-      const subcommands = splitCommand_DEPRECATED(segment)
-      for (const sub of subcommands) {
-        const trimmed = sub.trim()
-        if (checkers.isNormalizedCdCommand(trimmed)) {
-          hasCd = true
-        }
-        if (checkers.isNormalizedGitCommand(trimmed)) {
-          hasGit = true
-        }
-      }
-    }
+    const hasCd = astCommands.some(command =>
+      checkers.isNormalizedCdCommand(command.text.trim(), command.argv),
+    )
+    const hasGit = astCommands.some(command =>
+      checkers.isNormalizedGitCommand(command.text.trim(), command.argv),
+    )
     if (hasCd && hasGit) {
       const decisionReason = {
         type: 'other' as const,
@@ -174,9 +162,8 @@ async function buildSegmentWithoutRedirections(
 }
 
 /**
- * Wrapper that resolves an IParsedCommand (from a pre-parsed AST root if
- * available, else via ParsedCommand.parse) and delegates to
- * bashToolCheckCommandOperatorPermissions.
+ * Builds operator analysis from the authoritative AST. Callers must reject
+ * parse failures before reaching this function.
  */
 export async function checkCommandOperatorPermissions(
   input: z.infer<typeof BashTool.inputSchema>,
@@ -184,20 +171,16 @@ export async function checkCommandOperatorPermissions(
     input: z.infer<typeof BashTool.inputSchema>,
   ) => Promise<PermissionResult>,
   checkers: CommandIdentityCheckers,
-  astRoot: Node | null | typeof PARSE_ABORTED,
+  astRoot: Node,
+  astCommands: readonly SimpleCommand[],
 ): Promise<PermissionResult> {
-  const parsed =
-    astRoot && astRoot !== PARSE_ABORTED
-      ? buildParsedCommandFromRoot(input.command, astRoot)
-      : await ParsedCommand.parse(input.command)
-  if (!parsed) {
-    return { behavior: 'passthrough', message: 'Failed to parse command' }
-  }
+  const parsed = buildParsedCommandFromRoot(input.command, astRoot)
   return bashToolCheckCommandOperatorPermissions(
     input,
     bashToolHasPermissionFn,
     checkers,
     parsed,
+    astCommands,
   )
 }
 
@@ -212,24 +195,18 @@ async function bashToolCheckCommandOperatorPermissions(
   ) => Promise<PermissionResult>,
   checkers: CommandIdentityCheckers,
   parsed: IParsedCommand,
+  astCommands: readonly SimpleCommand[],
 ): Promise<PermissionResult> {
   // 1. Check for unsafe compound commands (subshells, command groups).
   const tsAnalysis = parsed.getTreeSitterAnalysis()
-  const isUnsafeCompound = tsAnalysis
-    ? tsAnalysis.compoundStructure.hasSubshell ||
-      tsAnalysis.compoundStructure.hasCommandGroup
-    : isUnsafeCompoundCommand_DEPRECATED(input.command)
+  const isUnsafeCompound =
+    tsAnalysis?.compoundStructure.hasSubshell === true ||
+    tsAnalysis?.compoundStructure.hasCommandGroup === true
   if (isUnsafeCompound) {
-    // This command contains an operator like `>` that we don't support as a subcommand separator
-    // Check if bashCommandIsSafe_DEPRECATED has a more specific message
-    const safetyResult = await bashCommandIsSafeAsync_DEPRECATED(input.command)
-
     const decisionReason = {
       type: 'other' as const,
       reason:
-        safetyResult.behavior === 'ask' && safetyResult.message
-          ? safetyResult.message
-          : 'This command uses shell operators that require approval for safety',
+        'This command uses shell operators that require approval for safety',
     }
     return {
       behavior: 'ask',
@@ -261,5 +238,6 @@ async function bashToolCheckCommandOperatorPermissions(
     segments,
     bashToolHasPermissionFn,
     checkers,
+    astCommands,
   )
 }

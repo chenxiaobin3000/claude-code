@@ -1,5 +1,9 @@
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
-import { splitCommand_DEPRECATED } from 'src/utils/bash/commands.js'
+import {
+  checkSemantics,
+  parseForSecuritySync,
+  type SimpleCommand,
+} from 'src/utils/bash/ast.js'
 import { SandboxManager } from 'src/utils/sandbox/sandbox-adapter.js'
 import { getSettings_DEPRECATED } from 'src/utils/settings/settings.js'
 import {
@@ -18,7 +22,10 @@ type SandboxInput = {
 // NOTE: excludedCommands is a user-facing convenience feature, not a security boundary.
 // It is not a security bug to be able to bypass excludedCommands — the sandbox permission
 // system (which prompts users) is the actual security control.
-function containsExcludedCommand(command: string): boolean {
+function containsExcludedCommand(
+  command: string,
+  authoritativeCommands: readonly SimpleCommand[],
+): boolean {
   // Check dynamic config for disabled commands and substrings (only for ants)
   if (process.env.USER_TYPE === 'ant') {
     const disabledCommands = getFeatureValue_CACHED_MAY_BE_STALE<{
@@ -34,18 +41,11 @@ function containsExcludedCommand(command: string): boolean {
     }
 
     // Check if command starts with any disabled commands
-    try {
-      const commandParts = splitCommand_DEPRECATED(command)
-      for (const part of commandParts) {
-        const baseCommand = part.trim().split(' ')[0]
-        if (baseCommand && disabledCommands.commands.includes(baseCommand)) {
-          return true
-        }
+    for (const part of authoritativeCommands) {
+      const baseCommand = part.argv[0]
+      if (baseCommand && disabledCommands.commands.includes(baseCommand)) {
+        return true
       }
-    } catch {
-      // If we can't parse the command (e.g., malformed bash syntax),
-      // treat it as not excluded to allow other validation checks to handle it
-      // This prevents crashes when rendering tool use messages
     }
   }
 
@@ -61,15 +61,8 @@ function containsExcludedCommand(command: string): boolean {
   // subcommands and check each one against excluded patterns. This prevents a
   // compound command from escaping the sandbox just because its first subcommand
   // matches an excluded pattern.
-  let subcommands: string[]
-  try {
-    subcommands = splitCommand_DEPRECATED(command)
-  } catch {
-    subcommands = [command]
-  }
-
-  for (const subcommand of subcommands) {
-    const trimmed = subcommand.trim()
+  for (const subcommand of authoritativeCommands) {
+    const trimmed = subcommand.text.trim()
     // Also try matching with env var prefixes and wrapper commands stripped, so
     // that `FOO=bar bazel ...` and `timeout 30 bazel ...` match `bazel:*`. Not a
     // security boundary (see NOTE at top); the &&-split above already lets
@@ -127,7 +120,10 @@ function containsExcludedCommand(command: string): boolean {
   return false
 }
 
-export function shouldUseSandbox(input: Partial<SandboxInput>): boolean {
+export function shouldUseSandbox(
+  input: Partial<SandboxInput>,
+  authoritativeCommands?: readonly SimpleCommand[],
+): boolean {
   if (!SandboxManager.isSandboxingEnabled()) {
     return false
   }
@@ -144,8 +140,24 @@ export function shouldUseSandbox(input: Partial<SandboxInput>): boolean {
     return false
   }
 
+  const commands =
+    authoritativeCommands ??
+    (() => {
+      const parsed = parseForSecuritySync(input.command!)
+      return parsed.kind === 'simple' && checkSemantics(parsed.commands).ok
+        ? parsed.commands
+        : null
+    })()
+
+  // Sandbox auto-allow must never rely on a permissive fallback parser. A
+  // command that cannot be proven simple is handled by the main permission
+  // pipeline and requires approval.
+  if (!commands) {
+    return false
+  }
+
   // Don't sandbox if the command contains user-configured excluded commands
-  if (containsExcludedCommand(input.command)) {
+  if (containsExcludedCommand(input.command, commands)) {
     return false
   }
 

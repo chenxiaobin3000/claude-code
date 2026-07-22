@@ -1,7 +1,22 @@
 import type { ToolPermissionContext } from 'src/Tool.js'
-import { splitCommand_DEPRECATED } from 'src/utils/bash/commands.js'
+import type { SimpleCommand } from 'src/utils/bash/ast.js'
 import { tryParseShellCommand } from 'src/utils/bash/shellQuote.js'
 import type { PermissionResult } from 'src/utils/permissions/PermissionResult.js'
+
+function parseSedArguments(
+  command: string,
+  authoritativeArgv?: readonly string[],
+): unknown[] | null {
+  if (authoritativeArgv) {
+    return authoritativeArgv[0] === 'sed'
+      ? [...authoritativeArgv.slice(1)]
+      : null
+  }
+  const sedMatch = command.match(/^\s*sed\s+/)
+  if (!sedMatch) return null
+  const parseResult = tryParseShellCommand(command.slice(sedMatch[0].length))
+  return parseResult.success ? parseResult.tokens : null
+}
 
 /**
  * Helper: Validate flags against an allowlist
@@ -44,14 +59,10 @@ function validateFlagsAgainstAllowlist(
 export function isLinePrintingCommand(
   command: string,
   expressions: string[],
+  authoritativeArgv?: readonly string[],
 ): boolean {
-  const sedMatch = command.match(/^\s*sed\s+/)
-  if (!sedMatch) return false
-
-  const withoutSed = command.slice(sedMatch[0].length)
-  const parseResult = tryParseShellCommand(withoutSed)
-  if (!parseResult.success) return false
-  const parsed = parseResult.tokens
+  const parsed = parseSedArguments(command, authoritativeArgv)
+  if (!parsed) return false
 
   // Extract all flags
   const flags: string[] = []
@@ -144,6 +155,7 @@ function isSubstitutionCommand(
   expressions: string[],
   hasFileArguments: boolean,
   options?: { allowFileWrites?: boolean },
+  authoritativeArgv?: readonly string[],
 ): boolean {
   const allowFileWrites = options?.allowFileWrites ?? false
 
@@ -152,13 +164,8 @@ function isSubstitutionCommand(
     return false
   }
 
-  const sedMatch = command.match(/^\s*sed\s+/)
-  if (!sedMatch) return false
-
-  const withoutSed = command.slice(sedMatch[0].length)
-  const parseResult = tryParseShellCommand(withoutSed)
-  if (!parseResult.success) return false
-  const parsed = parseResult.tokens
+  const parsed = parseSedArguments(command, authoritativeArgv)
+  if (!parsed) return false
 
   // Extract all flags
   const flags: string[] = []
@@ -247,20 +254,21 @@ function isSubstitutionCommand(
 export function sedCommandIsAllowedByAllowlist(
   command: string,
   options?: { allowFileWrites?: boolean },
+  authoritativeArgv?: readonly string[],
 ): boolean {
   const allowFileWrites = options?.allowFileWrites ?? false
 
   // Extract sed expressions (content inside quotes where actual sed commands live)
   let expressions: string[]
   try {
-    expressions = extractSedExpressions(command)
+    expressions = extractSedExpressions(command, authoritativeArgv)
   } catch (_error) {
     // If parsing failed, treat as not allowed
     return false
   }
 
   // Check if sed command has file arguments
-  const hasFileArguments = hasFileArgs(command)
+  const hasFileArguments = hasFileArgs(command, authoritativeArgv)
 
   // Check if command matches allowlist patterns
   let isPattern1 = false
@@ -269,13 +277,23 @@ export function sedCommandIsAllowedByAllowlist(
   if (allowFileWrites) {
     // When allowing file writes, only check substitution commands (Pattern 2 variant)
     // Pattern 1 (line printing) doesn't need file writes
-    isPattern2 = isSubstitutionCommand(command, expressions, hasFileArguments, {
-      allowFileWrites: true,
-    })
+    isPattern2 = isSubstitutionCommand(
+      command,
+      expressions,
+      hasFileArguments,
+      { allowFileWrites: true },
+      authoritativeArgv,
+    )
   } else {
     // Standard read-only mode: check both patterns
-    isPattern1 = isLinePrintingCommand(command, expressions)
-    isPattern2 = isSubstitutionCommand(command, expressions, hasFileArguments)
+    isPattern1 = isLinePrintingCommand(command, expressions, authoritativeArgv)
+    isPattern2 = isSubstitutionCommand(
+      command,
+      expressions,
+      hasFileArguments,
+      undefined,
+      authoritativeArgv,
+    )
   }
 
   if (!isPattern1 && !isPattern2) {
@@ -304,14 +322,12 @@ export function sedCommandIsAllowedByAllowlist(
  * Check if a sed command has file arguments (not just stdin)
  * @internal Exported for testing
  */
-export function hasFileArgs(command: string): boolean {
-  const sedMatch = command.match(/^\s*sed\s+/)
-  if (!sedMatch) return false
-
-  const withoutSed = command.slice(sedMatch[0].length)
-  const parseResult = tryParseShellCommand(withoutSed)
-  if (!parseResult.success) return true
-  const parsed = parseResult.tokens
+export function hasFileArgs(
+  command: string,
+  authoritativeArgv?: readonly string[],
+): boolean {
+  const parsed = parseSedArguments(command, authoritativeArgv)
+  if (!parsed) return true
 
   try {
     let argCount = 0
@@ -385,29 +401,24 @@ export function hasFileArgs(command: string): boolean {
  * @throws Error if parsing fails
  * @internal Exported for testing
  */
-export function extractSedExpressions(command: string): string[] {
+export function extractSedExpressions(
+  command: string,
+  authoritativeArgv?: readonly string[],
+): string[] {
   const expressions: string[] = []
 
-  // Calculate withoutSed by trimming off the first N characters (removing 'sed ')
-  const sedMatch = command.match(/^\s*sed\s+/)
-  if (!sedMatch) return expressions
+  const parsed = parseSedArguments(command, authoritativeArgv)
+  if (!parsed) return expressions
 
-  const withoutSed = command.slice(sedMatch[0].length)
+  const withoutSed = authoritativeArgv
+    ? authoritativeArgv.slice(1).join(' ')
+    : command.replace(/^\s*sed\s+/, '')
 
   // Reject dangerous flag combinations like -ew, -eW, -ee, -we (combined -e/-w with dangerous commands)
   if (/-e[wWe]/.test(withoutSed) || /-w[eE]/.test(withoutSed)) {
     throw new Error('Dangerous flag combination detected')
   }
 
-  // Use shell-quote to parse the arguments properly
-  const parseResult = tryParseShellCommand(withoutSed)
-  if (!parseResult.success) {
-    // Malformed shell syntax - throw error to be caught by caller
-    throw new Error(
-      `Malformed shell syntax: ${(parseResult as { success: false; error: string }).error}`,
-    )
-  }
-  const parsed = parseResult.tokens
   try {
     let foundEFlag = false
     let foundExpression = false
@@ -647,13 +658,19 @@ function containsDangerousOperations(expression: string): boolean {
 export function checkSedConstraints(
   input: { command: string },
   toolPermissionContext: ToolPermissionContext,
+  authoritativeCommands?: readonly SimpleCommand[],
 ): PermissionResult {
-  const commands = splitCommand_DEPRECATED(input.command)
+  if (!authoritativeCommands) {
+    return {
+      behavior: 'passthrough',
+      message: 'Authoritative Bash parse is required for sed validation',
+    }
+  }
 
-  for (const cmd of commands) {
+  for (const command of authoritativeCommands) {
     // Skip non-sed commands
-    const trimmed = cmd.trim()
-    const baseCmd = trimmed.split(/\s+/)[0]
+    const trimmed = command.text.trim()
+    const baseCmd = command.argv[0]
     if (baseCmd !== 'sed') {
       continue
     }
@@ -661,9 +678,13 @@ export function checkSedConstraints(
     // In acceptEdits mode, allow file writes (-i flag) but still block dangerous operations
     const allowFileWrites = toolPermissionContext.mode === 'acceptEdits'
 
-    const isAllowed = sedCommandIsAllowedByAllowlist(trimmed, {
-      allowFileWrites,
-    })
+    const isAllowed = sedCommandIsAllowedByAllowlist(
+      trimmed,
+      {
+        allowFileWrites,
+      },
+      command.argv,
+    )
 
     if (!isAllowed) {
       return {

@@ -1,5 +1,3 @@
-import { feature } from 'bun:bundle'
-import { logEvent } from '../../services/analytics/index.js'
 import { logForDebugging } from '../debug.js'
 import {
   ensureParserInitialized,
@@ -16,7 +14,7 @@ export interface ParsedCommandData {
   originalCommand: string
 }
 
-const MAX_COMMAND_LENGTH = 10000
+export const MAX_BASH_COMMAND_LENGTH = 10000
 const DECLARATION_COMMANDS = new Set([
   'export',
   'declare',
@@ -40,7 +38,6 @@ function logLoadOnce(success: boolean): void {
   logForDebugging(
     success ? 'tree-sitter: native module loaded' : 'tree-sitter: unavailable',
   )
-  logEvent('tengu_tree_sitter_load', { success })
 }
 
 /**
@@ -48,39 +45,29 @@ function logLoadOnce(success: boolean): void {
  * parseCommand/parseCommandRaw for the parser to be available. Idempotent.
  */
 export async function ensureInitialized(): Promise<void> {
-  if (feature('TREE_SITTER_BASH') || feature('TREE_SITTER_BASH_SHADOW')) {
-    await ensureParserInitialized()
-  }
+  await ensureParserInitialized()
 }
 
 export async function parseCommand(
   command: string,
 ): Promise<ParsedCommandData | null> {
-  if (!command || command.length > MAX_COMMAND_LENGTH) return null
+  if (!command || command.length > MAX_BASH_COMMAND_LENGTH) return null
+  await ensureParserInitialized()
+  const mod = getParserModule()
+  logLoadOnce(mod !== null)
+  if (!mod) return null
 
-  // Gate: ant-only until pentest. External builds fall back to legacy
-  // regex/shell-quote path. Guarding the whole body inside the positive
-  // branch lets Bun DCE the NAPI import AND keeps telemetry honest — we
-  // only fire tengu_tree_sitter_load when a load was genuinely attempted.
-  if (feature('TREE_SITTER_BASH')) {
-    await ensureParserInitialized()
-    const mod = getParserModule()
-    logLoadOnce(mod !== null)
-    if (!mod) return null
+  try {
+    const rootNode = mod.parse(command)
+    if (!rootNode) return null
 
-    try {
-      const rootNode = mod.parse(command)
-      if (!rootNode) return null
+    const commandNode = findCommandNode(rootNode, null)
+    const envVars = extractEnvVars(commandNode)
 
-      const commandNode = findCommandNode(rootNode, null)
-      const envVars = extractEnvVars(commandNode)
-
-      return { rootNode, envVars, commandNode, originalCommand: command }
-    } catch {
-      return null
-    }
+    return { rootNode, envVars, commandNode, originalCommand: command }
+  } catch {
+    return null
   }
-  return null
 }
 
 /**
@@ -91,6 +78,12 @@ export async function parseCommand(
  * Callers MUST treat this as fail-closed (too-complex), NOT route to legacy.
  */
 export const PARSE_ABORTED = Symbol('parse-aborted')
+export const PARSE_UNAVAILABLE = Symbol('parse-unavailable')
+export const PARSE_TOO_LONG = Symbol('parse-too-long')
+export type ParseFailure =
+  | typeof PARSE_ABORTED
+  | typeof PARSE_UNAVAILABLE
+  | typeof PARSE_TOO_LONG
 
 /**
  * Raw parse — skips findCommandNode/extractEnvVars which the security
@@ -103,36 +96,26 @@ export const PARSE_ABORTED = Symbol('parse-aborted')
  */
 export async function parseCommandRaw(
   command: string,
-): Promise<Node | null | typeof PARSE_ABORTED> {
-  if (!command || command.length > MAX_COMMAND_LENGTH) return null
-  if (feature('TREE_SITTER_BASH') || feature('TREE_SITTER_BASH_SHADOW')) {
-    await ensureParserInitialized()
-    const mod = getParserModule()
-    logLoadOnce(mod !== null)
-    if (!mod) return null
-    try {
-      const result = mod.parse(command)
-      // SECURITY: Module loaded; null here = timeout/node-budget abort in
-      // bashParser.ts (PARSE_TIMEOUT_MS=50, MAX_NODES=50_000).
-      // Previously collapsed into `return null` → parse-unavailable → legacy
-      // path, which lacks EVAL_LIKE_BUILTINS — `trap`, `enable`, `hash` leaked.
-      if (result === null) {
-        logEvent('tengu_tree_sitter_parse_abort', {
-          cmdLength: command.length,
-          panic: false,
-        })
-        return PARSE_ABORTED
-      }
-      return result
-    } catch {
-      logEvent('tengu_tree_sitter_parse_abort', {
-        cmdLength: command.length,
-        panic: true,
-      })
-      return PARSE_ABORTED
-    }
+): Promise<Node | ParseFailure> {
+  await ensureParserInitialized()
+  return parseCommandRawSync(command)
+}
+
+/** Synchronous authoritative parse for read-only/concurrency decisions. */
+export function parseCommandRawSync(command: string): Node | ParseFailure {
+  if (command.length > MAX_BASH_COMMAND_LENGTH) return PARSE_TOO_LONG
+  const mod = getParserModule()
+  logLoadOnce(mod !== null)
+  if (!mod) return PARSE_UNAVAILABLE
+  try {
+    const result = mod.parse(command)
+    // SECURITY: Module loaded; null here = timeout/node-budget abort in
+    // bashParser.ts (PARSE_TIMEOUT_MS=50, MAX_NODES=50_000).
+    if (result === null) return PARSE_ABORTED
+    return result
+  } catch {
+    return PARSE_ABORTED
   }
-  return null
 }
 
 function findCommandNode(node: Node, parent: Node | null): Node | null {

@@ -911,7 +911,7 @@ function validateSinglePathCommandArgv(
   // `timeout 5 ` prefix), so strip here too.
   const operationTypeOverride =
     baseCmd === 'sed' &&
-    sedCommandIsAllowedByAllowlist(stripSafeWrappers(cmd.text))
+    sedCommandIsAllowedByAllowlist(['sed', ...args].join(' '), undefined, argv)
       ? ('read' as FileOperationType)
       : undefined
   const pathChecker = createPathChecker(

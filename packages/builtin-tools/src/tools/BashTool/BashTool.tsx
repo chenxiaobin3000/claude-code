@@ -23,7 +23,7 @@ import {
 } from 'src/tasks/LocalShellTask/LocalShellTask.js';
 import type { AgentId } from 'src/types/ids.js';
 import type { AssistantMessage } from 'src/types/message.js';
-import { parseForSecurity } from 'src/utils/bash/ast.js';
+import { checkSemantics, parseForSecurity, parseForSecuritySync } from 'src/utils/bash/ast.js';
 import { splitCommand_DEPRECATED, splitCommandWithOperators } from 'src/utils/bash/commands.js';
 import { detectCodeIndexingFromCommand } from 'src/utils/codeIndexing.js';
 import { isEnvTruthy } from 'src/utils/envUtils.js';
@@ -55,7 +55,7 @@ import { userFacingName as fileEditUserFacingName } from '../FileEditTool/UI.js'
 import { trackGitOperations } from '../shared/gitOperationTracking.js';
 import {
   bashToolHasPermission,
-  commandHasAnyCd,
+  isNormalizedCdCommand,
   matchWildcardPattern,
   permissionRuleExtractPrefix,
 } from './bashPermissions.js';
@@ -569,8 +569,14 @@ export const BashTool = buildTool({
     return this.isReadOnly?.(input) ?? false;
   },
   isReadOnly(input) {
-    const compoundCommandHasCd = commandHasAnyCd(input.command);
-    const result = checkReadOnlyConstraints(input, compoundCommandHasCd);
+    const parsed = parseForSecuritySync(input.command);
+    if (parsed.kind !== 'simple' || !checkSemantics(parsed.commands).ok) {
+      return false;
+    }
+    const compoundCommandHasCd = parsed.commands.some(command =>
+      isNormalizedCdCommand(command.text.trim(), command.argv),
+    );
+    const result = checkReadOnlyConstraints(input, compoundCommandHasCd, parsed.commands);
     return result.behavior === 'allow';
   },
   toAutoClassifierInput(input) {

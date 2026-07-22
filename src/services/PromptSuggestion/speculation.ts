@@ -10,12 +10,13 @@ import {
   type SpeculationResult,
   type SpeculationState,
 } from '../../state/AppStateStore.js'
-import { commandHasAnyCd } from '@claude-code-best/builtin-tools/tools/BashTool/bashPermissions.js'
+import { isNormalizedCdCommand } from '@claude-code-best/builtin-tools/tools/BashTool/bashPermissions.js'
 import { checkReadOnlyConstraints } from '@claude-code-best/builtin-tools/tools/BashTool/readOnlyValidation.js'
 import type { SpeculationAcceptMessage } from '../../types/logs.js'
 import type { Message } from '../../types/message.js'
 import { createChildAbortController } from '../../utils/abortController.js'
 import { count } from '../../utils/array.js'
+import { checkSemantics, parseForSecuritySync } from '../../utils/bash/ast.js'
 import { getGlobalConfig } from '../../utils/config.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { errorMessage } from '../../utils/errors.js'
@@ -582,9 +583,19 @@ export async function startSpeculation(
             'command' in input && typeof input.command === 'string'
               ? input.command
               : ''
+          const parsed = command ? parseForSecuritySync(command) : null
+          const semanticsOk =
+            parsed?.kind === 'simple' && checkSemantics(parsed.commands).ok
+          const hasCd =
+            parsed?.kind === 'simple' &&
+            parsed.commands.some(item =>
+              isNormalizedCdCommand(item.text.trim(), item.argv),
+            )
           if (
             !command ||
-            checkReadOnlyConstraints({ command }, commandHasAnyCd(command))
+            parsed?.kind !== 'simple' ||
+            !semanticsOk ||
+            checkReadOnlyConstraints({ command }, hasCd, parsed.commands)
               .behavior !== 'allow'
           ) {
             logForDebugging(

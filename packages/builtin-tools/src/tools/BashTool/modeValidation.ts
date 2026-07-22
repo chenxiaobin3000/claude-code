@@ -1,6 +1,6 @@
 import type { z } from 'zod/v4'
 import type { ToolPermissionContext } from 'src/Tool.js'
-import { splitCommand_DEPRECATED } from 'src/utils/bash/commands.js'
+import type { SimpleCommand } from 'src/utils/bash/ast.js'
 import type { PermissionResult } from 'src/utils/permissions/PermissionResult.js'
 import type { BashTool } from './BashTool.js'
 
@@ -21,11 +21,10 @@ function isFilesystemCommand(command: string): command is FilesystemCommand {
 }
 
 function validateCommandForMode(
-  cmd: string,
+  cmd: SimpleCommand,
   toolPermissionContext: ToolPermissionContext,
 ): PermissionResult {
-  const trimmedCmd = cmd.trim()
-  const [baseCmd] = trimmedCmd.split(/\s+/)
+  const baseCmd = cmd.argv[0]
 
   if (!baseCmd) {
     return {
@@ -41,7 +40,7 @@ function validateCommandForMode(
   ) {
     return {
       behavior: 'allow',
-      updatedInput: { command: cmd },
+      updatedInput: { command: cmd.text },
       decisionReason: {
         type: 'mode',
         mode: 'acceptEdits',
@@ -72,6 +71,7 @@ function validateCommandForMode(
 export function checkPermissionMode(
   input: z.infer<typeof BashTool.inputSchema>,
   toolPermissionContext: ToolPermissionContext,
+  authoritativeCommands?: readonly SimpleCommand[],
 ): PermissionResult {
   // Skip if in bypass mode (handled elsewhere)
   if (toolPermissionContext.mode === 'bypassPermissions') {
@@ -89,10 +89,15 @@ export function checkPermissionMode(
     }
   }
 
-  const commands = splitCommand_DEPRECATED(input.command)
+  if (!authoritativeCommands) {
+    return {
+      behavior: 'passthrough',
+      message: 'Authoritative Bash parse is required for mode auto-approval',
+    }
+  }
 
   // Check each subcommand
-  for (const cmd of commands) {
+  for (const cmd of authoritativeCommands) {
     const result = validateCommandForMode(cmd, toolPermissionContext)
 
     // If any command triggers mode-specific behavior, return that result
