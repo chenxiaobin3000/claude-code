@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { existsSync, readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import type { ToolUseContext } from '../../src/Tool.js'
 import { getEmptyToolPermissionContext } from '../../src/Tool.js'
@@ -19,27 +19,118 @@ import {
 } from '../../src/utils/bash/parser.js'
 import { bashToolHasPermission } from '../../packages/builtin-tools/src/tools/BashTool/bashPermissions.js'
 import { assert, assertDeepEqual, assertEqual } from './assertions.js'
+import {
+  findGitBashPathOrNull,
+  findGitBashPathOrNullWithDeps,
+  type GitBashDiscoveryDeps,
+} from '../../src/utils/windowsPaths.js'
+
+function discoveryDeps({
+  existing,
+  whereBash = '',
+  whereGit = '',
+  usable,
+  override = '',
+  probeCalls,
+}: {
+  existing: string[]
+  whereBash?: string
+  whereGit?: string
+  usable: string[]
+  override?: string
+  probeCalls?: string[]
+}): GitBashDiscoveryDeps {
+  const existingSet = new Set(existing.map(path => path.toLowerCase()))
+  const usableSet = new Set(usable.map(path => path.toLowerCase()))
+  return {
+    checkExists: path => existingSet.has(path.toLowerCase()),
+    execCommand: command => {
+      if (command === 'where.exe bash') return whereBash
+      if (command === 'where.exe git') return whereGit
+      throw new Error(`Unexpected discovery command: ${command}`)
+    },
+    probeShell: path => {
+      probeCalls?.push(path)
+      return usableSet.has(path.toLowerCase())
+    },
+    cwdFn: () => 'D:\\work',
+    userProfile: 'C:\\Users\\test',
+    envOverride: override,
+  }
+}
+
+const systemBash = 'C:\\Windows\\System32\\bash.exe'
+const pathBash = 'D:\\Tools\\Git\\bin\\bash.exe'
+const probeCalls: string[] = []
+assertEqual(
+  findGitBashPathOrNullWithDeps(
+    discoveryDeps({
+      existing: [systemBash, pathBash],
+      whereBash: `${systemBash}\n${pathBash}`,
+      usable: [pathBash],
+      probeCalls,
+    }),
+  ),
+  pathBash,
+  'Bash discovery skips an unusable higher-priority PATH candidate',
+)
+assertDeepEqual(
+  probeCalls,
+  [systemBash, pathBash],
+  'Bash discovery preserves PATH candidate probe order',
+)
+
+const gitExe = 'D:\\PortableGit\\cmd\\git.exe'
+const gitDerivedBash = 'D:\\PortableGit\\bin\\bash.exe'
+assertEqual(
+  findGitBashPathOrNullWithDeps(
+    discoveryDeps({
+      existing: [systemBash, gitExe, gitDerivedBash],
+      whereBash: systemBash,
+      whereGit: gitExe,
+      usable: [gitDerivedBash],
+    }),
+  ),
+  gitDerivedBash,
+  'Bash discovery falls through from PATH to a usable git-derived candidate',
+)
+
+assertEqual(
+  findGitBashPathOrNullWithDeps(
+    discoveryDeps({
+      existing: ['D:\\invalid\\bash.exe', pathBash],
+      whereBash: pathBash,
+      usable: [pathBash],
+      override: 'D:\\invalid\\bash.exe',
+    }),
+  ),
+  pathBash,
+  'Bash discovery falls through from an unusable explicit override',
+)
+
+assertEqual(
+  findGitBashPathOrNullWithDeps(
+    discoveryDeps({
+      existing: [systemBash],
+      whereBash: systemBash,
+      usable: [],
+    }),
+  ),
+  null,
+  'Bash discovery returns null when every candidate is unusable',
+)
 
 function findBash(): string {
+  if (process.platform === 'win32') {
+    const productionBash = findGitBashPathOrNull()
+    if (productionBash) return productionBash
+    throw new Error('A usable Windows Bash executable is required')
+  }
+
   const configured = process.env.CLAUDE_CODE_VERIFY_BASH
-  const gitBashCandidates =
-    process.platform === 'win32'
-      ? (spawnSync('where.exe', ['git.exe'], { encoding: 'utf8' }).stdout ?? '')
-          .split(/\r?\n/)
-          .filter(Boolean)
-          .map(git => resolve(dirname(git), '..', 'bin', 'bash.exe'))
-      : []
   const candidates = configured
     ? [configured]
-    : process.platform === 'win32'
-      ? [
-          'C:\\Program Files\\Git\\bin\\bash.exe',
-          'C:\\Program Files\\Git\\usr\\bin\\bash.exe',
-          'C:\\dev\\Git\\bin\\bash.exe',
-          ...gitBashCandidates,
-          'bash.exe',
-        ]
-      : ['/bin/bash', '/usr/bin/bash', 'bash']
+    : ['/bin/bash', '/usr/bin/bash', 'bash']
   for (const candidate of candidates) {
     if (
       (candidate.includes('\\') || candidate.includes('/')) &&

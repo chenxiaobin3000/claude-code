@@ -1,3 +1,4 @@
+import { spawnSync } from 'child_process'
 import { existsSync } from 'fs'
 import memoize from 'lodash-es/memoize.js'
 import * as path from 'path'
@@ -33,6 +34,8 @@ export type GitBashDiscoveryDeps = {
   checkExists: (filePath: string) => boolean
   /** Executes a shell command and returns its trimmed stdout. May throw. */
   execCommand: (cmd: string) => string
+  /** Returns true iff the candidate can execute Bash commands in the current Windows cwd. */
+  probeShell: (shellPath: string, cwd: string) => boolean
   /** Returns the current working directory (used to filter PATH-based lookups). */
   cwdFn: () => string
   /**
@@ -53,20 +56,38 @@ const DEFAULT_DEPS: GitBashDiscoveryDeps = {
   checkExists: existsSync,
   execCommand: cmd =>
     execSync_DEPRECATED(cmd, { stdio: 'pipe', encoding: 'utf8' }).trim(),
+  probeShell: (shellPath, cwd) => {
+    const marker = 'CLAUDE_CODE_BASH_PROBE_OK'
+    const result = spawnSync(
+      shellPath,
+      [
+        '--noprofile',
+        '--norc',
+        '-c',
+        'cd -- "$1" && printf %s "$2"',
+        'claude-code-bash-probe',
+        cwd,
+        marker,
+      ],
+      {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        timeout: 3000,
+        windowsHide: true,
+      },
+    )
+    return result.status === 0 && result.stdout === marker
+  },
   cwdFn: getCwd,
   userProfile: process.env.USERPROFILE,
   envOverride: undefined,
 }
 
 /**
- * Search common install locations for bash.exe directly. Returns the first
- * existing candidate or null if none match. Used as a last-resort fallback
- * when `where.exe` cannot locate bash via PATH and git is also unknown.
+ * Return common bash.exe locations in their established priority order.
+ * Used as a last-resort fallback when PATH and git-derived candidates fail.
  */
-function searchDefaultBashLocations(
-  checkExists: (p: string) => boolean,
-  userProfile?: string,
-): string | null {
+function getDefaultBashLocations(userProfile?: string): string[] {
   const candidates = [
     // Standard Git for Windows install locations (both layouts).
     'C:\\Program Files\\Git\\bin\\bash.exe',
@@ -80,12 +101,7 @@ function searchDefaultBashLocations(
       `${userProfile}\\scoop\\apps\\git\\current\\usr\\bin\\bash.exe`,
     )
   }
-  for (const candidate of candidates) {
-    if (checkExists(candidate)) {
-      return candidate
-    }
-  }
-  return null
+  return candidates
 }
 
 /**
@@ -96,10 +112,12 @@ function searchDefaultBashLocations(
  * Pure variant — takes its dependencies as parameters so it can be unit-tested
  * without process-global mocks.
  */
-function findExecutableWithDeps(
+function findExecutablesWithDeps(
   executable: string,
   deps: GitBashDiscoveryDeps,
-): string | null {
+): string[] {
+  const candidates: string[] = []
+
   // For git, check common installation locations first
   if (executable === 'git') {
     const defaultLocations = [
@@ -112,7 +130,7 @@ function findExecutableWithDeps(
 
     for (const location of defaultLocations) {
       if (deps.checkExists(location)) {
-        return location
+        candidates.push(location)
       }
     }
   }
@@ -157,14 +175,32 @@ function findExecutableWithDeps(
         continue
       }
 
-      // Return the first valid path that's not in the current directory
-      return candidatePath
+      candidates.push(candidatePath)
     }
-
-    return null
   } catch {
-    return null
+    // Keep candidates found from stable locations above.
   }
+
+  const seen = new Set<string>()
+  return candidates.filter(candidate => {
+    const key = pathWin32.resolve(candidate).toLowerCase()
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+function firstUsableBashCandidate(
+  candidates: readonly string[],
+  deps: GitBashDiscoveryDeps,
+): string | null {
+  const cwd = deps.cwdFn()
+  for (const candidate of candidates) {
+    if (!deps.checkExists(candidate)) continue
+    if (deps.probeShell(candidate, cwd)) return candidate
+    logForDebugging(`Skipping unusable Bash candidate: ${candidate}`)
+  }
+  return null
 }
 
 /**
@@ -180,42 +216,45 @@ export function findGitBashPathOrNullWithDeps(
 ): string | null {
   const envOverride = deps.envOverride ?? process.env.CLAUDE_CODE_GIT_BASH_PATH
 
-  // 1. Honor explicit CLAUDE_CODE_GIT_BASH_PATH override
+  // 1. Try the explicit CLAUDE_CODE_GIT_BASH_PATH override first.
   if (envOverride) {
-    return deps.checkExists(envOverride) ? envOverride : null
+    const selected = firstUsableBashCandidate([envOverride], deps)
+    if (selected) return selected
   }
 
-  // 2. Look up bash.exe directly via PATH. This is the most reliable
+  // 2. Look up bash.exe candidates directly via PATH. This is the most reliable
   //    method for non-default install locations (e.g. D:\software\Git\)
   //    where bash sits at <root>/usr/bin/bash.exe rather than the
-  //    conventional <root>/bin/bash.exe.
-  const fromPath = findExecutableWithDeps('bash', deps)
-  if (fromPath && deps.checkExists(fromPath)) {
-    return fromPath
-  }
+  //    conventional <root>/bin/bash.exe. Probe candidates in PATH order.
+  const fromPath = firstUsableBashCandidate(
+    findExecutablesWithDeps('bash', deps),
+    deps,
+  )
+  if (fromPath) return fromPath
 
   // 3. Derive bash from git's location, trying multiple layouts since
   //    non-standard Git installs (scoop, chocolatey, manual / portable)
   //    place bash differently relative to git.exe.
-  const gitPath = findExecutableWithDeps('git', deps)
-  if (gitPath) {
-    const candidates = [
-      // Standard Git for Windows: git at <root>/cmd/git.exe, bash at <root>/bin/bash.exe
-      pathWin32.join(gitPath, '..', '..', 'bin', 'bash.exe'),
-      // PortableGit / custom installs: git at <root>/cmd/git.exe, bash at <root>/usr/bin/bash.exe
-      pathWin32.join(gitPath, '..', '..', 'usr', 'bin', 'bash.exe'),
-      // Some installs: git at <root>/bin/git.exe, bash at <root>/bin/bash.exe
-      pathWin32.join(gitPath, '..', 'bash.exe'),
-    ]
-    for (const candidate of candidates) {
-      if (deps.checkExists(candidate)) {
-        return candidate
-      }
-    }
+  for (const gitPath of findExecutablesWithDeps('git', deps)) {
+    const selected = firstUsableBashCandidate(
+      [
+        // Standard Git for Windows: git at <root>/cmd/git.exe, bash at <root>/bin/bash.exe
+        pathWin32.join(gitPath, '..', '..', 'bin', 'bash.exe'),
+        // PortableGit / custom installs: git at <root>/cmd/git.exe, bash at <root>/usr/bin/bash.exe
+        pathWin32.join(gitPath, '..', '..', 'usr', 'bin', 'bash.exe'),
+        // Some installs: git at <root>/bin/git.exe, bash at <root>/bin/bash.exe
+        pathWin32.join(gitPath, '..', 'bash.exe'),
+      ],
+      deps,
+    )
+    if (selected) return selected
   }
 
-  // 4. Last resort: scan common install locations for bash.exe directly
-  return searchDefaultBashLocations(deps.checkExists, deps.userProfile)
+  // 4. Last resort: probe common install locations in their existing order.
+  return firstUsableBashCandidate(
+    getDefaultBashLocations(deps.userProfile),
+    deps,
+  )
 }
 
 /**
@@ -223,8 +262,11 @@ export function findGitBashPathOrNullWithDeps(
  * `null` if no suitable bash.exe can be located.
  *
  * Discovery order (each step is skipped if the previous one resolves):
- *   1. `CLAUDE_CODE_GIT_BASH_PATH` env var, if set and the file exists
- *   2. `where.exe bash` lookup (works whenever Git Bash's bin dir is in PATH,
+ * Every candidate must pass a real Bash/cwd compatibility probe. An unusable
+ * candidate is skipped without changing the priority order below.
+ *
+ *   1. `CLAUDE_CODE_GIT_BASH_PATH` env var, if set
+ *   2. every `where.exe bash` result in PATH order (works whenever Git Bash's bin dir is in PATH,
  *      e.g. portable installs at `D:\software\Git\` where bash is at
  *      `<root>/usr/bin/bash.exe` rather than the conventional `<root>/bin/bash.exe`)
  *   3. Derive from `where.exe git`, trying multiple relative layouts
