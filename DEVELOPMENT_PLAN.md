@@ -124,7 +124,7 @@
 | --- | --- | --- | --- |
 | Bun bundle | Bun 用户、开发与 Bun 运行时发布 | Bun `>=1.3.0`；当前已验证 Windows x64 | `dist/cli-bun.js`；允许 `bun:ffi` 等 Bun 专用模块，不将同次构建生成的 Node 包装入口作为正式 Node 产物。 |
 | Vite/Rollup Node bundle | npm 默认 CLI 发布产物 | 当前基线为 Node.js 22；扩大 Node 版本或操作系统范围前必须增加对应 CI | `dist/cli-node.js` 与 `dist/chunks/*`；不得残留 Bun-only 必需依赖，Chunk 引用必须完整。 |
-| Bun standalone EXE | 无需目标机器安装 Node.js/Bun 的单文件发布 | 仅 Windows x64 | `dist/ccb.exe`；内嵌 Bun Runtime，但 Git、Shell、MCP Server 等外部功能依赖不因此自动内嵌。 |
+| Bun standalone EXE | 无需目标机器安装 Node.js/Bun 的单文件发布 | 仅 Windows x64 | `dist/claude.exe`；内嵌 Bun Runtime，但 Git、Shell、MCP Server 等外部功能依赖不因此自动内嵌。 |
 
 ### 5.2 统一验证矩阵
 

@@ -1,7 +1,8 @@
-import { mkdir, readFile, stat } from 'fs/promises'
+import { mkdir, readFile, rm, stat } from 'fs/promises'
 import { getMacroDefines, resolveBuildFeatures } from './defines.ts'
 
-const outfile = 'dist/claude-code.exe'
+const outfile = 'dist/claude.exe'
+const legacyOutfiles = ['dist/claude-code.exe']
 const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
   version: string
 }
@@ -10,6 +11,7 @@ const windowsVersion = `${packageJson.version}.0`
 const features = resolveBuildFeatures()
 
 await mkdir('dist', { recursive: true })
+await Promise.all(legacyOutfiles.map(path => rm(path, { force: true })))
 
 const result = await Bun.build({
   entrypoints: ['src/entrypoints/cli.tsx'],

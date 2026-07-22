@@ -64,7 +64,7 @@
 |------|------|----------|
 | `dist/cli-bun.js` | `bun run build:bun` | `bun dist/cli-bun.js` |
 | `dist/cli-node.js` | `bun run build:vite` | `node dist/cli-node.js` |
-| `dist/ccb.exe` | `bun run build:exe` | Windows 独立可执行文件 |
+| `dist/claude.exe` | `bun run build:exe` | Windows 独立可执行文件 |
 
 ### 构建流程（`build.ts`）
 

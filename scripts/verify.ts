@@ -340,7 +340,7 @@ async function main(): Promise<void> {
     ])
     const exeArtifact: CliArtifact = {
       label: 'Windows x64 standalone EXE',
-      command: [resolve(projectRoot, 'dist', 'claude-code.exe')],
+      command: [resolve(projectRoot, 'dist', 'claude.exe')],
     }
     await verifyCliArtifact(exeArtifact, config)
   } else {

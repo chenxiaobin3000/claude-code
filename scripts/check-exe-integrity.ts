@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { REMOVED_CLOUD_ARTIFACT_MARKERS } from './removed-cloud-markers.js'
 
-const path = resolve(process.argv[2] ?? 'dist/claude-code.exe')
+const path = resolve(process.argv[2] ?? 'dist/claude.exe')
 const bytes = await readFile(path)
 const ascii = bytes.toString('latin1')
 const utf16 = bytes.toString('utf16le')
