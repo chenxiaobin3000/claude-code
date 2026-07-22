@@ -14,6 +14,10 @@ import { isCurrentDirectoryBareGitRepo } from 'src/utils/git.js'
 import type { PermissionRule } from 'src/utils/permissions/PermissionRule.js'
 import type { PermissionUpdate } from 'src/utils/permissions/PermissionUpdateSchema.js'
 import {
+  reduceShellDecisions,
+  shellDecisionCategoryForResult,
+} from 'src/utils/permissions/shellDecision.js'
+import {
   createPermissionRequestMessage,
   getRuleByContentsForToolName,
 } from 'src/utils/permissions/permissions.js'
@@ -667,9 +671,12 @@ export async function powershellToolHasPermission(
     toolPermissionContext,
   )
 
-  // Exact command was denied
+  let preParseDenyDecision: PermissionResult | null = null
+
+  // Defer explicit deny until hard safety checks have run. It still beats all
+  // approval and allow candidates after parsing.
   if (exactMatchResult.behavior === 'deny') {
-    return exactMatchResult
+    preParseDenyDecision = exactMatchResult
   }
 
   // 2. Check prefix/wildcard rules
@@ -681,7 +688,7 @@ export async function powershellToolHasPermission(
 
   // 2a. Deny if command has a deny rule
   if (matchingDenyRules[0] !== undefined) {
-    return {
+    preParseDenyDecision ??= {
       behavior: 'deny',
       message: `Permission to use ${POWERSHELL_TOOL_NAME} with command ${command} has been denied.`,
       decisionReason: {
@@ -810,12 +817,15 @@ export async function powershellToolHasPermission(
         'prefix',
       )
       if (fragDenyRules[0] !== undefined) {
-        return {
+        preParseDenyDecision ??= {
           behavior: 'deny',
           message: `Permission to use ${POWERSHELL_TOOL_NAME} with command ${command} has been denied.`,
           decisionReason: { type: 'rule', rule: fragDenyRules[0] },
         }
       }
+    }
+    if (preParseDenyDecision !== null) {
+      return preParseDenyDecision
     }
     // Preserve pre-parse ask messaging when parse fails. The deferred ask
     // (2b prefix rule or UNC) carries a better decisionReason than the
@@ -840,7 +850,7 @@ export async function powershellToolHasPermission(
   }
 
   // ========================================================================
-  // COLLECT-THEN-REDUCE: post-parse decisions (deny > ask > allow > passthrough)
+  // COLLECT-THEN-REDUCE: all parsed-command decisions use shared priority
   // ========================================================================
   // Ported from bashPermissions.ts:1446-1472. Every post-parse check pushes
   // its decision into a single array; a single reduce applies precedence.
@@ -853,17 +863,22 @@ export async function powershellToolHasPermission(
   // pattern is also fragile: the next author who writes `return ask` is back
   // where we started. Collect-then-reduce makes the bypass impossible to write.
   //
-  // First-of-each-behavior wins (array order = step order), so single-check
-  // ask messages are unchanged vs. sequential-early-return.
+  // First within each priority category wins (array order = step order), so
+  // single-check messages are unchanged vs. sequential early returns.
   //
-  // Pre-parse deny checks above (exact/prefix deny) stay sequential: they
-  // fire even when pwsh is unavailable. Pre-parse asks (prefix ask, raw UNC)
-  // are now deferred here so sub-command deny (step 4) beats them.
+  // Pre-parse deny checks above (exact/prefix deny) are also collected here
+  // after a successful parse, while parse failures return them directly.
+  // Pre-parse asks (prefix ask, raw UNC) are deferred too, so later hard
+  // safety and sub-command decisions participate in the same precedence pass.
 
   // Gather sub-commands once (used by decisions 3, 4, and fallthrough step 5).
   const allSubCommands = await getSubCommandsForPermissionCheck(parsed, command)
 
   const decisions: PermissionResult[] = []
+
+  if (preParseDenyDecision !== null) {
+    decisions.push(preParseDenyDecision)
+  }
 
   const destructiveOperation = allSubCommands
     .map(({ element }) => {
@@ -1363,20 +1378,21 @@ export async function powershellToolHasPermission(
     decisions.push(modeResult)
   }
 
-  // REDUCE: deny > ask > allow > passthrough. First of each behavior type
+  // REDUCE using the shared shell priority. First within the same category
   // wins (preserves step-order messaging for single-check cases). If nothing
   // decided, fall through to step 5 per-sub-command approval collection.
-  const deniedDecision = decisions.find(d => d.behavior === 'deny')
-  if (deniedDecision !== undefined) {
-    return deniedDecision
-  }
-  const askDecision = decisions.find(d => d.behavior === 'ask')
-  if (askDecision !== undefined) {
-    return askDecision
-  }
-  const allowDecision = decisions.find(d => d.behavior === 'allow')
-  if (allowDecision !== undefined) {
-    return allowDecision
+  const selectedDecision = reduceShellDecisions(
+    decisions.map(result => ({
+      category: shellDecisionCategoryForResult(
+        result,
+        result.decisionReason?.type === 'rule' ? 'exact-allow' : 'constrained-allow',
+        'mandatory-ask',
+      ),
+      result,
+    })),
+  )
+  if (selectedDecision !== null) {
+    return selectedDecision
   }
 
   // 5. Pipeline/statement splitting: check each sub-command independently.

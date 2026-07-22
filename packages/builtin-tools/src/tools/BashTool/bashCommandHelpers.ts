@@ -9,6 +9,11 @@ import type { Node } from 'src/utils/bash/parser.js'
 import type { PermissionResult } from 'src/utils/permissions/PermissionResult.js'
 import type { PermissionUpdate } from 'src/utils/permissions/PermissionUpdateSchema.js'
 import { createPermissionRequestMessage } from 'src/utils/permissions/permissions.js'
+import {
+  selectShellDecision,
+  shellDecisionCategoryForResult,
+  type ShellDecisionCandidate,
+} from 'src/utils/permissions/shellDecision.js'
 import { BashTool } from './BashTool.js'
 
 type CommandIdentityCheckers = {
@@ -25,21 +30,27 @@ async function segmentedCommandPermissionResult(
   checkers: CommandIdentityCheckers,
   astCommands: readonly SimpleCommand[],
 ): Promise<PermissionResult> {
+  const mandatoryAskCandidates: ShellDecisionCandidate[] = []
+
   // Check for multiple cd commands across all segments
   const cdCommands = astCommands.filter(command =>
     checkers.isNormalizedCdCommand(command.text.trim(), command.argv),
   )
   if (cdCommands.length > 1) {
     const decisionReason = {
-      type: 'other' as const,
+      type: 'safetyCheck' as const,
       reason:
         'Multiple directory changes in one command require approval for clarity',
+      classifierApprovable: false,
     }
-    return {
-      behavior: 'ask',
-      decisionReason,
-      message: createPermissionRequestMessage(BashTool.name, decisionReason),
-    }
+    mandatoryAskCandidates.push({
+      category: 'mandatory-ask',
+      result: {
+        behavior: 'ask',
+        decisionReason,
+        message: createPermissionRequestMessage(BashTool.name, decisionReason),
+      },
+    })
   }
 
   // SECURITY: Check for cd+git across pipe segments to prevent bare repo fsmonitor bypass.
@@ -57,15 +68,19 @@ async function segmentedCommandPermissionResult(
     )
     if (hasCd && hasGit) {
       const decisionReason = {
-        type: 'other' as const,
+        type: 'safetyCheck' as const,
         reason:
           'Compound commands with cd and git require approval to prevent bare repository attacks',
+        classifierApprovable: false,
       }
-      return {
-        behavior: 'ask',
-        decisionReason,
-        message: createPermissionRequestMessage(BashTool.name, decisionReason),
-      }
+      mandatoryAskCandidates.push({
+        category: 'mandatory-ask',
+        result: {
+          behavior: 'ask',
+          decisionReason,
+          message: createPermissionRequestMessage(BashTool.name, decisionReason),
+        },
+      })
     }
   }
 
@@ -83,10 +98,21 @@ async function segmentedCommandPermissionResult(
     segmentResults.set(trimmedSegment, segmentResult)
   }
 
+  const selected = selectShellDecision([
+    ...Array.from(segmentResults.values(), result => ({
+      category: shellDecisionCategoryForResult(result),
+      result,
+    })),
+    ...mandatoryAskCandidates,
+  ])
+
   // Check if any segment is denied (after evaluating all)
-  const deniedSegment = Array.from(segmentResults.entries()).find(
-    ([, result]) => result.behavior === 'deny',
-  )
+  const deniedSegment =
+    selected?.result.behavior === 'deny'
+      ? Array.from(segmentResults.entries()).find(
+          ([, result]) => result === selected.result,
+        )
+      : undefined
 
   if (deniedSegment) {
     const [segmentCommand, segmentResult] = deniedSegment
@@ -101,6 +127,10 @@ async function segmentedCommandPermissionResult(
         reasons: segmentResults,
       },
     }
+  }
+
+  if (selected?.category === 'mandatory-ask') {
+    return selected.result
   }
 
   const allAllowed = Array.from(segmentResults.values()).every(

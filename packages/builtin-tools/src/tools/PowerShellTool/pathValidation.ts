@@ -843,12 +843,15 @@ export function isDangerousRemovalRawPath(filePath: string): boolean {
 }
 
 export function dangerousRemovalDeny(path: string): PermissionResult {
+  const reason = 'Removal targets a protected system path'
   return {
     behavior: 'deny',
     message: `Remove-Item on system path '${path}' is blocked. This path is protected from removal.`,
     decisionReason: {
-      type: 'other',
-      reason: 'Removal targets a protected system path',
+      type: 'destructiveOperation',
+      operation: 'remove-protected-system-path',
+      reason,
+      severity: 'hard-deny',
     },
   }
 }

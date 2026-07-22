@@ -50,6 +50,11 @@ import {
   permissionRuleValueToString,
 } from './permissionRuleParser.js'
 import {
+  selectShellDecision,
+  shellDecisionCategoryForResult,
+  type ShellDecisionCandidate,
+} from './shellDecision.js'
+import {
   deletePermissionRuleFromSettings,
   type PermissionRuleFromEditableSettings,
   shouldAllowManagedPermissionRulesOnly,
@@ -1079,10 +1084,12 @@ export async function checkRuleBasedPermissions(
   context: ToolUseContext,
 ): Promise<PermissionAskDecision | PermissionDenyDecision | null> {
   const appState = context.getAppState()
+  const isShellTool =
+    tool.name === BASH_TOOL_NAME || tool.name === POWERSHELL_TOOL_NAME
 
   // 1a. Entire tool is denied by rule
   const denyRule = getDenyRuleForTool(appState.toolPermissionContext, tool)
-  if (denyRule) {
+  if (denyRule && !isShellTool) {
     return {
       behavior: 'deny',
       decisionReason: {
@@ -1095,7 +1102,7 @@ export async function checkRuleBasedPermissions(
 
   // 1b. Entire tool has an ask rule
   const askRule = getAskRuleForTool(appState.toolPermissionContext, tool)
-  if (askRule) {
+  if (askRule && !isShellTool) {
     const canSandboxAutoAllow =
       tool.name === BASH_TOOL_NAME &&
       SandboxManager.isSandboxingEnabled() &&
@@ -1128,6 +1135,44 @@ export async function checkRuleBasedPermissions(
       throw e
     }
     logError(e)
+  }
+
+  if (isShellTool) {
+    const candidates: ShellDecisionCandidate[] = []
+    if (denyRule) {
+      candidates.push({
+        category: 'explicit-deny',
+        result: {
+          behavior: 'deny',
+          decisionReason: { type: 'rule', rule: denyRule },
+          message: `Permission to use ${tool.name} has been denied.`,
+        },
+      })
+    }
+    if (askRule) {
+      candidates.push({
+        category: 'explicit-ask',
+        result: {
+          behavior: 'ask',
+          decisionReason: { type: 'rule', rule: askRule },
+          message: createPermissionRequestMessage(tool.name),
+        },
+      })
+    }
+    if (toolPermissionResult.behavior !== 'passthrough') {
+      candidates.push({
+        category: shellDecisionCategoryForResult(toolPermissionResult),
+        result: toolPermissionResult,
+      })
+    }
+    const selected = selectShellDecision(candidates)
+    if (
+      selected?.result.behavior === 'deny' ||
+      selected?.result.behavior === 'ask'
+    ) {
+      return selected.result
+    }
+    return null
   }
 
   // 1d. Tool implementation denied (catches bash subcommand denies wrapped
@@ -1171,11 +1216,13 @@ async function hasPermissionsToUseToolInner(
   }
 
   let appState = context.getAppState()
+  const isShellTool =
+    tool.name === BASH_TOOL_NAME || tool.name === POWERSHELL_TOOL_NAME
 
   // 1. Check if the tool is denied
   // 1a. Entire tool is denied
   const denyRule = getDenyRuleForTool(appState.toolPermissionContext, tool)
-  if (denyRule) {
+  if (denyRule && !isShellTool) {
     return {
       behavior: 'deny',
       decisionReason: {
@@ -1188,7 +1235,7 @@ async function hasPermissionsToUseToolInner(
 
   // 1b. Check if the entire tool should always ask for permission
   const askRule = getAskRuleForTool(appState.toolPermissionContext, tool)
-  if (askRule) {
+  if (askRule && !isShellTool) {
     // When autoAllowBashIfSandboxed is on, sandboxed commands skip the ask rule and
     // auto-allow via Bash's checkPermissions. Commands that won't be sandboxed (excluded
     // commands, dangerouslyDisableSandbox) still need to respect the ask rule.
@@ -1226,6 +1273,45 @@ async function hasPermissionsToUseToolInner(
       throw e
     }
     logError(e)
+  }
+
+  if (isShellTool) {
+    const candidates: ShellDecisionCandidate[] = []
+    if (denyRule) {
+      candidates.push({
+        category: 'explicit-deny',
+        result: {
+          behavior: 'deny',
+          decisionReason: { type: 'rule', rule: denyRule },
+          message: `Permission to use ${tool.name} has been denied.`,
+        },
+      })
+    }
+    if (askRule) {
+      candidates.push({
+        category: 'explicit-ask',
+        result: {
+          behavior: 'ask',
+          decisionReason: { type: 'rule', rule: askRule },
+          message: createPermissionRequestMessage(tool.name),
+        },
+      })
+    }
+    if (toolPermissionResult.behavior !== 'passthrough') {
+      candidates.push({
+        category: shellDecisionCategoryForResult(toolPermissionResult),
+        result: toolPermissionResult,
+      })
+    }
+    const selected = selectShellDecision(candidates)
+    if (
+      selected !== null &&
+      selected.category !== 'default-ask' &&
+      (selected.result.behavior === 'deny' ||
+        selected.result.behavior === 'ask')
+    ) {
+      return selected.result
+    }
   }
 
   // 1d. Tool implementation denied permission

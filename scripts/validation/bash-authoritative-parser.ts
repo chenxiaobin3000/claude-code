@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { existsSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import type { ToolUseContext } from '../../src/Tool.js'
 import { getEmptyToolPermissionContext } from '../../src/Tool.js'
@@ -22,6 +22,13 @@ import { assert, assertDeepEqual, assertEqual } from './assertions.js'
 
 function findBash(): string {
   const configured = process.env.CLAUDE_CODE_VERIFY_BASH
+  const gitBashCandidates =
+    process.platform === 'win32'
+      ? (spawnSync('where.exe', ['git.exe'], { encoding: 'utf8' }).stdout ?? '')
+          .split(/\r?\n/)
+          .filter(Boolean)
+          .map(git => resolve(dirname(git), '..', 'bin', 'bash.exe'))
+      : []
   const candidates = configured
     ? [configured]
     : process.platform === 'win32'
@@ -29,6 +36,7 @@ function findBash(): string {
           'C:\\Program Files\\Git\\bin\\bash.exe',
           'C:\\Program Files\\Git\\usr\\bin\\bash.exe',
           'C:\\dev\\Git\\bin\\bash.exe',
+          ...gitBashCandidates,
           'bash.exe',
         ]
       : ['/bin/bash', '/usr/bin/bash', 'bash']
@@ -39,8 +47,12 @@ function findBash(): string {
     ) {
       continue
     }
-    const result = spawnSync(candidate, ['--version'], { stdio: 'ignore' })
-    if (result.status === 0) return candidate
+    const result = spawnSync(
+      candidate,
+      ['--noprofile', '--norc', '-c', 'printf BASH_PROBE_OK'],
+      { encoding: 'utf8' },
+    )
+    if (result.status === 0 && result.stdout === 'BASH_PROBE_OK') return candidate
   }
   throw new Error('A real Bash or Git Bash executable is required')
 }
