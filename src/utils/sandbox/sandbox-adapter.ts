@@ -57,6 +57,11 @@ import { errorMessage } from '../errors.js'
 import { getClaudeTempDir } from '../permissions/filesystem.js'
 import type { PermissionRuleValue } from '../permissions/PermissionRule.js'
 import { ripgrepCommand } from '../ripgrep.js'
+import {
+  getCredentialDenyReadPaths,
+  getCredentialProtectionConfig,
+  isCredentialProtectionEnabled,
+} from './credentials.js'
 
 // Local copies to avoid circular dependency
 // (permissions.ts imports SandboxManager, bashPermissions.ts imports permissions.ts)
@@ -173,6 +178,7 @@ export function convertToSandboxRuntimeConfig(
   settings: SettingsJson,
 ): SandboxRuntimeConfig {
   const permissions = settings.permissions || {}
+  const credentialConfig = getCredentialProtectionConfig(settings)
 
   // Extract network domains from WebFetch rules
   const allowedDomains: string[] = []
@@ -226,6 +232,10 @@ export function convertToSandboxRuntimeConfig(
   const denyWrite: string[] = []
   const denyRead: string[] = []
   const allowRead: string[] = []
+
+  // Credential protection is a hard read boundary and cannot be re-allowed by
+  // ordinary sandbox.filesystem.allowRead entries.
+  denyRead.push(...getCredentialDenyReadPaths(credentialConfig))
 
   // Always deny writes to settings.json files to prevent sandbox escape
   // This blocks settings in the original working directory (where Claude Code started)
@@ -368,7 +378,7 @@ export function convertToSandboxRuntimeConfig(
     },
     filesystem: {
       denyRead,
-      allowRead,
+      allowRead: credentialConfig.enabled ? [] : allowRead,
       allowWrite,
       denyWrite,
     },
@@ -479,8 +489,9 @@ function areUnsandboxedCommandsAllowed(): boolean {
 function isSandboxRequired(): boolean {
   const settings = getSettings_DEPRECATED()
   return (
-    getSandboxEnabledSetting() &&
-    (settings?.sandbox?.failIfUnavailable ?? false)
+    isCredentialProtectionEnabled() ||
+    (getSandboxEnabledSetting() &&
+      (settings?.sandbox?.failIfUnavailable ?? false))
   )
 }
 
@@ -560,6 +571,10 @@ function isSandboxingEnabled(): boolean {
  * Does not cover the case where the user never enabled sandbox (no noise).
  */
 function getSandboxUnavailableReason(): string | undefined {
+  if (isCredentialProtectionEnabled() && !getSandboxEnabledSetting()) {
+    return 'sandbox.credentials.enabled requires sandbox.enabled'
+  }
+
   // Only warn if user explicitly asked for sandbox. If they didn't enable
   // it, missing deps are irrelevant.
   if (!getSandboxEnabledSetting()) {

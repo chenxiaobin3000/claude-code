@@ -87,7 +87,7 @@
 | 运行时 | 平台原生可执行文件 | 部分 | 本地仍以 TypeScript、Bun/Node 为主 |
 | 会话迁移 | `/cd` 保留会话迁移到新目录 | 缺失 | 没有官方同等语义的会话迁移 |
 | Shell 模式 | `! command` 后模型主动分析输出 | 缺失 | 未发现 `respondToBashCommands` |
-| Sandbox | 凭据文件和秘密环境变量隔离 | 缺失 | 未发现 `sandbox.credentials` |
+| Sandbox | 凭据文件和秘密环境变量隔离 | 已有 | `sandbox.credentials` 同时覆盖文件工具、Sandbox Runtime 和 Shell 子进程环境 |
 | 权限规则 | 支持工具输入参数匹配及更严格危险命令分类 | 部分 | 本地有权限系统，但未完整对齐最新规则 |
 | Hook | MCP Tool Hook、参数数组、`continueOnBlock`、`MessageDisplay` 等 | 部分 | 基础 Hook 和 MCP 存在，新字段不完整 |
 | Agent | Dashboard、attach/detach、嵌套子 Agent、默认后台运行 | 部分 | 本地有后台 Agent/Coordinator，但行为和协议可能不同 |
@@ -211,7 +211,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - [x] 将危险操作从“UI 提示”提升为权限分类约束（2026-07-22 完成）。共享分类器直接消费 Bash AST argv 或 PowerShell 原生 AST 命令/参数，覆盖 `git reset --hard`、强制 clean、`checkout/restore -- .`、stash 删除、分支强删、强制 push、危险 `rm`/`Remove-Item`、`Clear-Disk`、`Format-Volume`、Terraform destroy、kubectl delete，以及数据库 DROP/TRUNCATE/无 WHERE DELETE。危险结果使用结构化 `destructiveOperation` 原因，优先于精确/宽泛 allow、Accept Edits、Sandbox、classifier、auto 和 bypass，且不提供持久授权入口；关键路径硬拒绝优先于显式 deny，普通危险审批低于显式 deny。原 Bash/PowerShell 展示层正则已删除，UI 只展示权限分类结果。`destructive-permissions.ts` 已覆盖复合命令、PowerShell 嵌套命令/别名/Unicode 参数、dry-run 反例、SQL 字面量/CTE、关键路径和完整权限模式。
 - [x] 统一 Bash 与 PowerShell 决策优先级（2026-07-22 完成）：新增共用 `shellDecision.ts`，固定为硬安全拒绝 > 显式 deny > 不可绕过安全审批 > 显式 ask > 精确 allow > 受约束的模式/只读自动允许 > 默认 ask。通用权限入口对 Shell 先执行完整专用检查，再归并工具级 deny/ask/allow，`Bash(*)`、`PowerShell(*)`、bypass、Sandbox 和模式允许均不能提前短路安全结果。Bash 管道、控制流和每个子命令改为先收集后归并，原始重定向与段结果共同检查；`command` 等包装器和 `$()`、反引号、`eval`、嵌套 shell 只执行保守 deny 扫描，不参与自动允许。PowerShell 原有 collect-then-reduce 已切换到共用等级，覆盖别名、模块限定名、调用运算符、嵌套命令、路径型可执行文件和解析失败降级，系统关键路径删除使用结构化 `hard-deny`。完整判定覆盖已统一到 `shell-permission-matrix.ts` 并入 `bun run verify`；普通 `bun run verify` 使用本地 llama.cpp 对三类产物完成真实请求和 `Read` 工具调用（145.9 秒）。
 - [x] 完整 Shell 权限决策矩阵（2026-07-23 完成）：新增 `shell-permission-matrix.ts`，直接调用 `bashToolHasPermission` 和 `powershellToolHasPermission`，使用固定 `ToolUseContext`、规则集合、cwd 和预期 `allow`/`ask`/`deny` 判定，不引入测试框架。Bash 覆盖包装器、管道/控制符、命令/进程替换、变量、`eval`/`source`/嵌套 shell、heredoc、重定向、控制字符、Unicode、超过 50 个子命令、cwd 变化和符号链接；PowerShell 覆盖别名和模块前缀、动态调用、EncodedCommand、`Invoke-Expression`、`Start-Process`、脚本块、Splatting、Provider/UNC、Unicode dash、`--%`、变量路径、cwd 变化和链接创建。脚本已并入唯一入口 `bun run verify`：Linux 强制验证无 PowerShell 时的安全降级，Windows 分别使用真实 PowerShell 5.1/7 AST；CI 缺少任一 Windows 版本即失败。定向矩阵、类型检查和 Biome 均通过，最终 `bun run verify -- --ci` 全矩阵通过（148.2 秒）。
-- [ ] 增加 `sandbox.credentials`：阻止读取常见凭据文件和秘密环境变量。
+- [x] 增加 `sandbox.credentials`（2026-07-23 完成）：配置默认关闭，显式启用后以硬拒绝保护常见 `.env`、SSH、云平台、包管理器和私钥文件，并支持追加文件/环境变量模式；Read/Glob/Grep 在应用层拒绝或隐藏凭据路径，Sandbox Runtime 合并不可被 `allowRead` 覆盖的 `denyRead`，Bash/PowerShell 在 Provider 和 session 环境覆盖完成后裁剪秘密变量，主进程模型 Provider、MCP 和 Hook 不受影响。凭据保护不允许非 Sandbox Shell，Sandbox 不可用时按强制策略退出；`sandbox-credentials.ts` 已并入统一 `bun run verify`，定向验证、TypeScript、Biome 及最终 `bun run verify -- --ci` 全矩阵通过（154.6 秒）。
 - [ ] 支持 `Tool(param:value)` 权限规则及通配符。
 - [ ] 验证 Worktree Agent 无法修改主工作区。
 - [ ] 验证符号链接、目录切换、后台命令不会绕过写入边界。

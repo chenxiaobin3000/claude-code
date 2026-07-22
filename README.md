@@ -96,6 +96,23 @@ CLI 不提供 Anthropic 账号登录、官方模型直连、会话分享、Feedb
 
 `settings.json` 的权威结构由 `src/utils/settings/types.ts` 定义；`bun run schema:settings` 从同一 Zod 定义输出项目 Schema。项目不再引用上游 Claude Code SchemaStore，以免编辑器提示已经删除的登录、云服务或远程分发字段。
 
+Sandbox 可显式启用凭据隔离：
+
+```json
+{
+  "sandbox": {
+    "enabled": true,
+    "credentials": {
+      "enabled": true,
+      "additionalFilePatterns": ["~/.custom/credentials/**"],
+      "additionalEnvPatterns": ["COMPANY_*_TOKEN"]
+    }
+  }
+}
+```
+
+启用后，Read/Glob/Grep 和 Sandbox 子进程不能读取常见 `.env`、SSH、云平台、包管理器及私钥文件；Bash/PowerShell 子进程会移除常见 `*_API_KEY`、`*_TOKEN`、`*_SECRET`、`*_PASSWORD` 等秘密变量，但主进程中的模型 Provider 仍可读取 `models.json` 指定的 API Key。普通 `Read(*)`、`sandbox.filesystem.allowRead`、bypass 和非 Sandbox Shell 不能覆盖该限制；平台不支持 Sandbox 或依赖缺失时启动失败。该能力默认关闭，必须同时设置 `sandbox.enabled` 和 `sandbox.credentials.enabled`。
+
 ### 本地自定义主题
 
 `/theme` 除 6 个内置主题外，还会在启动时读取 `~/.claude/themes/*.json`。文件名是不含扩展名的 slug，选择后保存为 `custom:<slug>`；程序只读这些文件，不创建、编辑、删除或监听主题，外部变更需要重启后生效。例如 `~/.claude/themes/dracula.json`：

@@ -71,6 +71,7 @@ import type { PermissionDecision } from 'src/utils/permissions/PermissionResult.
 import { matchWildcardPattern } from 'src/utils/permissions/shellRuleMatching.js'
 import { readFileInRange } from 'src/utils/readFileInRange.js'
 import { semanticNumber } from 'src/utils/semanticNumber.js'
+import { isCredentialFilePath } from 'src/utils/sandbox/credentials.js'
 import { jsonStringify } from 'src/utils/slowOperations.js'
 import { BASH_TOOL_NAME } from '../BashTool/toolName.js'
 import { getDefaultFileReadingLimits } from './limits.js'
@@ -439,6 +440,14 @@ export const FileReadTool = buildTool({
 
     // Path expansion + deny rule check (no I/O)
     const fullFilePath = expandPath(file_path)
+
+    if (isCredentialFilePath(fullFilePath)) {
+      return {
+        result: false,
+        message: 'Credential protection prevents reading this path.',
+        errorCode: 1,
+      }
+    }
 
     const appState = toolUseContext.getAppState()
     const denyRule = matchingRuleForInput(

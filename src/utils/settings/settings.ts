@@ -570,6 +570,7 @@ export function getManagedSettingsKeysForLogging(
       'allowUnsandboxedCommands',
       'network',
       'filesystem',
+      'credentials',
       'ignoreViolations',
       'excludedCommands',
       'autoAllowBashIfSandboxed',

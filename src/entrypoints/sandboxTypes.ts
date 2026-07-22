@@ -85,6 +85,23 @@ export const SandboxFilesystemConfigSchema = lazySchema(() =>
     .optional(),
 )
 
+export const SandboxCredentialsConfigSchema = lazySchema(() =>
+  z
+    .object({
+      enabled: z.boolean().optional(),
+      additionalFilePatterns: z
+        .array(z.string().min(1))
+        .optional()
+        .describe('Additional credential file paths or glob patterns to protect.'),
+      additionalEnvPatterns: z
+        .array(z.string().min(1))
+        .optional()
+        .describe('Additional secret environment-variable name patterns to remove from shell subprocesses.'),
+    })
+    .strict()
+    .optional(),
+)
+
 /**
  * Sandbox settings schema.
  */
@@ -120,6 +137,7 @@ export const SandboxSettingsSchema = lazySchema(() =>
         ),
       network: SandboxNetworkConfigSchema(),
       filesystem: SandboxFilesystemConfigSchema(),
+      credentials: SandboxCredentialsConfigSchema(),
       ignoreViolations: z.record(z.string(), z.array(z.string())).optional(),
       enableWeakerNestedSandbox: z.boolean().optional(),
       enableWeakerNetworkIsolation: z
@@ -150,6 +168,9 @@ export type SandboxNetworkConfig = NonNullable<
 >
 export type SandboxFilesystemConfig = NonNullable<
   z.infer<ReturnType<typeof SandboxFilesystemConfigSchema>>
+>
+export type SandboxCredentialsConfig = NonNullable<
+  z.infer<ReturnType<typeof SandboxCredentialsConfigSchema>>
 >
 export type SandboxIgnoreViolations = NonNullable<
   SandboxSettings['ignoreViolations']

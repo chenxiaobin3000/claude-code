@@ -37,6 +37,10 @@ import {
   getSettingsRootPathForSource,
 } from '../settings/settings.js'
 import { containsVulnerableUncPath } from '../shell/readOnlyCommandValidation.js'
+import {
+  getCredentialSearchIgnorePatterns,
+  isCredentialFilePath,
+} from '../sandbox/credentials.js'
 import { getToolResultsDir } from '../toolResultStorage.js'
 import { windowsPathToPosixPath } from '../windowsPaths.js'
 import type {
@@ -847,6 +851,14 @@ export function getFileReadIgnorePatterns(
     result.set(patternRoot, Array.from(patternMap.keys()))
   }
 
+  const credentialPatterns = getCredentialSearchIgnorePatterns()
+  if (credentialPatterns.length > 0) {
+    result.set(null, [
+      ...(result.get(null) ?? []),
+      ...credentialPatterns,
+    ])
+  }
+
   return result
 }
 
@@ -1046,6 +1058,21 @@ export function checkReadPermissionForTool(
   // existsSync/lstatSync/realpathSync syscalls on the same path (previously
   // 6× = 30 syscalls per Read permission check).
   const pathsToCheck = getPathsForPermissionCheck(path)
+
+  // Credential protection is a hard deny. It precedes every rule, working
+  // directory, mode and bypass allow, and checks resolved symlink targets.
+  for (const pathToCheck of pathsToCheck) {
+    if (isCredentialFilePath(pathToCheck)) {
+      return {
+        behavior: 'deny',
+        message: 'Credential protection prevents reading this path.',
+        decisionReason: {
+          type: 'other',
+          reason: 'Path is protected by sandbox.credentials',
+        },
+      }
+    }
+  }
 
   // 1. Defense-in-depth: Block UNC paths early (before other checks)
   // This catches paths starting with \\ or // that could access network resources

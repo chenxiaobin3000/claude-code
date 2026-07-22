@@ -1695,7 +1695,7 @@ export function REPL({
     if (SandboxManager.isSandboxRequired()) {
       process.stderr.write(
         `\nError: sandbox required but unavailable: ${reason}\n` +
-          `  sandbox.failIfUnavailable is set — refusing to start without a working sandbox.\n\n`,
+          `  sandbox security policy requires a working sandbox — refusing to start.\n\n`,
       );
       gracefulShutdownSync(1, 'other');
       return;

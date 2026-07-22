@@ -2,6 +2,7 @@ import { z } from 'zod/v4'
 import type { ValidationResult } from 'src/Tool.js'
 import { buildTool, type ToolDef } from 'src/Tool.js'
 import { getCwd } from 'src/utils/cwd.js'
+import { isCredentialFilePath } from 'src/utils/sandbox/credentials.js'
 import { isENOENT } from 'src/utils/errors.js'
 import { FILE_NOT_FOUND_CWD_NOTE, suggestPathUnderCwd } from 'src/utils/file.js'
 import { getFsImplementation } from 'src/utils/fsOperations.js'
@@ -93,6 +94,14 @@ export const GlobTool = buildTool({
     if (path) {
       const fs = getFsImplementation()
       const absolutePath = expandPath(path)
+
+      if (isCredentialFilePath(absolutePath)) {
+        return {
+          result: false,
+          message: 'Credential protection prevents searching this path.',
+          errorCode: 1,
+        }
+      }
 
       // SECURITY: Skip filesystem operations for UNC paths to prevent NTLM credential leaks.
       if (absolutePath.startsWith('\\\\') || absolutePath.startsWith('//')) {

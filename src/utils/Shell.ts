@@ -40,6 +40,10 @@ import { getCachedPowerShellPath } from './shell/powershellDetection.js'
 import { createPowerShellProvider } from './shell/powershellProvider.js'
 import type { ShellProvider, ShellType } from './shell/shellProvider.js'
 import { subprocessEnv } from './subprocessEnv.js'
+import {
+  isCredentialProtectionEnabled,
+  scrubCredentialEnvironment,
+} from './sandbox/credentials.js'
 import { posixPathToWindowsPath } from './windowsPaths.js'
 
 const DEFAULT_TIMEOUT = 30 * 60 * 1000 // 30 minutes
@@ -173,6 +177,8 @@ export type ExecOptions = {
   shouldAutoBackground?: boolean
   /** When provided, stdout is piped (not sent to file) and this callback fires on each data chunk. */
   onStdout?: (data: string) => void
+  /** Apply sandbox.credentials isolation to a model-invoked Shell tool. */
+  protectCredentials?: boolean
 }
 
 /**
@@ -192,8 +198,19 @@ export async function exec(
     shouldUseSandbox,
     shouldAutoBackground,
     onStdout,
+    protectCredentials,
   } = options ?? {}
   const commandTimeout = timeout || DEFAULT_TIMEOUT
+
+  if (
+    protectCredentials &&
+    isCredentialProtectionEnabled() &&
+    !shouldUseSandbox
+  ) {
+    return createFailedCommand(
+      'Credential protection requires this command to run inside the sandbox.',
+    )
+  }
 
   const provider = await resolveProvider[shellType]()
 
@@ -279,6 +296,25 @@ export async function exec(
     ? ['-c', commandString]
     : provider.getSpawnArgs(commandString)
   const envOverrides = await provider.getEnvironmentOverrides(command)
+  const shellEnvironment = scrubCredentialEnvironment(
+    {
+      ...subprocessEnv(),
+      SHELL: shellType === 'bash' ? binShell : undefined,
+      GIT_EDITOR: 'true',
+      CLAUDECODE: '1',
+      ...envOverrides,
+      ...(process.env.USER_TYPE === 'ant'
+        ? { CLAUDE_CODE_SESSION_ID: getSessionId() }
+        : {}),
+    },
+    protectCredentials
+      ? undefined
+      : {
+          enabled: false,
+          additionalFilePatterns: [],
+          additionalEnvPatterns: [],
+        },
+  )
 
   // When onStdout is provided, use pipe mode: stdout flows through
   // StreamWrapper → TaskOutput in-memory buffer instead of a file fd.
@@ -316,18 +352,7 @@ export async function exec(
 
   try {
     const childProcess = spawn(spawnBinary, shellArgs, {
-      env: {
-        ...subprocessEnv(),
-        SHELL: shellType === 'bash' ? binShell : undefined,
-        GIT_EDITOR: 'true',
-        CLAUDECODE: '1',
-        ...envOverrides,
-        ...(process.env.USER_TYPE === 'ant'
-          ? {
-              CLAUDE_CODE_SESSION_ID: getSessionId(),
-            }
-          : {}),
-      },
+      env: shellEnvironment,
       cwd,
       stdio: usePipeMode
         ? ['pipe', 'pipe', 'pipe']

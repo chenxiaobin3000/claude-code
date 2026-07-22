@@ -1042,6 +1042,7 @@ async function* runShellCommand({
     },
     preventCwdChanges,
     shouldUseSandbox: shouldUseSandbox(input),
+    protectCredentials: true,
     shouldAutoBackground,
   });
 

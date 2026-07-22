@@ -11,6 +11,7 @@
 // Re-export sandbox types for SDK consumers
 export type {
   SandboxFilesystemConfig,
+  SandboxCredentialsConfig,
   SandboxIgnoreViolations,
   SandboxNetworkConfig,
   SandboxSettings,
