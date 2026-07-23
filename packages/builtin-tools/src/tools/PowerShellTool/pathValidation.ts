@@ -1313,7 +1313,7 @@ const SAFE_PATH_ELEMENT_TYPES = new Set<string>(['StringConstant', 'Parameter'])
  * subexpression) that cannot be statically validated, sets
  * hasUnvalidatablePathArg so the caller can force an ask.
  */
-function extractPathsFromCommand(cmd: ParsedCommandElement): {
+export function extractPathsFromCommand(cmd: ParsedCommandElement): {
   paths: string[]
   operationType: FileOperationType
   hasUnvalidatablePathArg: boolean

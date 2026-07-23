@@ -588,6 +588,31 @@ export const COMMAND_OPERATION_TYPE: Record<PathCommand, FileOperationType> = {
   md5sum: 'read',
 }
 
+export function getWorktreeWriteTargets(cmd: SimpleCommand): {
+  paths: string[]
+  hasUnprovableWriteTargets: boolean
+} {
+  const argv = stripWrappersFromArgv(cmd.argv)
+  const [baseCmd, ...args] = argv
+  if (!baseCmd || !SUPPORTED_PATH_COMMANDS.includes(baseCmd as PathCommand)) {
+    return { paths: [], hasUnprovableWriteTargets: false }
+  }
+  const command = baseCmd as PathCommand
+  const operationType =
+    command === 'sed' &&
+    sedCommandIsAllowedByAllowlist(['sed', ...args].join(' '), undefined, argv)
+      ? 'read'
+      : COMMAND_OPERATION_TYPE[command]
+  if (operationType === 'read') {
+    return { paths: [], hasUnprovableWriteTargets: false }
+  }
+  const validator = COMMAND_VALIDATOR[command]
+  return {
+    paths: PATH_EXTRACTORS[command](args),
+    hasUnprovableWriteTargets: validator ? !validator(args) : false,
+  }
+}
+
 /**
  * Command-specific validators that run before path validation.
  * Returns true if the command is valid, false if it should be rejected.

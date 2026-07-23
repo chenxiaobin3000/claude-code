@@ -28,9 +28,16 @@ import {
   checkWritePermissionForTool,
 } from '../../src/utils/permissions/filesystem.js'
 import { hasPermissionsToUseTool } from '../../src/utils/permissions/permissions.js'
-import { classifyWorktreeGitEscape } from '../../src/utils/permissions/worktreeIsolation.js'
+import {
+  classifyWorktreeGitEscape,
+  classifyWorktreeShellEscape,
+} from '../../src/utils/permissions/worktreeIsolation.js'
 import { getCachedPowerShellPath } from '../../src/utils/shell/powershellDetection.js'
 import { assert, assertEqual } from './assertions.js'
+
+(globalThis as typeof globalThis & { MACRO: { VERSION: string } }).MACRO = {
+  VERSION: 'worktree-isolation-validation',
+}
 
 const projectRoot = resolve(import.meta.dir, '../..')
 const agentToolSource = await Bun.file(
@@ -55,6 +62,15 @@ const powershellPermissionSource = await Bun.file(
   join(
     projectRoot,
     'packages/builtin-tools/src/tools/PowerShellTool/powershellPermissions.ts',
+  ),
+).text()
+const bashToolSource = await Bun.file(
+  join(projectRoot, 'packages/builtin-tools/src/tools/BashTool/BashTool.tsx'),
+).text()
+const powershellToolSource = await Bun.file(
+  join(
+    projectRoot,
+    'packages/builtin-tools/src/tools/PowerShellTool/PowerShellTool.tsx',
   ),
 ).text()
 
@@ -82,9 +98,29 @@ for (const [label, source, required] of [
     'classifyWorktreeGitEscape(',
   ],
   [
+    'Bash shell worktree escape guard',
+    bashPermissionSource,
+    'classifyWorktreeShellEscape(',
+  ],
+  [
     'PowerShell Git worktree escape guard',
     powershellPermissionSource,
     'classifyWorktreeGitEscape(',
+  ],
+  [
+    'PowerShell shell worktree escape guard',
+    powershellPermissionSource,
+    'classifyWorktreeShellEscape(',
+  ],
+  [
+    'Bash worktree background lifecycle guard',
+    bashToolSource,
+    'const preventBackgrounding = Boolean(',
+  ],
+  [
+    'PowerShell worktree background lifecycle guard',
+    powershellToolSource,
+    'const preventBackgrounding = Boolean(',
   ],
 ] as const) {
   assert(source.includes(required), `${label} was removed`)
@@ -290,6 +326,225 @@ try {
     'deny',
     'symlink escaped the worktree write boundary',
   )
+
+  assertEqual(
+    classifyWorktreeShellEscape(
+      [
+        { argv: ['cd', 'protected-local'] },
+        {
+          argv: ['touch', 'inside.txt'],
+          writeTargets: ['inside.txt'],
+        },
+      ],
+      worktreePath,
+      worktreePath,
+    ),
+    null,
+    'worktree-local directory change and write were rejected',
+  )
+  assert(
+    classifyWorktreeShellEscape(
+      [
+        { argv: ['cd', mainPath] },
+        {
+          argv: ['touch', 'escaped.txt'],
+          writeTargets: ['escaped.txt'],
+        },
+      ],
+      worktreePath,
+      worktreePath,
+    ) !== null,
+    'directory change escaped the worktree classifier',
+  )
+  assert(
+    classifyWorktreeShellEscape(
+      [
+        {
+          argv: ['touch', join(linkPath, 'classifier-escaped.txt')],
+          writeTargets: [join(linkPath, 'classifier-escaped.txt')],
+        },
+      ],
+      worktreePath,
+      worktreePath,
+    ) !== null,
+    'symlink write escaped the worktree classifier',
+  )
+  assert(
+    classifyWorktreeShellEscape(
+      [{ argv: ['printf', 'local'] }],
+      worktreePath,
+      worktreePath,
+      { runInBackground: true },
+    ) !== null,
+    'background option escaped the worktree classifier',
+  )
+
+  const bashMain = mainPath.replaceAll('\\', '/').replaceAll("'", "'\\''")
+  const bashLink = linkPath.replaceAll('\\', '/').replaceAll("'", "'\\''")
+  const bashEscapeCases: Array<{
+    label: string
+    input: Parameters<typeof bashToolHasPermission>[0]
+  }> = [
+    {
+      label: 'directory change',
+      input: {
+        command: `cd '${bashMain}' && printf escape > cwd-escaped.txt`,
+      },
+    },
+    {
+      label: 'absolute redirection',
+      input: {
+        command: `printf escape > '${bashMain}/redirect-escaped.txt'`,
+      },
+    },
+    {
+      label: 'symlink redirection',
+      input: {
+        command: `printf escape > '${bashLink}/symlink-escaped.txt'`,
+      },
+    },
+    {
+      label: 'direct symlink write',
+      input: {
+        command: `touch '${bashLink}/touch-escaped.txt'`,
+      },
+    },
+    {
+      label: 'shell background operator',
+      input: {
+        command: `touch '${bashMain}/background-escaped.txt' &`,
+      },
+    },
+    {
+      label: 'nested shell',
+      input: {
+        command: `bash -c 'touch "${bashMain}/nested-escaped.txt"'`,
+      },
+    },
+    {
+      label: 'tool background option',
+      input: {
+        command: 'printf local',
+        run_in_background: true,
+      } as unknown as Parameters<typeof bashToolHasPermission>[0],
+    },
+  ]
+
+  await runWithCwdOverride(worktreePath, async () => {
+    for (const testCase of bashEscapeCases) {
+      const decision = await bashToolHasPermission(
+        testCase.input,
+        toolUseContext(outsidePermissions),
+      )
+      assertEqual(
+        decision.behavior,
+        'deny',
+        `Bash ${testCase.label} was not hard-denied`,
+      )
+      assertEqual(
+        decision.decisionReason?.type,
+        'destructiveOperation',
+        `Bash ${testCase.label} was not bypass-immune`,
+      )
+    }
+  })
+
+  if (await getCachedPowerShellPath()) {
+    const quotePS = (value: string) => value.replaceAll("'", "''")
+    const powershellEscapeCases: Array<{
+      label: string
+      input: Parameters<typeof powershellToolHasPermission>[0]
+    }> = [
+      {
+        label: 'directory change',
+        input: {
+          command: `Set-Location '${quotePS(mainPath)}'; Set-Content -Path cwd-escaped-ps.txt -Value escape`,
+        },
+      },
+      {
+        label: 'absolute redirection',
+        input: {
+          command: `'escape' > '${quotePS(join(mainPath, 'redirect-escaped-ps.txt'))}'`,
+        },
+      },
+      {
+        label: 'symlink write',
+        input: {
+          command: `Set-Content -Path '${quotePS(join(linkPath, 'symlink-escaped-ps.txt'))}' -Value escape`,
+        },
+      },
+      {
+        label: 'background job',
+        input: {
+          command: `Start-Job -ScriptBlock { Set-Content '${quotePS(join(mainPath, 'job-escaped.txt'))}' escape }`,
+        },
+      },
+      {
+        label: 'detached process',
+        input: {
+          command: `Start-Process pwsh -ArgumentList '-Command','Set-Content escaped.txt escape'`,
+        },
+      },
+      {
+        label: 'nested shell',
+        input: {
+          command: `pwsh -Command "Set-Content '${quotePS(join(mainPath, 'nested-escaped-ps.txt'))}' escape"`,
+        },
+      },
+      {
+        label: 'tool background option',
+        input: {
+          command: "Write-Output 'local'",
+          run_in_background: true,
+        } as unknown as Parameters<typeof powershellToolHasPermission>[0],
+      },
+    ]
+
+    await runWithCwdOverride(worktreePath, async () => {
+      for (const testCase of powershellEscapeCases) {
+        const decision = await powershellToolHasPermission(
+          testCase.input,
+          toolUseContext(outsidePermissions),
+        )
+        assertEqual(
+          decision.behavior,
+          'deny',
+          `PowerShell ${testCase.label} was not hard-denied`,
+        )
+        assertEqual(
+          decision.decisionReason?.type,
+          'destructiveOperation',
+          `PowerShell ${testCase.label} was not bypass-immune`,
+        )
+      }
+    })
+  }
+
+  for (const escapedPath of [
+    'cwd-escaped.txt',
+    'redirect-escaped.txt',
+    'background-escaped.txt',
+    'nested-escaped.txt',
+    'cwd-escaped-ps.txt',
+    'redirect-escaped-ps.txt',
+    'job-escaped.txt',
+    'nested-escaped-ps.txt',
+  ]) {
+    assert(
+      !(await Bun.file(join(mainPath, escapedPath)).exists()),
+      `permission validation executed an escaped write: ${escapedPath}`,
+    )
+  }
+  for (const escapedPath of [
+    'symlink-escaped.txt',
+    'touch-escaped.txt',
+    'symlink-escaped-ps.txt',
+  ]) {
+    assert(
+      !(await Bun.file(join(mainPath, 'protected', escapedPath)).exists()),
+      `symlink validation executed an escaped write: ${escapedPath}`,
+    )
+  }
 
   await runWithCwdOverride(worktreePath, async () => {
     assertEqual(getCwd(), worktreePath, 'Agent cwd override')

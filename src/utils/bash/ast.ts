@@ -50,6 +50,12 @@ export type ParseForSecurityResult =
   | { kind: 'simple'; commands: SimpleCommand[] }
   | { kind: 'too-complex'; reason: string; nodeType?: string }
 
+/** True when the parsed program contains Bash's asynchronous `&` separator. */
+export function hasBackgroundOperator(root: Node): boolean {
+  if (root.type === '&') return true
+  return root.children.some(hasBackgroundOperator)
+}
+
 /**
  * Structural node types that represent composition of commands. We recurse
  * through these to find the leaf `command` nodes. `program` is the root;

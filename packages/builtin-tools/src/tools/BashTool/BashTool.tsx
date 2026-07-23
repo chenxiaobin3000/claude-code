@@ -781,6 +781,9 @@ export const BashTool = buildTool({
 
     const isMainThread = !toolUseContext.agentId;
     const preventCwdChanges = !isMainThread;
+    const preventBackgrounding = Boolean(
+      getAppState().toolPermissionContext.writeIsolationRoot,
+    );
 
     try {
       // Use the new async generator version of runShellCommand
@@ -792,6 +795,7 @@ export const BashTool = buildTool({
         setAppState: toolUseContext.setAppStateForTasks ?? setAppState,
         setToolJSX,
         preventCwdChanges,
+        preventBackgrounding,
         isMainThread,
         toolUseId: toolUseContext.toolUseId,
         agentId: toolUseContext.agentId,
@@ -976,6 +980,7 @@ async function* runShellCommand({
   setAppState,
   setToolJSX,
   preventCwdChanges,
+  preventBackgrounding,
   isMainThread,
   toolUseId,
   agentId,
@@ -985,6 +990,7 @@ async function* runShellCommand({
   setAppState: (f: (prev: AppState) => AppState) => void;
   setToolJSX?: SetToolJSXFn;
   preventCwdChanges?: boolean;
+  preventBackgrounding?: boolean;
   isMainThread?: boolean;
   toolUseId?: string;
   agentId?: AgentId;
@@ -1024,7 +1030,10 @@ async function* runShellCommand({
   // Determine if auto-backgrounding should be enabled
   // Only enable for commands that are allowed to be auto-backgrounded
   // and when background tasks are not disabled
-  const shouldAutoBackground = !isBackgroundTasksDisabled && isAutobackgroundingAllowed(command);
+  const shouldAutoBackground =
+    !preventBackgrounding &&
+    !isBackgroundTasksDisabled &&
+    isAutobackgroundingAllowed(command);
 
   const shellCommand = await exec(command, abortController.signal, 'bash', {
     timeout: timeoutMs,
@@ -1139,6 +1148,7 @@ async function* runShellCommand({
     feature('KAIROS') &&
     getKairosActive() &&
     isMainThread &&
+    !preventBackgrounding &&
     !isBackgroundTasksDisabled &&
     run_in_background !== true
   ) {
@@ -1154,7 +1164,11 @@ async function* runShellCommand({
   // When explicitly requested via run_in_background, always honor the request
   // regardless of the command type (isAutobackgroundingAllowed only applies to automatic backgrounding)
   // Skip if background tasks are disabled - run in foreground instead
-  if (run_in_background === true && !isBackgroundTasksDisabled) {
+  if (
+    run_in_background === true &&
+    !preventBackgrounding &&
+    !isBackgroundTasksDisabled
+  ) {
     const shellId = await spawnBackgroundTask();
 
     logEvent('tengu_bash_command_explicitly_backgrounded', {
@@ -1283,6 +1297,7 @@ async function* runShellCommand({
       // Show minimal backgrounding UI if available
       // Skip if background tasks are disabled
       if (
+        !preventBackgrounding &&
         !isBackgroundTasksDisabled &&
         backgroundShellId === undefined &&
         elapsedSeconds >= PROGRESS_THRESHOLD_MS / 1000 &&

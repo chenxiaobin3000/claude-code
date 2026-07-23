@@ -17,7 +17,10 @@ import {
   reduceShellDecisions,
   shellDecisionCategoryForResult,
 } from 'src/utils/permissions/shellDecision.js'
-import { classifyWorktreeGitEscape } from 'src/utils/permissions/worktreeIsolation.js'
+import {
+  classifyWorktreeGitEscape,
+  classifyWorktreeShellEscape,
+} from 'src/utils/permissions/worktreeIsolation.js'
 import {
   createPermissionRequestMessage,
   getRuleByContentsForToolName,
@@ -47,6 +50,7 @@ import {
 import {
   checkPathConstraints,
   dangerousRemovalDeny,
+  extractPathsFromCommand,
   isDangerousRemovalRawPath,
 } from './pathValidation.js'
 import { powershellCommandIsSafe } from './powershellSecurity.js'
@@ -828,6 +832,20 @@ export async function powershellToolHasPermission(
     if (preParseDenyDecision !== null) {
       return preParseDenyDecision
     }
+    if (toolPermissionContext.writeIsolationRoot) {
+      const reason =
+        'Worktree Agent cannot execute a PowerShell command whose write targets cannot be proven because parsing failed'
+      return {
+        behavior: 'deny',
+        decisionReason: {
+          type: 'destructiveOperation',
+          operation: 'worktree-isolation-escape',
+          reason,
+          severity: 'hard-deny',
+        },
+        message: reason,
+      }
+    }
     // Preserve pre-parse ask messaging when parse fails. The deferred ask
     // (2b prefix rule or UNC) carries a better decisionReason than the
     // generic parse-error ask. Sub-command deny can't run the AST loop
@@ -897,14 +915,34 @@ export async function powershellToolHasPermission(
     return [resolveToCanonical(element.name), ...normalizedArgs]
   })
 
-  const worktreeEscape = toolPermissionContext.writeIsolationRoot
-    ? normalizedSubcommands
-        .map(argv =>
-          classifyWorktreeGitEscape(
+  const isolationRoot = toolPermissionContext.writeIsolationRoot
+  const worktreeEscape = isolationRoot
+    ? classifyWorktreeShellEscape(
+        normalizedSubcommands.map((argv, index) => {
+          const extracted = extractPathsFromCommand(
+            allSubCommands[index]!.element,
+          )
+          const hasWriteOperation = extracted.operationType !== 'read'
+          return {
             argv,
-            toolPermissionContext.writeIsolationRoot!,
-          ),
-        )
+            writeTargets: hasWriteOperation ? extracted.paths : [],
+            hasUnprovableWriteTargets:
+              hasWriteOperation &&
+              extracted.hasUnvalidatablePathArg &&
+              (!extracted.optionalWrite || extracted.paths.length > 0),
+          }
+        }),
+        isolationRoot,
+        getCwd(),
+        {
+          runInBackground:
+            'run_in_background' in input &&
+            input.run_in_background === true,
+          additionalRedirects: getFileRedirections(parsed),
+        },
+      ) ??
+      normalizedSubcommands
+        .map(argv => classifyWorktreeGitEscape(argv, isolationRoot))
         .find(reason => reason !== null)
     : null
   if (worktreeEscape) {

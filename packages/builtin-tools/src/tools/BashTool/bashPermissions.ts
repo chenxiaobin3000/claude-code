@@ -10,6 +10,7 @@ import type { PendingClassifierCheck } from 'src/types/permissions.js'
 import { count } from 'src/utils/array.js'
 import {
   checkSemantics,
+  hasBackgroundOperator,
   nodeTypeId,
   parseForSecurityFromAst,
   type Redirect,
@@ -46,7 +47,10 @@ import type {
 import { extractRules } from 'src/utils/permissions/PermissionUpdate.js'
 import type { PermissionUpdate } from 'src/utils/permissions/PermissionUpdateSchema.js'
 import { permissionRuleValueToString } from 'src/utils/permissions/permissionRuleParser.js'
-import { classifyWorktreeGitEscape } from 'src/utils/permissions/worktreeIsolation.js'
+import {
+  classifyWorktreeGitEscape,
+  classifyWorktreeShellEscape,
+} from 'src/utils/permissions/worktreeIsolation.js'
 import {
   selectShellDecision,
   shellDecisionCategoryForResult,
@@ -70,7 +74,10 @@ import { windowsPathToPosixPath } from 'src/utils/windowsPaths.js'
 import { BashTool } from './BashTool.js'
 import { checkCommandOperatorPermissions } from './bashCommandHelpers.js'
 import { checkPermissionMode } from './modeValidation.js'
-import { checkPathConstraints } from './pathValidation.js'
+import {
+  checkPathConstraints,
+  getWorktreeWriteTargets,
+} from './pathValidation.js'
 import { checkSedConstraints } from './sedValidation.js'
 import { shouldUseSandbox } from './shouldUseSandbox.js'
 import { classifyDestructiveArgv } from '../destructiveOperations.js'
@@ -1702,6 +1709,19 @@ export async function bashToolHasPermission(
     // ask rules remain authoritative; allow rules never override this result.
     const earlyExit = checkEarlyExitDeny(input, appState.toolPermissionContext)
     if (earlyExit !== null) return earlyExit
+    if (appState.toolPermissionContext.writeIsolationRoot) {
+      const reason = `Worktree Agent cannot execute a shell command whose write targets cannot be proven: ${astResult.reason}`
+      return {
+        behavior: 'deny',
+        decisionReason: {
+          type: 'destructiveOperation',
+          operation: 'worktree-isolation-escape',
+          reason,
+          severity: 'hard-deny',
+        },
+        message: reason,
+      }
+    }
     const decisionReason: PermissionDecisionReason = {
       type: 'other' as const,
       reason: astResult.reason,
@@ -1730,6 +1750,19 @@ export async function bashToolHasPermission(
         astResult.commands,
       )
       if (earlyExit !== null) return earlyExit
+      if (appState.toolPermissionContext.writeIsolationRoot) {
+        const reason = `Worktree Agent cannot execute a shell command with unprovable semantics: ${(sem as { ok: false; reason: string }).reason}`
+        return {
+          behavior: 'deny',
+          decisionReason: {
+            type: 'destructiveOperation',
+            operation: 'worktree-isolation-escape',
+            reason,
+            severity: 'hard-deny',
+          },
+          message: reason,
+        }
+      }
       const decisionReason: PermissionDecisionReason = {
         type: 'other' as const,
         reason: (sem as { ok: false; reason: string }).reason,
@@ -1749,14 +1782,27 @@ export async function bashToolHasPermission(
     astCommands = astResult.commands
   }
 
-  const worktreeEscape = appState.toolPermissionContext.writeIsolationRoot
-    ? astCommands
-        ?.map(command =>
-          classifyWorktreeGitEscape(
-            command.argv,
-            appState.toolPermissionContext.writeIsolationRoot!,
-          ),
-        )
+  const isolationRoot = appState.toolPermissionContext.writeIsolationRoot
+  const worktreeEscape = isolationRoot
+    ? classifyWorktreeShellEscape(
+        (astCommands ?? []).map(command => ({
+          ...command,
+          writeTargets: getWorktreeWriteTargets(command).paths,
+          hasUnprovableWriteTargets:
+            getWorktreeWriteTargets(command).hasUnprovableWriteTargets,
+        })),
+        isolationRoot,
+        getCwd(),
+        {
+          runInBackground:
+            'run_in_background' in input &&
+            input.run_in_background === true,
+          hasShellBackgroundOperator:
+            astRoot !== null && hasBackgroundOperator(astRoot),
+        },
+      ) ??
+      astCommands
+        ?.map(command => classifyWorktreeGitEscape(command.argv, isolationRoot))
         .find(reason => reason !== null)
     : null
   if (worktreeEscape) {

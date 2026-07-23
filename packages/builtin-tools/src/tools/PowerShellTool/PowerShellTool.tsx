@@ -545,9 +545,12 @@ export const PowerShellTool = buildTool({
       throw new Error(WINDOWS_SANDBOX_POLICY_REFUSAL);
     }
 
-    const { abortController, setAppState, setToolJSX } = toolUseContext;
+    const { abortController, getAppState, setAppState, setToolJSX } = toolUseContext;
 
     const isMainThread = !toolUseContext.agentId;
+    const preventBackgrounding = Boolean(
+      getAppState().toolPermissionContext.writeIsolationRoot,
+    );
 
     let progressCounter = 0;
 
@@ -560,6 +563,7 @@ export const PowerShellTool = buildTool({
         setAppState: toolUseContext.setAppStateForTasks ?? setAppState,
         setToolJSX,
         preventCwdChanges: !isMainThread,
+        preventBackgrounding,
         isMainThread,
         toolUseId: toolUseContext.toolUseId,
         agentId: toolUseContext.agentId,
@@ -763,6 +767,7 @@ async function* runPowerShellCommand({
   setAppState,
   setToolJSX,
   preventCwdChanges,
+  preventBackgrounding,
   isMainThread,
   toolUseId,
   agentId,
@@ -772,6 +777,7 @@ async function* runPowerShellCommand({
   setAppState: (f: (prev: AppState) => AppState) => void;
   setToolJSX?: SetToolJSXFn;
   preventCwdChanges?: boolean;
+  preventBackgrounding?: boolean;
   isMainThread?: boolean;
   toolUseId?: string;
   agentId?: AgentId;
@@ -810,7 +816,10 @@ async function* runPowerShellCommand({
     });
   }
 
-  const shouldAutoBackground = !isBackgroundTasksDisabled && isAutobackgroundingAllowed(command);
+  const shouldAutoBackground =
+    !preventBackgrounding &&
+    !isBackgroundTasksDisabled &&
+    isAutobackgroundingAllowed(command);
 
   const powershellPath = await getCachedPowerShellPath();
   if (!powershellPath) {
@@ -945,6 +954,7 @@ async function* runPowerShellCommand({
     feature('KAIROS') &&
     getKairosActive() &&
     isMainThread &&
+    !preventBackgrounding &&
     !isBackgroundTasksDisabled &&
     run_in_background !== true
   ) {
@@ -959,7 +969,11 @@ async function* runPowerShellCommand({
   // Handle Claude asking to run it in the background explicitly
   // When explicitly requested via run_in_background, always honor the request
   // regardless of the command type (isAutobackgroundingAllowed only applies to automatic backgrounding)
-  if (run_in_background === true && !isBackgroundTasksDisabled) {
+  if (
+    run_in_background === true &&
+    !preventBackgrounding &&
+    !isBackgroundTasksDisabled
+  ) {
     const shellId = await spawnBackgroundTask();
 
     logEvent('tengu_powershell_command_explicitly_backgrounded', {
@@ -1052,7 +1066,7 @@ async function* runPowerShellCommand({
         !interruptBackgroundingStarted
       ) {
         interruptBackgroundingStarted = true;
-        if (!isBackgroundTasksDisabled) {
+        if (!preventBackgrounding && !isBackgroundTasksDisabled) {
           startBackgrounding('tengu_powershell_command_interrupt_backgrounded');
           // Reloop so the backgroundShellId check (above) catches the sync
           // foregroundTaskId→background path. Without this, we fall through
@@ -1083,6 +1097,7 @@ async function* runPowerShellCommand({
 
       // Show backgrounding UI hint after threshold
       if (
+        !preventBackgrounding &&
         !isBackgroundTasksDisabled &&
         backgroundShellId === undefined &&
         elapsedSeconds >= PROGRESS_THRESHOLD_MS / 1000 &&
