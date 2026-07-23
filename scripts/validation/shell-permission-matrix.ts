@@ -91,8 +91,9 @@ async function fullDecision(
 }
 
 async function runBashMatrix(): Promise<void> {
-  const longCompound = Array.from({ length: 51 }, (_, index) =>
-    `printf ${index}`,
+  const longCompound = Array.from(
+    { length: 51 },
+    (_, index) => `printf ${index}`,
   ).join(' && ')
   const cases: PermissionCase[] = [
     {
@@ -368,13 +369,18 @@ async function runUnavailablePowerShellChecks(): Promise<void> {
 }
 
 async function spawnIsolated(mode: string, pathValue: string): Promise<void> {
+  const isolatedEnv = { ...process.env }
+  for (const key of Object.keys(isolatedEnv)) {
+    if (key.toLowerCase() === 'path') {
+      delete isolatedEnv[key]
+    }
+  }
+  isolatedEnv.PATH = pathValue
+  isolatedEnv.CLAUDE_CODE_PERMISSION_PS_MODE = mode
+
   const proc = Bun.spawn([process.execPath, import.meta.path], {
     cwd: projectRoot,
-    env: {
-      ...process.env,
-      PATH: pathValue,
-      CLAUDE_CODE_PERMISSION_PS_MODE: mode,
-    },
+    env: isolatedEnv,
     stdin: 'ignore',
     stdout: 'inherit',
     stderr: 'inherit',
@@ -393,17 +399,21 @@ async function runPowerShellEnvironments(): Promise<void> {
       'v1.0',
       'powershell.exe',
     )
-    const core = Bun.which('pwsh') ??
-      'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
+    const core =
+      Bun.which('pwsh') ?? 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
     for (const [mode, executable] of [
       ['desktop', desktop],
       ['core', core],
     ] as const) {
       if (!existsSync(executable)) {
         if (process.env.CI) {
-          throw new Error(`Windows CI requires PowerShell ${mode}: ${executable}`)
+          throw new Error(
+            `Windows CI requires PowerShell ${mode}: ${executable}`,
+          )
         }
-        console.log(`[shell-permission-matrix] SKIP missing ${mode}: ${executable}`)
+        console.log(
+          `[shell-permission-matrix] SKIP missing ${mode}: ${executable}`,
+        )
         continue
       }
       await spawnIsolated(mode, dirname(executable))

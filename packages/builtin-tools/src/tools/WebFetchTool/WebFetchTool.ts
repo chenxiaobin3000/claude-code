@@ -5,6 +5,7 @@ import { formatFileSize } from 'src/utils/format.js'
 import { lazySchema } from 'src/utils/lazySchema.js'
 import type { PermissionDecision } from 'src/utils/permissions/PermissionResult.js'
 import { getRuleByContentsForTool } from 'src/utils/permissions/permissions.js'
+import { matchWebFetchDomainSpecifier } from 'src/utils/settings/toolValidationConfig.js'
 import { getSettings_DEPRECATED } from 'src/utils/settings/settings.js'
 import { isPreapprovedHost } from './preapproved.js'
 import { DESCRIPTION, WEB_FETCH_TOOL_NAME } from './prompt.js'
@@ -107,7 +108,50 @@ export const WebFetchTool = buildTool({
     const appState = context.getAppState()
     const permissionContext = appState.toolPermissionContext
 
-    // Check if the hostname is in the preapproved list
+    // Check for a rule specific to the tool input (matching hostname)
+    const ruleContent = webFetchToolInputToPermissionRuleContent(input)
+
+    const findRule = (behavior: 'allow' | 'ask' | 'deny') => {
+      const rules = getRuleByContentsForTool(
+        permissionContext,
+        WebFetchTool,
+        behavior,
+      )
+      return (
+        rules.get(ruleContent) ??
+        [...rules.entries()].find(([pattern]) =>
+          matchWebFetchDomainSpecifier(pattern, ruleContent),
+        )?.[1]
+      )
+    }
+
+    const denyRule = findRule('deny')
+    if (denyRule) {
+      return {
+        behavior: 'deny',
+        message: `${WebFetchTool.name} denied access to ${ruleContent}.`,
+        decisionReason: {
+          type: 'rule',
+          rule: denyRule,
+        },
+      }
+    }
+
+    const askRule = findRule('ask')
+    if (askRule) {
+      return {
+        behavior: 'ask',
+        message: `Claude requested permissions to use ${WebFetchTool.name}, but you haven't granted it yet.`,
+        decisionReason: {
+          type: 'rule',
+          rule: askRule,
+        },
+        suggestions: buildSuggestions(ruleContent),
+      }
+    }
+
+    // Preapproved hosts are a built-in allow, so explicit deny and ask rules
+    // above must take precedence.
     try {
       const { url } = input as { url: string }
       const parsedUrl = new URL(url)
@@ -122,47 +166,7 @@ export const WebFetchTool = buildTool({
       // If URL parsing fails, continue with normal permission checks
     }
 
-    // Check for a rule specific to the tool input (matching hostname)
-    const ruleContent = webFetchToolInputToPermissionRuleContent(input)
-
-    const denyRule = getRuleByContentsForTool(
-      permissionContext,
-      WebFetchTool,
-      'deny',
-    ).get(ruleContent)
-    if (denyRule) {
-      return {
-        behavior: 'deny',
-        message: `${WebFetchTool.name} denied access to ${ruleContent}.`,
-        decisionReason: {
-          type: 'rule',
-          rule: denyRule,
-        },
-      }
-    }
-
-    const askRule = getRuleByContentsForTool(
-      permissionContext,
-      WebFetchTool,
-      'ask',
-    ).get(ruleContent)
-    if (askRule) {
-      return {
-        behavior: 'ask',
-        message: `Claude requested permissions to use ${WebFetchTool.name}, but you haven't granted it yet.`,
-        decisionReason: {
-          type: 'rule',
-          rule: askRule,
-        },
-        suggestions: buildSuggestions(ruleContent),
-      }
-    }
-
-    const allowRule = getRuleByContentsForTool(
-      permissionContext,
-      WebFetchTool,
-      'allow',
-    ).get(ruleContent)
+    const allowRule = findRule('allow')
     if (allowRule) {
       return {
         behavior: 'allow',

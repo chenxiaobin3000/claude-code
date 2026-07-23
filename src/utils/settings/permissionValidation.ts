@@ -1,7 +1,10 @@
 import { z } from 'zod/v4'
 import { mcpInfoFromString } from '../../services/mcp/mcpStringUtils.js'
 import { lazySchema } from '../lazySchema.js'
-import { permissionRuleValueFromString } from '../permissions/permissionRuleParser.js'
+import {
+  hasWellFormedPermissionRuleSyntax,
+  permissionRuleValueFromString,
+} from '../permissions/permissionRuleParser.js'
 import { capitalize } from '../stringUtils.js'
 import {
   getCustomValidation,
@@ -93,6 +96,16 @@ export function validatePermissionRule(
   // Empty rule check
   if (!rule || rule.trim() === '') {
     return { valid: false, error: 'Permission rule cannot be empty' }
+  }
+
+  if (!hasWellFormedPermissionRuleSyntax(rule)) {
+    return {
+      valid: false,
+      error: 'Malformed Tool(specifier) syntax',
+      suggestion:
+        'Use a tool name optionally followed by one parenthesized specifier with no trailing content',
+      examples: ['Bash(npm run *)', 'Read(src/**)'],
+    }
   }
 
   // Check parentheses matching first (only count unescaped parens)

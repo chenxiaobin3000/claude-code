@@ -133,6 +133,28 @@ export function permissionRuleValueFromString(
 }
 
 /**
+ * Returns whether a serialized permission rule has a valid outer
+ * `Tool(specifier)` shape. The specifier itself remains tool-defined.
+ *
+ * This deliberately rejects trailing content instead of allowing malformed
+ * input such as `Bash(npm test)extra` to be reinterpreted as a tool-wide rule.
+ */
+export function hasWellFormedPermissionRuleSyntax(ruleString: string): boolean {
+  const openParenIndex = findFirstUnescapedChar(ruleString, '(')
+  const closeParenIndex = findLastUnescapedChar(ruleString, ')')
+
+  if (openParenIndex === -1) {
+    return closeParenIndex === -1
+  }
+
+  return (
+    openParenIndex > 0 &&
+    closeParenIndex > openParenIndex &&
+    closeParenIndex === ruleString.length - 1
+  )
+}
+
+/**
  * Converts a permission rule value to its string representation.
  * Escapes parentheses in the content to prevent parsing issues.
  *
