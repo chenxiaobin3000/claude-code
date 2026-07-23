@@ -13,6 +13,7 @@ import { POWERSHELL_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/Powe
 import { REPL_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/REPLTool/constants.js'
 import type { AssistantMessage } from '../../types/message.js'
 import { extractOutputRedirections } from '../bash/commands.js'
+import { isCrossSessionTurn } from '../crossSessionAuthority.js'
 import { logForDebugging } from '../debug.js'
 import { AbortError, toError } from '../errors.js'
 import { logError } from '../log.js'
@@ -483,7 +484,41 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
   assistantMessage,
   toolUseID,
 ): Promise<PermissionDecision> => {
-  const result = await hasPermissionsToUseToolInner(tool, input, context)
+  const isRelayedTurn = isCrossSessionTurn(context.messages)
+  const effectiveContext: ToolUseContext = isRelayedTurn
+    ? {
+        ...context,
+        getAppState: () => {
+          const state = context.getAppState()
+          return {
+            ...state,
+            toolPermissionContext: {
+              ...state.toolPermissionContext,
+              mode: 'default',
+              shouldAvoidPermissionPrompts: true,
+            },
+          }
+        },
+      }
+    : context
+  const result = await hasPermissionsToUseToolInner(
+    tool,
+    input,
+    effectiveContext,
+  )
+
+  if (isRelayedTurn && result.behavior === 'ask') {
+    return {
+      behavior: 'deny',
+      message:
+        'Cross-session messages cannot request or inherit user permission for tool use.',
+      decisionReason: {
+        type: 'other',
+        reason:
+          'Cross-session message has no user authority; relayed permission requests are refused',
+      },
+    }
+  }
 
   // Reset consecutive denials on any allowed tool use in auto mode.
   // This ensures that a successful tool use (even one auto-allowed by rules)

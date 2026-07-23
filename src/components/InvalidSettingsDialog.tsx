@@ -26,7 +26,9 @@ export function InvalidSettingsDialog({ settingsErrors, onContinue, onExit }: Pr
   return (
     <Dialog title="Settings Error" onCancel={onExit} color="warning">
       <ValidationErrorsList errors={settingsErrors} />
-      <Text dimColor>Files with errors are skipped entirely, not just the invalid settings.</Text>
+      <Text dimColor>
+        Invalid permission rules are skipped; files with other errors may be skipped entirely.
+      </Text>
       <Select
         options={[
           { label: 'Exit and fix manually', value: 'exit' },

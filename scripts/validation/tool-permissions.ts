@@ -17,6 +17,10 @@ import {
 } from '../../src/utils/permissions/shellRuleMatching.js'
 import { validatePermissionRule } from '../../src/utils/settings/permissionValidation.js'
 import {
+  filterInvalidPermissionRules,
+  findUnknownDenyRuleWarnings,
+} from '../../src/utils/settings/validation.js'
+import {
   getToolSpecifierPolicy,
   matchWebFetchDomainSpecifier,
 } from '../../src/utils/settings/toolValidationConfig.js'
@@ -137,6 +141,81 @@ for (const rule of invalidRules) {
     `invalid tool specifier was accepted: ${rule}`,
   )
 }
+
+assert(
+  !validatePermissionRule('Unknown*', 'allow').valid,
+  'allow rule accepted a wildcard in the tool-name position',
+)
+assert(
+  !validatePermissionRule('Unknown?', 'ask').valid,
+  'ask rule accepted a wildcard in the tool-name position',
+)
+assert(
+  validatePermissionRule('Unknown*', 'deny').valid,
+  'deny rule rejected a tool-name wildcard',
+)
+
+const unknownDenyWarnings = findUnknownDenyRuleWarnings(
+  {
+    permissions: {
+      deny: [
+        'Read(secret/**)',
+        'RemovedTool',
+        'RemovedTool(*)',
+        'Future*',
+        'mcp__optional__tool',
+      ],
+    },
+  },
+  new Set(['Read']),
+)
+assertEqual(
+  unknownDenyWarnings.length,
+  2,
+  'unknown exact deny rules did not produce startup warnings',
+)
+assert(
+  unknownDenyWarnings.every(warning =>
+    warning.message.includes('RemovedTool'),
+  ),
+  'unknown deny warning did not identify the stale tool',
+)
+
+const settingsWithInvalidRules = {
+  permissions: {
+    allow: ['Read(src/**)', 'Unknown*'],
+    ask: ['Bash(npm test)trailing'],
+    deny: ['RemovedTool'],
+  },
+}
+const invalidRuleWarnings = filterInvalidPermissionRules(
+  settingsWithInvalidRules,
+  'permission-fixture.json',
+)
+assertEqual(
+  invalidRuleWarnings.length,
+  2,
+  'invalid permission rules did not produce load warnings',
+)
+assertDeepEqual(
+  settingsWithInvalidRules.permissions,
+  {
+    allow: ['Read(src/**)'],
+    ask: [],
+    deny: ['RemovedTool'],
+  },
+  'invalid rules were not filtered without weakening unknown deny rules',
+)
+
+const startupSource = await Bun.file(
+  'src/cli/modes/defaultMode.tsx',
+).text()
+assert(
+  startupSource.includes('findUnknownDenyRuleWarnings(') &&
+    startupSource.includes('startupSettingsWarnings') &&
+    startupSource.includes('writeToStderr('),
+  'permission rule warnings are no longer wired to interactive and headless startup',
+)
 
 assertEqual(
   getToolSpecifierPolicy('Bash')?.kind,

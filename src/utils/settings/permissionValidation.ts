@@ -176,8 +176,22 @@ export function validatePermissionRule(
     return { valid: false, error: 'Tool name cannot be empty' }
   }
 
+  const hasToolNameGlob = /[*?[\]]/.test(parsed.toolName)
+  if (hasToolNameGlob && behavior !== undefined && behavior !== 'deny') {
+    return {
+      valid: false,
+      error: 'Tool-name wildcards are only supported in deny rules',
+      suggestion:
+        'Use an exact tool name for allow/ask rules, or move the wildcard rule to permissions.deny',
+      examples: ['Bash(npm run *)', 'mcp__local__*'],
+    }
+  }
+
   // Check tool name starts with uppercase (standard tools)
-  if (parsed.toolName[0] !== parsed.toolName[0]?.toUpperCase()) {
+  if (
+    parsed.toolName !== '*' &&
+    parsed.toolName[0] !== parsed.toolName[0]?.toUpperCase()
+  ) {
     return {
       valid: false,
       error: 'Tool names must start with uppercase',

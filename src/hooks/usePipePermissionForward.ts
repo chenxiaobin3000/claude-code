@@ -2,7 +2,7 @@
  * usePipePermissionForward — Forward slave permission requests to master UI.
  *
  * Subscribes to slave pipe messages via subscribePipeEntries, and:
- * 1. permission_request → enqueue into toolUseConfirmQueue for master approval
+ * 1. permission_request → reject (cross-session messages carry no user authority)
  * 2. permission_cancel → remove from queue
  * 3. stream/error/done → display as system messages
  */
@@ -22,11 +22,8 @@ type Deps = {
 
 export function usePipePermissionForward({
   store,
-  tools,
   setMessages,
   setToolUseConfirmQueue,
-  getToolUseContext,
-  mainLoopModel,
 }: Deps): void {
   useEffect(() => {
     if (!feature('UDS_INBOX')) return
@@ -35,7 +32,7 @@ export function usePipePermissionForward({
       require('./useMasterMonitor.js') as typeof import('./useMasterMonitor.js')
     const { getPipeIpc } =
       require('../utils/pipeTransport.js') as typeof import('../utils/pipeTransport.js')
-    const { createAssistantMessage, createSystemMessage } =
+    const { createSystemMessage } =
       require('../utils/messages.js') as typeof import('../utils/messages.js')
     /* eslint-enable @typescript-eslint/no-require-imports */
 
@@ -56,91 +53,17 @@ export function usePipePermissionForward({
         if (entry.type === 'permission_request') {
           try {
             const payload = JSON.parse(content)
-            const tool = tools.find(
-              candidate => candidate.name === payload.toolName,
-            )
             const client = getSlaveClient(pipeName)
             if (!client) return
-
-            if (!tool) {
-              client.send({
-                type: 'permission_response',
-                data: JSON.stringify({
-                  requestId: payload.requestId,
-                  behavior: 'deny',
-                  feedback: `Tool "${payload.toolName}" is not available in main.`,
-                }),
-              })
-              return
-            }
-
-            const assistantMessage = createAssistantMessage({ content: '' })
-            const toolUseContext = getToolUseContext(
-              [],
-              [],
-              new AbortController(),
-              mainLoopModel,
-            )
-            setToolUseConfirmQueue((queue: any[]) => [
-              ...queue,
-              {
-                assistantMessage,
-                tool,
-                description: payload.description,
-                input: payload.input,
-                toolUseContext,
-                toolUseID: `pipe:${payload.requestId}`,
-                pipeName,
-                permissionResult: payload.permissionResult,
-                permissionPromptStartTimeMs:
-                  payload.permissionPromptStartTimeMs,
-                workerBadge: {
-                  name: `${displayRole} / ${pipeName}`,
-                  color: 'cyan',
-                },
-                onUserInteraction() {},
-                onAbort() {
-                  client.send({
-                    type: 'permission_response',
-                    data: JSON.stringify({
-                      requestId: payload.requestId,
-                      behavior: 'deny',
-                      feedback: 'Permission request was aborted in main.',
-                    }),
-                  })
-                },
-                onAllow(
-                  updatedInput: any,
-                  permissionUpdates: any,
-                  feedback: any,
-                  contentBlocks: any,
-                ) {
-                  client.send({
-                    type: 'permission_response',
-                    data: JSON.stringify({
-                      requestId: payload.requestId,
-                      behavior: 'allow',
-                      updatedInput,
-                      permissionUpdates,
-                      feedback,
-                      contentBlocks,
-                    }),
-                  })
-                },
-                onReject(feedback: any, contentBlocks: any) {
-                  client.send({
-                    type: 'permission_response',
-                    data: JSON.stringify({
-                      requestId: payload.requestId,
-                      behavior: 'deny',
-                      feedback,
-                      contentBlocks,
-                    }),
-                  })
-                },
-                async recheckPermission() {},
-              },
-            ])
+            client.send({
+              type: 'permission_response',
+              data: JSON.stringify({
+                requestId: payload.requestId,
+                behavior: 'deny',
+                feedback:
+                  'Cross-session permission requests are not accepted. Ask the local user in the originating session.',
+              }),
+            })
           } catch {
             // Malformed permission request — ignore
           }
@@ -186,11 +109,8 @@ export function usePipePermissionForward({
       },
     )
   }, [
-    getToolUseContext,
-    mainLoopModel,
     setMessages,
     setToolUseConfirmQueue,
     store,
-    tools,
   ])
 }

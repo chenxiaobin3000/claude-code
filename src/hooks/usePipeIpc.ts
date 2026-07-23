@@ -12,6 +12,11 @@
  */
 import { feature } from 'bun:bundle'
 import { useEffect } from 'react'
+import type { QueuedCommand } from '../types/textInputTypes.js'
+import {
+  CROSS_SESSION_MESSAGE_ORIGIN,
+  formatCrossSessionMessage,
+} from '../utils/crossSessionAuthority.js'
 import * as pt from '../utils/pipeTransport.js'
 import * as pr from '../utils/pipeRegistry.js'
 import * as mm from './useMasterMonitor.js'
@@ -36,7 +41,7 @@ type StoreApi = {
 
 export type UsePipeIpcOptions = {
   store: StoreApi
-  handleIncomingPrompt: (content: string) => boolean
+  handleIncomingPrompt: (content: string | QueuedCommand) => boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -153,7 +158,7 @@ function registerMessageHandlers(
   pipeName: string,
   machineId: string,
   store: StoreApi,
-  handleIncomingPrompt: (content: string) => boolean,
+  handleIncomingPrompt: (content: string | QueuedCommand) => boolean,
 ): void {
   // Auto-reply pings for health checks
   server.onMessage((msg: PipeMessage, reply) => {
@@ -204,7 +209,13 @@ function registerMessageHandlers(
   // Handle prompts from master
   server.onMessage((msg: PipeMessage, reply) => {
     if (msg.type === 'prompt' && msg.data) {
-      const accepted = handleIncomingPrompt(msg.data)
+      const accepted = handleIncomingPrompt({
+        mode: 'prompt',
+        value: formatCrossSessionMessage(msg.from, msg.data),
+        origin: CROSS_SESSION_MESSAGE_ORIGIN,
+        isMeta: true,
+        skipSlashCommands: true,
+      })
       if (accepted) {
         reply({ type: 'prompt_ack', data: 'accepted' })
       } else {

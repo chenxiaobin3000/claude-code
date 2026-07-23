@@ -1,5 +1,7 @@
 import type { ConfigScope } from 'src/services/mcp/types.js'
 import type { ZodError, ZodIssue } from 'zod/v4'
+import { mcpInfoFromString } from '../../services/mcp/mcpStringUtils.js'
+import { permissionRuleValueFromString } from '../permissions/permissionRuleParser.js'
 import { jsonParse } from '../slowOperations.js'
 import { plural } from '../stringUtils.js'
 import { validatePermissionRule } from './permissionValidation.js'
@@ -263,5 +265,45 @@ export function filterInvalidPermissionRules(
       return true
     })
   }
+  return warnings
+}
+
+/**
+ * Audits syntactically valid deny rules after the runtime tool registry exists.
+ * Unknown deny rules remain loaded (fail-safe) but produce a startup warning so
+ * typos and stale tool names do not pass unnoticed.
+ */
+export function findUnknownDenyRuleWarnings(
+  settings: SettingsJson,
+  knownToolNames: ReadonlySet<string>,
+): ValidationError[] {
+  const rules = settings.permissions?.deny
+  if (!Array.isArray(rules)) return []
+
+  const warnings: ValidationError[] = []
+  for (const rule of rules) {
+    if (typeof rule !== 'string') continue
+    const validation = validatePermissionRule(rule, 'deny')
+    if (!validation.valid) continue
+
+    const { toolName } = permissionRuleValueFromString(rule)
+    if (
+      mcpInfoFromString(toolName) ||
+      /[*?[\]]/.test(toolName) ||
+      knownToolNames.has(toolName)
+    ) {
+      continue
+    }
+
+    warnings.push({
+      file: '(merged settings)',
+      path: 'permissions.deny',
+      message: `Unknown tool name "${toolName}" in deny rule "${rule}"; the rule was retained but currently matches no registered tool`,
+      invalidValue: rule,
+      suggestion:
+        'Check the tool name for a typo or remove the stale rule if the tool is no longer installed',
+    })
+  }
+
   return warnings
 }

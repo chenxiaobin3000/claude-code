@@ -11,6 +11,7 @@ import {
   type useSetAppState,
 } from '../../../state/AppState.js'
 import type { Message as MessageType } from '../../../types/message.js'
+import type { QueuedCommand } from '../../../types/textInputTypes.js'
 import { isAgentSwarmsEnabled } from '../../../utils/agentSwarmsEnabled.js'
 import { getPipeIpc } from '../../../utils/pipeTransport.js'
 
@@ -79,7 +80,7 @@ export function usePipeLifecycle({
   mainLoopModel: string
   isLoading: boolean
   focusedInputDialog: string | undefined
-  handleIncomingPrompt: (content: string) => boolean
+  handleIncomingPrompt: (content: string | QueuedCommand) => boolean
 }): void {
   useInboxPoller({
     enabled: isAgentSwarmsEnabled(),

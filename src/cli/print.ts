@@ -134,6 +134,10 @@ import {
   permissionPromptToolResultToPermissionDecision,
 } from 'src/utils/permissions/PermissionPromptToolResultSchema.js'
 import { createAbortController } from 'src/utils/abortController.js'
+import {
+  CROSS_SESSION_MESSAGE_ORIGIN,
+  formatCrossSessionMessage,
+} from 'src/utils/crossSessionAuthority.js'
 import { createCombinedAbortSignal } from 'src/utils/combinedAbortSignal.js'
 import { generateSessionTitle } from 'src/utils/sessionTitle.js'
 import { buildSideQuestionFallbackParams } from 'src/utils/queryContext.js'
@@ -2029,6 +2033,7 @@ function runHeadlessStreaming(
                   prompt: input,
                   promptUuid: cmd.uuid,
                   isMeta: cmd.isMeta,
+                  origin: cmd.origin,
                   cwd: cwd(),
                   tools: allTools,
                   verbose: options.verbose,
@@ -2581,14 +2586,17 @@ function runHeadlessStreaming(
     const enqueueUdsInboxMessages = (): boolean => {
       const entries = drainInbox()
       for (const entry of entries) {
-        const value =
+        const content =
           typeof entry.message.data === 'string'
             ? entry.message.data
             : jsonStringify(entry.message.data)
         enqueue({
           mode: 'prompt',
-          value,
+          value: formatCrossSessionMessage(entry.message.from, content),
           uuid: randomUUID(),
+          origin: CROSS_SESSION_MESSAGE_ORIGIN,
+          isMeta: true,
+          skipSlashCommands: true,
         })
       }
       return entries.length > 0

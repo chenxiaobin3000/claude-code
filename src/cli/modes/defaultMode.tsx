@@ -15,7 +15,7 @@ import {
   createSyntheticOutputTool,
   isSyntheticOutputToolEnabled,
 } from '@claude-code-best/builtin-tools/tools/SyntheticOutputTool/SyntheticOutputTool.js';
-import { getTools } from '../../tools.js';
+import { getAllBaseTools, getTools } from '../../tools.js';
 import {
   canUserConfigureAdvisor,
   getInitialAdvisorSetting,
@@ -147,7 +147,11 @@ import {
   sessionIdExists,
 } from '../../utils/sessionStorage.js';
 import { getInitialSettings, getSettingsWithErrors } from '../../utils/settings/settings.js';
-import type { ValidationError } from '../../utils/settings/validation.js';
+import { TOOL_VALIDATION_CONFIG } from '../../utils/settings/toolValidationConfig.js';
+import {
+  findUnknownDenyRuleWarnings,
+  type ValidationError,
+} from '../../utils/settings/validation.js';
 import { DEFAULT_TASKS_MODE_TASK_LIST_ID } from '../../utils/tasks.js';
 import { validateUuid } from '../../utils/uuid.js';
 // Plugin startup checks are now handled non-blockingly in REPL.tsx
@@ -1493,16 +1497,36 @@ export async function runDefaultMode(
   // Must be after inline plugins are set (if any) so --plugin-dir LSP servers are included.
   initializeLspServerManager();
 
-  // Show settings validation errors after trust is established
-  // MCP config errors don't block settings from loading, so exclude them
+  // Audit settings after the runtime tool registry exists. Unknown deny rules
+  // remain loaded (fail-safe), while invalid rules were already filtered.
+  const settingsResult = getSettingsWithErrors();
+  const knownPermissionToolNames = new Set([
+    ...getAllBaseTools().map(tool => tool.name),
+    ...Object.keys(TOOL_VALIDATION_CONFIG.specifiers),
+  ]);
+  const permissionRuleWarnings = findUnknownDenyRuleWarnings(
+    settingsResult.settings,
+    knownPermissionToolNames,
+  );
+  const nonMcpErrors = settingsResult.errors.filter(e => !e.mcpErrorMetadata);
+
+  // Show settings validation errors after trust is established.
   if (!isNonInteractiveSession) {
-    const { errors } = getSettingsWithErrors();
-    const nonMcpErrors = errors.filter(e => !e.mcpErrorMetadata);
-    if (nonMcpErrors.length > 0) {
+    const startupSettingsWarnings = [
+      ...nonMcpErrors,
+      ...permissionRuleWarnings,
+    ];
+    if (startupSettingsWarnings.length > 0) {
       await launchInvalidSettingsDialog(root, {
-        settingsErrors: nonMcpErrors,
+        settingsErrors: startupSettingsWarnings,
         onExit: () => gracefulShutdownSync(1),
       });
+    }
+  } else {
+    for (const warning of [...nonMcpErrors, ...permissionRuleWarnings]) {
+      writeToStderr(
+        `Warning: ${warning.path}: ${warning.message}${warning.file ? ` (${warning.file})` : ''}\n`,
+      );
     }
   }
 

@@ -44,7 +44,11 @@ import { type Tools, type ToolUseContext, toolMatchesName } from './Tool.js'
 import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import { SYNTHETIC_OUTPUT_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SyntheticOutputTool/SyntheticOutputTool.js'
 import type { APIError } from '@anthropic-ai/sdk'
-import type { Message, SystemCompactBoundaryMessage } from './types/message.js'
+import type {
+  Message,
+  MessageOrigin,
+  SystemCompactBoundaryMessage,
+} from './types/message.js'
 import type { OrphanedPermission } from './types/textInputTypes.js'
 import { createAbortController } from './utils/abortController.js'
 import type { AttributionState } from './utils/commitAttribution.js'
@@ -218,7 +222,7 @@ export class QueryEngine {
 
   async *submitMessage(
     prompt: string | ContentBlockParam[],
-    options?: { uuid?: string; isMeta?: boolean },
+    options?: { uuid?: string; isMeta?: boolean; origin?: MessageOrigin },
   ): AsyncGenerator<SDKMessage, void, unknown> {
     const {
       cwd,
@@ -438,6 +442,14 @@ export class QueryEngine {
       isMeta: options?.isMeta,
       querySource: 'sdk',
     })
+
+    if (options?.origin !== undefined) {
+      for (const message of messagesFromUserInput) {
+        if (message.type === 'user' && message.toolUseResult === undefined) {
+          message.origin = options.origin
+        }
+      }
+    }
 
     // Push new messages, including user input and any attachments
     this.mutableMessages.push(...messagesFromUserInput)
@@ -1260,6 +1272,7 @@ export async function* ask({
   prompt,
   promptUuid,
   isMeta,
+  origin,
   cwd,
   tools,
   mcpClients,
@@ -1291,6 +1304,7 @@ export async function* ask({
   prompt: string | Array<ContentBlockParam>
   promptUuid?: string
   isMeta?: boolean
+  origin?: MessageOrigin
   cwd: string
   tools: Tools
   verbose?: boolean
@@ -1360,6 +1374,7 @@ export async function* ask({
     yield* engine.submitMessage(prompt, {
       uuid: promptUuid,
       isMeta,
+      origin,
     })
   } finally {
     setReadFileCache(engine.getReadFileState())
