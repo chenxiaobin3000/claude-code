@@ -19,6 +19,14 @@
 - 必须使用 Bash 时，Windows 路径 `C:\dev\claude-code` 在 Git Bash 中应写为 `/c/dev/claude-code`，在 WSL 中应写为 `/mnt/c/dev/claude-code`；不得写成 `/dev/claude-code`。
 - PowerShell 命令使用 Windows 路径和 PowerShell 语法，不要混用 Bash 的环境变量、重定向或路径写法。
 
+## Project、Session 与 `/cd` 边界
+
+- CLI 启动目录是当前 Session 唯一的 Project 边界，`originalCwd`、Session ID、Transcript 存储和 `--resume` 归属在整个 Session 内不得迁移到其他目录。
+- `/cd <directory>` 只临时修改当前工具和 Shell 使用的工作目录；它可以用于查看其他目录，但不得切换活动 Project 或创建、迁移、索引其他 Project 的 Session。
+- `/cd` 不加载目标目录的 `CLAUDE.md`、Settings、Skill、Hook、Plugin 或 MCP，不授予目标目录信任，也不改变启动 Project 已加载的上下文。
+- `/cd` 不自动扩大文件权限；启动 Project 外的写入仍按现有权限规则审批，且不得因临时 CWD 形成持久化宽泛授权。
+- `/clear` 将临时 CWD 恢复为启动目录；退出后必须从启动 Project 使用 `--resume` 查找该 Session。
+
 ## Monorepo 工作空间
 
 ```yaml
@@ -144,6 +152,9 @@
 6. 对 Bun 产物进行冒烟测试（版本、启动、模型请求、Read 工具）
 7. 对 Node.js 产物重复上述操作
 8. Windows 上额外构建并验证 EXE
+
+其中 `scripts/validation/temporary-cd.ts` 固定 `/cd` 的临时 CWD
+语义，防止其重新获得 Project 切换、配置加载或 Session 迁移职责。
 
 ### 模型配置
 

@@ -11,12 +11,12 @@ import type {
   UserMessage,
 } from 'src/types/message.js'
 import {
+  getOriginalCwd,
   getPlanSlugCache,
   getSessionId,
   setPlanSlugCacheEntry,
 } from '../bootstrap/state.js'
 import { EXIT_PLAN_MODE_V2_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/ExitPlanModeTool/constants.js'
-import { getCwd } from './cwd.js'
 import { logForDebugging } from './debug.js'
 import { getClaudeConfigHomeDir } from './envUtils.js'
 import { isENOENT } from './errors.js'
@@ -86,11 +86,11 @@ export const getPlansDirectory = memoize(function getPlansDirectory(): string {
 
   if (settingsDir) {
     // Settings.json (relative to project root)
-    const cwd = getCwd()
-    const resolved = resolve(cwd, settingsDir)
+    const projectRoot = getOriginalCwd()
+    const resolved = resolve(projectRoot, settingsDir)
 
     // Validate path stays within project root to prevent path traversal
-    if (!resolved.startsWith(cwd + sep) && resolved !== cwd) {
+    if (!resolved.startsWith(projectRoot + sep) && resolved !== projectRoot) {
       logError(
         new Error(`plansDirectory must be within project root: ${settingsDir}`),
       )
@@ -349,4 +349,3 @@ function findFileSnapshotEntry(
   }
   return undefined
 }
-

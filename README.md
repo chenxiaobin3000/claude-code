@@ -21,9 +21,20 @@
 - 基于 React/Ink 的终端 REPL
 - 流式模型响应与终端渲染
 - 会话保存、恢复、压缩和历史记录
+- `/cd <directory>` 可在当前 Session 内临时切换工具工作目录；启动目录仍是唯一 Project，目标目录配置和 Session 不会被加载或迁移，`/clear` 后回到启动目录
 - 上下文预算、长期记忆与提示词管理
 - 后台会话、任务和持久化 Goal
 - `/theme` 提供 6 个内置主题，并在启动时只读加载 `~/.claude/themes/*.json` 本地自定义主题；外部文件变更重启后生效
+
+#### `/cd` 的 Project 边界
+
+Session 始终属于 CLI 启动目录。`/cd` 只改变当前工具解析相对路径时使用的
+CWD，适合临时查看其他目录；它不会把目标目录切换为活动 Project，也不会加载
+目标目录的 `CLAUDE.md`、Settings、Skill、Hook、Plugin 或 MCP。Session ID 和
+Transcript 继续存放在启动 Project，`--resume` 也必须从该 Project 查找。
+`/cd` 不附带目录信任或写入授权，项目外写入仍由权限系统单独处理；`/clear`
+会把 CWD 恢复为启动目录。Session Memory、相对 Plan 目录、项目历史、动态
+Skill 和 MCP 发现也始终锚定启动 Project，不随临时 CWD 漂移。
 
 ### 工具系统
 

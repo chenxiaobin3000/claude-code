@@ -263,7 +263,10 @@ function isSessionPlanFile(absolutePath: string): boolean {
  * Path format: {projectDir}/{sessionId}/session-memory/
  */
 export function getSessionMemoryDir(): string {
-  return join(getProjectDir(getCwd()), getSessionId(), 'session-memory') + sep
+  return (
+    join(getProjectDir(getOriginalCwd()), getSessionId(), 'session-memory') +
+    sep
+  )
 }
 
 /**
@@ -286,7 +289,7 @@ function isSessionMemoryPath(absolutePath: string): boolean {
  * Path format: ~/.claude/projects/{sanitized-cwd}/...
  */
 function isProjectDirPath(absolutePath: string): boolean {
-  const projectDir = getProjectDir(getCwd())
+  const projectDir = getProjectDir(getOriginalCwd())
   // SECURITY: Normalize to prevent path traversal bypasses via .. segments
   const normalizedPath = normalize(absolutePath)
   return (

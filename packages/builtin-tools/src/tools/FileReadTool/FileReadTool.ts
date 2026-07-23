@@ -9,6 +9,7 @@ import {
   PDF_MAX_PAGES_PER_READ,
 } from 'src/constants/apiLimits.js'
 import { hasBinaryExtension } from 'src/constants/files.js'
+import { getOriginalCwd } from 'src/bootstrap/state.js'
 import { memoryFreshnessNote } from 'src/memdir/memoryAge.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
 import { logEvent } from 'src/services/analytics/index.js'
@@ -581,9 +582,12 @@ export const FileReadTool = buildTool({
 
     // Discover skills from this file's path (fire-and-forget, non-blocking)
     // Skip in simple mode - no skills available
-    const cwd = getCwd()
+    const projectRoot = getOriginalCwd()
     if (!isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)) {
-      const newSkillDirs = await discoverSkillDirsForPaths([fullFilePath], cwd)
+      const newSkillDirs = await discoverSkillDirsForPaths(
+        [fullFilePath],
+        projectRoot,
+      )
       if (newSkillDirs.length > 0) {
         // Store discovered dirs for attachment display
         for (const dir of newSkillDirs) {
@@ -594,7 +598,7 @@ export const FileReadTool = buildTool({
       }
 
       // Activate conditional skills whose path patterns match this file
-      activateConditionalSkillsForPaths([fullFilePath], cwd)
+      activateConditionalSkillsForPaths([fullFilePath], projectRoot)
     }
 
     try {

@@ -1,4 +1,5 @@
 import { dirname, sep } from 'path'
+import { getOriginalCwd } from 'src/bootstrap/state.js'
 import { logEvent } from 'src/services/analytics/index.js'
 import { z } from 'zod/v4'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
@@ -13,7 +14,6 @@ import {
 } from 'src/skills/loadSkillsDir.js'
 import type { ToolUseContext } from 'src/Tool.js'
 import { buildTool, type ToolDef } from 'src/Tool.js'
-import { getCwd } from 'src/utils/cwd.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import { countLinesChanged, getPatchForDisplay } from 'src/utils/diff.js'
 import { isEnvTruthy } from 'src/utils/envUtils.js'
@@ -306,8 +306,11 @@ export const FileWriteTool = buildTool({
     const dir = dirname(fullFilePath)
 
     // Discover skills from this file's path (fire-and-forget, non-blocking)
-    const cwd = getCwd()
-    const newSkillDirs = await discoverSkillDirsForPaths([fullFilePath], cwd)
+    const projectRoot = getOriginalCwd()
+    const newSkillDirs = await discoverSkillDirsForPaths(
+      [fullFilePath],
+      projectRoot,
+    )
     if (newSkillDirs.length > 0) {
       // Store discovered dirs for attachment display
       for (const dir of newSkillDirs) {
@@ -318,7 +321,7 @@ export const FileWriteTool = buildTool({
     }
 
     // Activate conditional skills whose path patterns match this file
-    activateConditionalSkillsForPaths([fullFilePath], cwd)
+    activateConditionalSkillsForPaths([fullFilePath], projectRoot)
 
     await diagnosticTracker.beforeFileEdited(fullFilePath)
 

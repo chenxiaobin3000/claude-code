@@ -85,7 +85,7 @@
 | 模块 | 官方现状 | 本地状态 | 主要差异 |
 | --- | --- | --- | --- |
 | 运行时 | 平台原生可执行文件 | 部分 | 本地仍以 TypeScript、Bun/Node 为主 |
-| 会话迁移 | `/cd` 保留会话迁移到新目录 | 缺失 | 没有官方同等语义的会话迁移 |
+| 会话目录 | `/cd` 保留会话迁移到新目录 | 已有（定制） | 本项目主动不迁移 Project/Session；`/cd` 仅临时改变 CWD，启动目录保持唯一 Project |
 | Shell 模式 | `! command` 后模型主动分析输出 | 缺失 | 未发现 `respondToBashCommands` |
 | Sandbox | 凭据文件和秘密环境变量隔离 | 已有 | `sandbox.credentials` 同时覆盖文件工具、Sandbox Runtime 和 Shell 子进程环境 |
 | 权限规则 | 支持工具输入参数匹配及更严格危险命令分类 | 部分 | 本地有权限系统，但未完整对齐最新规则 |
@@ -270,15 +270,25 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 目标：降低复杂配置导致的启动和会话故障。
 
-- [ ] 实现 `/cd`，明确新目录信任、CLAUDE.md 加载和 Session 存储迁移语义。
+- [x] 实现受限 `/cd`（2026-07-23 完成）：启动目录保持当前 Session 唯一 Project；命令只临时修改 CWD，不加载目标目录的 `CLAUDE.md`、Settings、Skill、Hook、Plugin 或 MCP，不授予目标目录信任，不迁移 Session ID、Transcript 或 `--resume` 归属；`/clear` 继续恢复启动目录。
 - [ ] 实现 `respondToBashCommands`，让 `! command` 可配置是否触发模型响应。
 - [ ] 支持 `/rewind` 跨 `/clear` 恢复。
 - [ ] 完善 API 中断重试和流断线恢复。
 
 验收标准：
 
-- `/cd` 后当前会话可继续，并能由 `--resume` 正确找到。
+- `/cd` 后当前会话继续使用启动 Project 的 Session ID 和 Transcript；`/clear` 恢复启动目录，`--resume` 仍从启动 Project 正确找到。
 - Shell 命令响应行为可由设置显式控制。
+
+`/cd` 验证记录（2026-07-23）：新增
+`scripts/validation/temporary-cd.ts` 并接入 `bun run verify`，覆盖带空格目录、
+相对路径、文件目标拒绝、失败不改变 CWD、Session ID/`originalCwd`/Transcript
+路径和 Session Memory 路径保持不变、`/clear` 复位接线，以及禁止重新引入
+Project 信任、配置加载、Hook 触发和 Session 迁移依赖。项目级 Plan、MCP
+发现、Session Memory、历史目录和动态 Skill 发现均固定使用 `originalCwd`，
+不会随临时 CWD 漂移。最终 `bun run verify --ci` 全矩阵通过（161.7 秒），
+包括 17 个 workspace、全部源验证、Bun/Vite 构建、Bundle 完整性、Windows
+standalone EXE 构建与完整性检查。
 
 ### P1：Agent 和后台任务
 

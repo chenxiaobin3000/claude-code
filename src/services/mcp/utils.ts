@@ -1,11 +1,13 @@
 import { createHash } from 'crypto'
 import { join } from 'path'
-import { getIsNonInteractiveSession } from '../../bootstrap/state.js'
+import {
+  getIsNonInteractiveSession,
+  getOriginalCwd,
+} from '../../bootstrap/state.js'
 import type { Command } from '../../commands.js'
 import type { AgentMcpServerInfo } from '../../components/mcp/types.js'
 import type { Tool } from '../../Tool.js'
 import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
-import { getCwd } from '../../utils/cwd.js'
 import { getGlobalClaudeFile } from '../../utils/env.js'
 import { isSettingSourceEnabled } from '../../utils/settings/constants.js'
 import {
@@ -256,9 +258,9 @@ export function describeMcpConfigFilePath(scope: ConfigScope): string {
     case 'user':
       return getGlobalClaudeFile()
     case 'project':
-      return join(getCwd(), '.mcp.json')
+      return join(getOriginalCwd(), '.mcp.json')
     case 'local':
-      return `${getGlobalClaudeFile()} [project: ${getCwd()}]`
+      return `${getGlobalClaudeFile()} [project: ${getOriginalCwd()}]`
     case 'dynamic':
       return 'Dynamically configured'
     case 'enterprise':

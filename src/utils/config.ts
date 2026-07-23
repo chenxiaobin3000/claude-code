@@ -511,9 +511,10 @@ function computeTrustDialogAccepted(): boolean {
     return true
   }
 
-  // Now check from current working directory and its parents
+  // Now check from the immutable startup project and its parents. Temporary
+  // /cd must not import trust from a directory visited during the session.
   // Normalize paths for consistent JSON key lookup
-  let currentPath = normalizePathForConfigKey(getCwd())
+  let currentPath = normalizePathForConfigKey(getOriginalCwd())
 
   // Traverse all parent directories
   while (true) {

@@ -3,6 +3,7 @@ import { chmod, open, rename, stat, unlink } from 'fs/promises'
 import mapValues from 'lodash-es/mapValues.js'
 import memoize from 'lodash-es/memoize.js'
 import { dirname, join, parse } from 'path'
+import { getOriginalCwd } from '../../bootstrap/state.js'
 import { getPlatform } from 'src/utils/platform.js'
 import type { PluginError } from '../../types/plugin.js'
 import { getPluginErrorMessage } from '../../types/plugin.js'
@@ -13,7 +14,6 @@ import {
   saveCurrentProjectConfig,
   saveGlobalConfig,
 } from '../../utils/config.js'
-import { getCwd } from '../../utils/cwd.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { getErrnoCode } from '../../utils/errors.js'
 import { getFsImplementation } from '../../utils/fsOperations.js'
@@ -85,7 +85,7 @@ function addScopeToServers(
  * Uses the original path for rename (does not follow symlinks).
  */
 async function writeMcpjsonFile(config: McpJsonConfig): Promise<void> {
-  const mcpJsonPath = join(getCwd(), '.mcp.json')
+  const mcpJsonPath = join(getOriginalCwd(), '.mcp.json')
 
   // Read existing file permissions to preserve them
   let existingMode: number | undefined
@@ -778,7 +778,7 @@ export function getProjectMcpConfigsFromCwd(): {
     return { servers: {}, errors: [] }
   }
 
-  const mcpJsonPath = join(getCwd(), '.mcp.json')
+  const mcpJsonPath = join(getOriginalCwd(), '.mcp.json')
 
   const { config, errors } = parseMcpConfigFromFilePath({
     filePath: mcpJsonPath,
@@ -841,7 +841,7 @@ export function getMcpConfigsByScope(
 
       // Build list of directories to check
       const dirs: string[] = []
-      let currentDir = getCwd()
+      let currentDir = getOriginalCwd()
 
       while (currentDir !== parse(currentDir).root) {
         dirs.push(currentDir)

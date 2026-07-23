@@ -36,6 +36,7 @@ const validationScripts = [
   'scripts/validation/message-conversion.ts',
   'scripts/validation/message-utils.ts',
   'scripts/validation/session-transcript.ts',
+  'scripts/validation/temporary-cd.ts',
   'scripts/validation/hook-protocol.ts',
   'scripts/validation/openai-stream.ts',
   'scripts/validation/openai-client.ts',

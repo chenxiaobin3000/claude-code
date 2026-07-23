@@ -1,4 +1,5 @@
 import { dirname, isAbsolute, sep } from 'path'
+import { getOriginalCwd } from 'src/bootstrap/state.js'
 import { logEvent } from 'src/services/analytics/index.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
 import { diagnosticTracker } from 'src/services/diagnosticTracking.js'
@@ -381,11 +382,11 @@ export const FileEditTool = buildTool({
 
     // Discover skills from this file's path (fire-and-forget, non-blocking)
     // Skip in simple mode - no skills available
-    const cwd = getCwd()
+    const projectRoot = getOriginalCwd()
     if (!isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)) {
       const newSkillDirs = await discoverSkillDirsForPaths(
         [absoluteFilePath],
-        cwd,
+        projectRoot,
       )
       if (newSkillDirs.length > 0) {
         // Store discovered dirs for attachment display
@@ -397,7 +398,7 @@ export const FileEditTool = buildTool({
       }
 
       // Activate conditional skills whose path patterns match this file
-      activateConditionalSkillsForPaths([absoluteFilePath], cwd)
+      activateConditionalSkillsForPaths([absoluteFilePath], projectRoot)
     }
 
     await diagnosticTracker.beforeFileEdited(absoluteFilePath)

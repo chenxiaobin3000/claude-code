@@ -5,6 +5,7 @@ import btw from './commands/btw/index.js'
 import goodClaude from './commands/good-claude/index.js'
 import issue from './commands/issue/index.js'
 import clear from './commands/clear/index.js'
+import cd from './commands/cd/index.js'
 import color from './commands/color/index.js'
 import commit from './commands/commit.js'
 import copy from './commands/copy/index.js'
@@ -241,6 +242,7 @@ const COMMANDS = memoize((): Command[] => [
   branch,
   btw,
   chrome,
+  cd,
   clear,
   color,
   compact,
