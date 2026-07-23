@@ -86,6 +86,7 @@ export function writeTextContent(
   content: string,
   encoding: BufferEncoding,
   endings: LineEndingType,
+  requireAtomic = false,
 ): void {
   let toWrite = content
   if (endings === 'CRLF') {
@@ -94,7 +95,10 @@ export function writeTextContent(
     toWrite = content.replaceAll('\r\n', '\n').split('\n').join('\r\n')
   }
 
-  writeFileSyncAndFlush_DEPRECATED(filePath, toWrite, { encoding })
+  writeFileSyncAndFlush_DEPRECATED(filePath, toWrite, {
+    encoding,
+    requireAtomic,
+  })
 }
 
 export function detectFileEncoding(filePath: string): BufferEncoding {
@@ -362,7 +366,11 @@ export function readFileSyncCached(filePath: string): string {
 export function writeFileSyncAndFlush_DEPRECATED(
   filePath: string,
   content: string,
-  options: { encoding: BufferEncoding; mode?: number } = { encoding: 'utf-8' },
+  options: {
+    encoding: BufferEncoding
+    mode?: number
+    requireAtomic?: boolean
+  } = { encoding: 'utf-8' },
 ): void {
   const fs = getFsImplementation()
 
@@ -448,6 +456,10 @@ export function writeFileSyncAndFlush_DEPRECATED(
       fs.unlinkSync(tempPath)
     } catch (cleanupError) {
       logForDebugging(`Failed to clean up temp file: ${cleanupError}`)
+    }
+
+    if (options.requireAtomic) {
+      throw atomicError
     }
 
     // Fallback to non-atomic write

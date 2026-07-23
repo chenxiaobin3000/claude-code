@@ -40,6 +40,10 @@ import { FILE_UNEXPECTEDLY_MODIFIED_ERROR } from '../FileEditTool/constants.js'
 import { gitDiffSchema, hunkSchema } from '../FileEditTool/types.js'
 import { FILE_WRITE_TOOL_NAME, getWriteToolDescription } from './prompt.js'
 import {
+  appendWriteRecoveryChunk,
+  completeWriteRecovery,
+} from 'src/services/tools/writeRecovery.js'
+import {
   getToolUseSummary,
   isResultTruncated,
   renderToolResultMessage,
@@ -50,21 +54,75 @@ import {
 } from './UI.js'
 
 const inputSchema = lazySchema(() =>
-  z.strictObject({
-    file_path: z
-      .string()
-      .describe(
-        'The absolute path to the file to write (must be absolute, not relative)',
-      ),
-    content: z.string().describe('The content to write to the file'),
-  }),
+  z
+    .strictObject({
+      file_path: z
+        .string()
+        .describe(
+          'The absolute path to the file to write (must be absolute, not relative)',
+        ),
+      content: z
+        .string()
+        .optional()
+        .describe('The complete content to write for a normal Write call'),
+      recovery_id: z
+        .string()
+        .uuid()
+        .optional()
+        .describe('Recovery ID supplied after a truncated Write call'),
+      chunk: z
+        .string()
+        .optional()
+        .describe('A complete bounded content chunk for recovery mode'),
+      sequence: z
+        .number()
+        .int()
+        .nonnegative()
+        .optional()
+        .describe('Zero-based recovery chunk sequence'),
+      final: z
+        .boolean()
+        .optional()
+        .describe('Whether this is the final recovery chunk'),
+    })
+    .superRefine((value, ctx) => {
+      const recoveryFields = [
+        value.recovery_id,
+        value.chunk,
+        value.sequence,
+        value.final,
+      ]
+      const hasRecoveryField = recoveryFields.some(field => field !== undefined)
+      if (!hasRecoveryField) {
+        if (value.content === undefined) {
+          ctx.addIssue({
+            code: 'custom',
+            message: 'A normal Write call requires content',
+          })
+        }
+        return
+      }
+      if (value.content !== undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Recovery Write calls cannot also provide content',
+        })
+      }
+      if (recoveryFields.some(field => field === undefined)) {
+        ctx.addIssue({
+          code: 'custom',
+          message:
+            'Recovery Write calls require recovery_id, chunk, sequence, and final',
+        })
+      }
+    }),
 )
 type InputSchema = ReturnType<typeof inputSchema>
 
 const outputSchema = lazySchema(() =>
   z.object({
     type: z
-      .enum(['create', 'update'])
+      .enum(['create', 'update', 'recovery'])
       .describe(
         'Whether a new file was created or an existing file was updated',
       ),
@@ -80,6 +138,9 @@ const outputSchema = lazySchema(() =>
         'The original file content before the write (null for new files)',
       ),
     gitDiff: gitDiffSchema().optional(),
+    recoveryId: z.string().optional(),
+    chunkCount: z.number().int().nonnegative().optional(),
+    stagedBytes: z.number().int().nonnegative().optional(),
   }),
 )
 type OutputSchema = ReturnType<typeof outputSchema>
@@ -113,7 +174,7 @@ export const FileWriteTool = buildTool({
     return outputSchema()
   },
   toAutoClassifierInput(input) {
-    return `${input.file_path}: ${input.content}`
+    return `${input.file_path}: ${input.content ?? input.chunk ?? ''}`
   },
   getPath(input): string {
     return input.file_path
@@ -205,11 +266,42 @@ export const FileWriteTool = buildTool({
     return { result: true }
   },
   async call(
-    { file_path, content },
+    input,
     { readFileState, updateFileHistoryState, dynamicSkillDirTriggers },
     _,
     parentMessage,
   ) {
+    const { file_path } = input
+    let content: string
+    let recoveryIdToComplete: string | undefined
+    if (input.content !== undefined) {
+      content = input.content
+    } else {
+      const recovery = appendWriteRecoveryChunk({
+        recoveryId: input.recovery_id!,
+        filePath: file_path,
+        sequence: input.sequence!,
+        chunk: input.chunk!,
+        final: input.final!,
+      })
+      if (!recovery.complete) {
+        return {
+          data: {
+            type: 'recovery' as const,
+            filePath: file_path,
+            content: '',
+            structuredPatch: [],
+            originalFile: null,
+            recoveryId: input.recovery_id,
+            chunkCount: recovery.chunkCount,
+            stagedBytes: recovery.bytes,
+          },
+        }
+      }
+      content = recovery.content
+      recoveryIdToComplete = input.recovery_id
+    }
+
     const fullFilePath = expandPath(file_path)
     const dir = dirname(fullFilePath)
 
@@ -261,20 +353,15 @@ export const FileWriteTool = buildTool({
     }
 
     if (meta !== null) {
-      const lastWriteTime = getFileModificationTime(fullFilePath)
       const lastRead = readFileState.get(fullFilePath)
-      if (!lastRead || lastWriteTime > lastRead.timestamp) {
-        // Timestamp indicates modification, but on Windows timestamps can change
-        // without content changes (cloud sync, antivirus, etc.). For full reads,
-        // compare content as a fallback to avoid false positives.
-        const isFullRead =
-          lastRead &&
-          lastRead.offset === undefined &&
-          lastRead.limit === undefined
-        // meta.content is CRLF-normalized — matches readFileState's normalized form.
-        if (!isFullRead || meta.content !== lastRead.content) {
-          throw new Error(FILE_UNEXPECTEDLY_MODIFIED_ERROR)
-        }
+      const isFullRead =
+        lastRead &&
+        lastRead.offset === undefined &&
+        lastRead.limit === undefined
+      // Compare the content even when mtime granularity hides a fast external
+      // edit. meta.content is CRLF-normalized like readFileState.
+      if (!isFullRead || meta.content !== lastRead.content) {
+        throw new Error(FILE_UNEXPECTEDLY_MODIFIED_ERROR)
       }
     }
 
@@ -286,7 +373,10 @@ export const FileWriteTool = buildTool({
     // the old file's line endings (or sampled the repo via ripgrep for new
     // files), which silently corrupted e.g. bash scripts with \r on Linux when
     // overwriting a CRLF file or when binaries in cwd poisoned the repo sample.
-    writeTextContent(fullFilePath, content, enc, 'LF')
+    writeTextContent(fullFilePath, content, enc, 'LF', true)
+    if (recoveryIdToComplete) {
+      completeWriteRecovery(recoveryIdToComplete)
+    }
 
     // Notify LSP servers about file modification (didChange) and save (didSave)
     const lspManager = getLspServerManager()
@@ -412,6 +502,12 @@ export const FileWriteTool = buildTool({
           tool_use_id: toolUseID,
           type: 'tool_result',
           content: `The file ${filePath} has been updated successfully.`,
+        }
+      case 'recovery':
+        return {
+          tool_use_id: toolUseID,
+          type: 'tool_result',
+          content: `Write recovery chunk staged for: ${filePath}`,
         }
     }
   },

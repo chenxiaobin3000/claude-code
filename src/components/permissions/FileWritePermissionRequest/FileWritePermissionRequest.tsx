@@ -30,7 +30,7 @@ const ideDiffSupport: IDEDiffSupport<FileWriteToolInput> = {
     return createSingleEditDiffConfig(
       input.file_path,
       oldContent,
-      input.content,
+      input.content ?? input.chunk ?? '',
       false, // For file writes, we replace the entire content
     );
   },
@@ -39,7 +39,9 @@ const ideDiffSupport: IDEDiffSupport<FileWriteToolInput> = {
     if (firstEdit) {
       return {
         ...input,
-        content: firstEdit.new_string,
+        ...(input.content !== undefined
+          ? { content: firstEdit.new_string }
+          : { chunk: firstEdit.new_string }),
       };
     }
     return input;
@@ -52,7 +54,8 @@ export function FileWritePermissionRequest(props: PermissionRequestProps): React
   };
 
   const parsed = parseInput(props.toolUseConfirm.input);
-  const { file_path, content } = parsed;
+  const { file_path } = parsed;
+  const content = parsed.content ?? parsed.chunk ?? '';
 
   // Single read drives both UI text ("Create" vs "Overwrite") and the diff
   // shown by FileWriteToolDiff — avoids a redundant existsSync stat that would

@@ -106,6 +106,16 @@ import type { QuerySource } from './constants/querySource.js'
 import type { QueuedCommand } from './types/textInputTypes.js'
 import { createDumpPromptsFetch } from './services/api/dumpPrompts.js'
 import { StreamingToolExecutor } from './services/tools/StreamingToolExecutor.js'
+import { isTruncatedToolInput } from './services/tools/truncatedToolInput.js'
+import {
+  abortWriteRecovery,
+  createWriteRecovery,
+  getWriteRecoveryStatus,
+  MAX_WRITE_RECOVERY_TRUNCATIONS,
+  noteWriteRecoveryTruncation,
+} from './services/tools/writeRecovery.js'
+import { getModelProfile } from './utils/model/modelProfiles.js'
+import { FILE_WRITE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/FileWriteTool/prompt.js'
 import { queryCheckpoint } from './utils/queryProfiler.js'
 import { runTools } from './services/tools/toolOrchestration.js'
 import { applyToolResultBudget } from './utils/toolResultStorage.js'
@@ -200,6 +210,27 @@ function isWithheldMaxOutputTokens(
   msg: Message | StreamEvent | undefined,
 ): msg is AssistantMessage {
   return msg?.type === 'assistant' && msg.apiError === 'max_output_tokens'
+}
+
+function findTruncatedWriteToolUse(
+  message: Message | StreamEvent | undefined,
+): ToolUseBlock | undefined {
+  if (message?.type !== 'assistant') return undefined
+  const assistant = message as AssistantMessage
+  if (
+    assistant.apiError ||
+    assistant.message.stop_reason !== 'max_tokens' ||
+    !Array.isArray(assistant.message.content)
+  ) {
+    return undefined
+  }
+  return assistant.message.content.find(
+    (block): block is ToolUseBlock =>
+      typeof block !== 'string' &&
+      block.type === 'tool_use' &&
+      block.name === FILE_WRITE_TOOL_NAME &&
+      isTruncatedToolInput(block.input),
+  )
 }
 
 function getAutonomyTurnOutcome(params: {
@@ -383,6 +414,14 @@ async function* queryLoop(
   // trigger point. Loop-local (not on State) to avoid touching the 7 continue
   // sites.
   let taskBudgetRemaining: number | undefined
+  let activeWriteRecoveryId: string | undefined
+  using _writeRecoveryCleanup = {
+    [Symbol.dispose]() {
+      if (activeWriteRecoveryId) {
+        abortWriteRecovery(activeWriteRecoveryId)
+      }
+    },
+  }
 
   // Snapshot immutable env/statsig/session state once at entry. See QueryConfig
   // for what's included and why feature() gates are intentionally excluded.
@@ -1013,6 +1052,9 @@ async function* queryLoop(
             if (isWithheldMaxOutputTokens(message)) {
               withheld = true
             }
+            if (findTruncatedWriteToolUse(message)) {
+              withheld = true
+            }
             if (!withheld) {
               yield yieldMessage
             }
@@ -1034,7 +1076,8 @@ async function* queryLoop(
 
               if (
                 streamingToolExecutor &&
-                !toolUseContext.abortController.signal.aborted
+                !toolUseContext.abortController.signal.aborted &&
+                !findTruncatedWriteToolUse(assistantMessage)
               ) {
                 for (const toolBlock of msgToolUseBlocks) {
                   streamingToolExecutor.addTool(toolBlock, assistantMessage)
@@ -1413,6 +1456,70 @@ async function* queryLoop(
       // was withheld from the stream above; only surface it if recovery
       // exhausts.
       if (isWithheldMaxOutputTokens(lastMessage)) {
+        const truncatedWrite = assistantMessages
+          .map(message => findTruncatedWriteToolUse(message))
+          .find(Boolean)
+
+        if (truncatedWrite) {
+          let recovery = activeWriteRecoveryId
+            ? getWriteRecoveryStatus(activeWriteRecoveryId)
+            : undefined
+          if (
+            recovery &&
+            recovery.truncationAttempts >= MAX_WRITE_RECOVERY_TRUNCATIONS
+          ) {
+            yield createAssistantAPIErrorMessage({
+              content:
+                `Write recovery stopped after ${MAX_WRITE_RECOVERY_TRUNCATIONS} truncated attempts. ` +
+                `Model ${currentModel} has a ${getModelProfile(currentModel).maxOutputTokens}-token output limit. ` +
+                'Retry with smaller complete chunks.',
+              apiError: 'max_output_tokens',
+              error: 'max_output_tokens',
+            })
+            return { reason: 'model_error' }
+          }
+          if (!recovery) {
+            recovery = createWriteRecovery(currentModel)
+            activeWriteRecoveryId = recovery.id
+            logForDebugging(
+              `Write recovery started: model=${currentModel}, maxOutputTokens=${recovery.maxOutputTokens}, suggestedChunkChars=${recovery.suggestedChunkChars}`,
+              { level: 'warn' },
+            )
+          } else {
+            recovery = noteWriteRecoveryTruncation(recovery.id)!
+            logForDebugging(
+              `Write recovery resumed: model=${currentModel}, attempt=${recovery.truncationAttempts}, nextSequence=${recovery.nextSequence}`,
+              { level: 'warn' },
+            )
+          }
+          const recoveryMessage = createUserMessage({
+            content:
+              `The Write tool input was truncated at the model output limit; no file content was written. ` +
+              `Recover using complete bounded Write calls with recovery fields. Use recovery_id=${JSON.stringify(recovery.id)}, ` +
+              `sequence=${recovery.nextSequence}, chunk strings no longer than ${recovery.suggestedChunkChars} characters, ` +
+              `and final=false until the last chunk. Keep file_path identical on every chunk. ` +
+              `The final chunk must set final=true. Do not resend the entire file in one call and do not use empty non-final chunks.`,
+            isMeta: true,
+          })
+
+          state = {
+            messages: [...messagesForQuery, recoveryMessage],
+            toolUseContext,
+            autoCompactTracking: tracking,
+            maxOutputTokensRecoveryCount: maxOutputTokensRecoveryCount + 1,
+            hasAttemptedReactiveCompact,
+            maxOutputTokensOverride: undefined,
+            pendingToolUseSummary: undefined,
+            stopHookActive: undefined,
+            turnCount,
+            transition: {
+              reason: 'max_output_tokens_recovery',
+              attempt: maxOutputTokensRecoveryCount + 1,
+            },
+          }
+          continue
+        }
+
         // Escalating retry: if we used the capped 8k default and hit the
         // limit, retry the SAME request at 64k — no meta message, no
         // multi-turn dance. This fires once per turn (guarded by the

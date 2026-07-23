@@ -427,21 +427,15 @@ export const FileEditTool = buildTool({
     } = readFileForEdit(absoluteFilePath)
 
     if (fileExists) {
-      const lastWriteTime = getFileModificationTime(absoluteFilePath)
       const lastRead = readFileState.get(absoluteFilePath)
-      if (!lastRead || lastWriteTime > lastRead.timestamp) {
-        // Timestamp indicates modification, but on Windows timestamps can change
-        // without content changes (cloud sync, antivirus, etc.). For full reads,
-        // compare content as a fallback to avoid false positives.
-        const isFullRead =
-          lastRead &&
-          lastRead.offset === undefined &&
-          lastRead.limit === undefined
-        const contentUnchanged =
-          isFullRead && originalFileContents === lastRead.content
-        if (!contentUnchanged) {
-          throw new Error(FILE_UNEXPECTEDLY_MODIFIED_ERROR)
-        }
+      const isFullRead =
+        lastRead &&
+        lastRead.offset === undefined &&
+        lastRead.limit === undefined
+      const contentUnchanged =
+        isFullRead && originalFileContents === lastRead.content
+      if (!contentUnchanged) {
+        throw new Error(FILE_UNEXPECTEDLY_MODIFIED_ERROR)
       }
     }
 
@@ -459,7 +453,13 @@ export const FileEditTool = buildTool({
     })
 
     // 5. Write to disk
-    writeTextContent(absoluteFilePath, updatedFile, encoding, endings)
+    writeTextContent(
+      absoluteFilePath,
+      updatedFile,
+      encoding,
+      endings,
+      true,
+    )
 
     // Notify LSP servers about file modification (didChange) and save (didSave)
     const lspManager = getLspServerManager()

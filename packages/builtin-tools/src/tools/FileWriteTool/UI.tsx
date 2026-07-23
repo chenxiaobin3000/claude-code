@@ -243,9 +243,12 @@ export function renderToolUseErrorMessage(
   { verbose }: { verbose: boolean },
 ): React.ReactNode {
   if (!verbose && typeof result === 'string' && extractTag(result, 'tool_use_error')) {
+    const message = result.includes('InputValidationError')
+      ? 'Write parameters are incomplete'
+      : 'Error writing file';
     return (
       <MessageResponse>
-        <Text color="error">Error writing file</Text>
+        <Text color="error">{message}</Text>
       </MessageResponse>
     );
   }
@@ -258,6 +261,12 @@ export function renderToolResultMessage(
   { style, verbose }: { style?: 'condensed'; verbose: boolean },
 ): React.ReactNode {
   switch (type) {
+    case 'recovery':
+      return (
+        <MessageResponse>
+          <Text dimColor>Staged another bounded chunk for {relative(getCwd(), filePath)}</Text>
+        </MessageResponse>
+      );
     case 'create': {
       const isPlanFile = filePath.startsWith(getPlansDirectory());
 

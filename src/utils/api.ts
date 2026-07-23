@@ -568,13 +568,17 @@ export function normalizeToolInput<T extends Tool>(
 
       // Markdown uses two trailing spaces as a hard line break — don't strip.
       const isMarkdown = /\.(md|mdx)$/i.test(parsedInput.file_path)
+      const rawContent = parsedInput.content ?? parsedInput.chunk ?? ''
+      const normalizedContent = isMarkdown
+        ? rawContent
+        : stripTrailingWhitespace(rawContent)
 
       // SAFETY: See comment in BashTool case above
       return {
-        file_path: parsedInput.file_path,
-        content: isMarkdown
-          ? parsedInput.content
-          : stripTrailingWhitespace(parsedInput.content),
+        ...parsedInput,
+        ...(parsedInput.content !== undefined
+          ? { content: normalizedContent }
+          : { chunk: normalizedContent }),
       } as z.infer<T['inputSchema']>
     }
     case TASK_OUTPUT_TOOL_NAME: {

@@ -54,6 +54,7 @@ function assembleAssistantOutputs(params: {
           blocks as unknown as BetaMessage['content'],
           params.tools,
           params.agentId,
+          params.stopReason,
         ),
         usage: params.usage,
         stop_reason: params.stopReason,

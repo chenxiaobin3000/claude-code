@@ -2007,6 +2007,7 @@ import {
   smooshIntoToolResult,
   smooshSystemReminderSiblings,
 } from './messages/contentMerge.js'
+import { createTruncatedToolInput } from '../services/tools/truncatedToolInput.js'
 
 // Sometimes the API returns empty messages (eg. "\n\n"). We need to filter these out,
 // otherwise they will give an API error when we send them to the API next time we call query().
@@ -2014,6 +2015,7 @@ export function normalizeContentFromAPI(
   contentBlocks: BetaMessage['content'],
   tools: Tools,
   agentId?: AgentId,
+  stopReason?: string | null,
 ): BetaMessage['content'] {
   if (!contentBlocks) {
     return []
@@ -2046,14 +2048,21 @@ export function normalizeContentFromAPI(
               toolName: sanitizeToolNameForAnalytics(contentBlock.name),
               inputLen: contentBlock.input.length,
             })
-            if (process.env.USER_TYPE === 'ant') {
+            if (
+              process.env.USER_TYPE === 'ant' &&
+              stopReason !== 'max_tokens'
+            ) {
               logForDebugging(
                 `tool input JSON parse fail: ${contentBlock.input.slice(0, 200)}`,
                 { level: 'warn' },
               )
             }
           }
-          normalizedInput = parsed ?? {}
+          normalizedInput =
+            parsed ??
+            (stopReason === 'max_tokens'
+              ? createTruncatedToolInput(contentBlock.input.length)
+              : {})
         } else {
           normalizedInput = contentBlock.input
         }
