@@ -17,6 +17,7 @@ import {
   reduceShellDecisions,
   shellDecisionCategoryForResult,
 } from 'src/utils/permissions/shellDecision.js'
+import { classifyWorktreeGitEscape } from 'src/utils/permissions/worktreeIsolation.js'
 import {
   createPermissionRequestMessage,
   getRuleByContentsForToolName,
@@ -880,25 +881,47 @@ export async function powershellToolHasPermission(
     decisions.push(preParseDenyDecision)
   }
 
-  const destructiveOperation = allSubCommands
-    .map(({ element }) => {
-      const normalizedArgs = element.args.map((arg, index) => {
-        if (element.elementTypes?.[index + 1] !== 'Parameter') return arg
-        if (PS_TOKENIZER_DASH_CHARS.has(arg[0] ?? '')) return `-${arg.slice(1)}`
+  const normalizedSubcommands = allSubCommands.map(({ element }) => {
+    const normalizedArgs = element.args.map((arg, index) => {
+      if (element.elementTypes?.[index + 1] !== 'Parameter') return arg
+      if (PS_TOKENIZER_DASH_CHARS.has(arg[0] ?? '')) return `-${arg.slice(1)}`
 
-        // Windows PowerShell 5.1 can transcode Unicode dash Extent.Text into
-        // replacement characters (en dash → "�C", horizontal bar → "�D").
-        // Parameter is established by the native AST, so normalize that known
-        // encoding artifact without treating ordinary string arguments as flags.
-        let name = arg.replace(/^�+/, '')
-        if (/^[A-Z][A-Z][a-z]/.test(name)) name = name.slice(1)
-        return `-${name}`
-      })
-      return classifyDestructiveArgv([
-        resolveToCanonical(element.name),
-        ...normalizedArgs,
-      ])
+      // Windows PowerShell 5.1 can transcode Unicode dash Extent.Text into
+      // replacement characters (en dash → "�C", horizontal bar → "�D").
+      // Parameter is established by the native AST, so normalize that known
+      // encoding artifact without treating ordinary string arguments as flags.
+      let name = arg.replace(/^�+/, '')
+      if (/^[A-Z][A-Z][a-z]/.test(name)) name = name.slice(1)
+      return `-${name}`
     })
+    return [resolveToCanonical(element.name), ...normalizedArgs]
+  })
+
+  const worktreeEscape = toolPermissionContext.writeIsolationRoot
+    ? normalizedSubcommands
+        .map(argv =>
+          classifyWorktreeGitEscape(
+            argv,
+            toolPermissionContext.writeIsolationRoot!,
+          ),
+        )
+        .find(reason => reason !== null)
+    : null
+  if (worktreeEscape) {
+    decisions.push({
+      behavior: 'deny',
+      decisionReason: {
+        type: 'destructiveOperation',
+        operation: 'worktree-isolation-escape',
+        reason: worktreeEscape,
+        severity: 'hard-deny',
+      },
+      message: worktreeEscape,
+    })
+  }
+
+  const destructiveOperation = normalizedSubcommands
+    .map(argv => classifyDestructiveArgv(argv))
     .find(result => result !== null)
   if (destructiveOperation) {
     const decisionReason: PermissionDecisionReason = {
@@ -1385,7 +1408,9 @@ export async function powershellToolHasPermission(
     decisions.map(result => ({
       category: shellDecisionCategoryForResult(
         result,
-        result.decisionReason?.type === 'rule' ? 'exact-allow' : 'constrained-allow',
+        result.decisionReason?.type === 'rule'
+          ? 'exact-allow'
+          : 'constrained-allow',
         'mandatory-ask',
       ),
       result,

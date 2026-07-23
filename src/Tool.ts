@@ -119,6 +119,12 @@ export type ToolPermissionContext = DeepImmutable<{
   isBypassPermissionsModeAvailable: boolean
   isAutoModeAvailable?: boolean
   strippedDangerousRules?: ToolPermissionRulesBySource
+  /**
+   * Hard filesystem write boundary for an isolated worktree agent. File-edit
+   * tools may write only beneath this root, regardless of inherited allow
+   * rules, permission mode, additional directories, or symlinks.
+   */
+  writeIsolationRoot?: string
   /** When true, permission prompts are auto-denied (e.g., background agents that can't show UI) */
   shouldAvoidPermissionPrompts?: boolean
   /** When true, automated checks (classifier, hooks) are awaited before showing the permission dialog (coordinator workers) */

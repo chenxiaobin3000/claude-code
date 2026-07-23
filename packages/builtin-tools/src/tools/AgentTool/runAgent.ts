@@ -454,6 +454,18 @@ export async function* runAgent({
       }
     }
 
+    // Worktree agents must not inherit the parent checkout as an editable
+    // working directory. This hard root is enforced by filesystem permission
+    // checks before mode and allow rules, and is restored automatically when
+    // resuming because worktreePath is persisted in agent metadata.
+    if (worktreePath) {
+      toolPermissionContext = {
+        ...toolPermissionContext,
+        writeIsolationRoot: worktreePath,
+        additionalWorkingDirectories: new Map(),
+      }
+    }
+
     // Scope tool permissions: when allowedTools is provided, use them as session rules.
     // IMPORTANT: Preserve cliArg rules (from SDK's --allowedTools) since those are
     // explicit permissions from the SDK consumer that should apply to all agents.

@@ -671,6 +671,9 @@ export function checkPathSafetyForAutoEdit(
 export function allWorkingDirectories(
   context: ToolPermissionContext,
 ): Set<string> {
+  if (context.writeIsolationRoot) {
+    return new Set([context.writeIsolationRoot])
+  }
   return new Set([
     getOriginalCwd(),
     ...context.additionalWorkingDirectories.keys(),
@@ -853,10 +856,7 @@ export function getFileReadIgnorePatterns(
 
   const credentialPatterns = getCredentialSearchIgnorePatterns()
   if (credentialPatterns.length > 0) {
-    result.set(null, [
-      ...(result.get(null) ?? []),
-      ...credentialPatterns,
-    ])
+    result.set(null, [...(result.get(null) ?? []), ...credentialPatterns])
   }
 
   return result
@@ -1246,6 +1246,30 @@ export function checkWritePermissionForTool<Input extends AnyObject>(
   // 1. Check for deny rules - check both the original path and resolved symlink path
   const pathsToCheck =
     precomputedPathsToCheck ?? getPathsForPermissionCheck(path)
+
+  // Worktree agents have a hard write boundary. Check both the lexical path
+  // and every resolved symlink target before internal-path carve-outs, mode,
+  // or allow rules so inherited parent permissions cannot write back into the
+  // main checkout.
+  if (toolPermissionContext.writeIsolationRoot) {
+    const isolationRoots = getResolvedWorkingDirPaths(
+      toolPermissionContext.writeIsolationRoot,
+    )
+    const staysInsideIsolation = pathsToCheck.every(pathToCheck =>
+      isolationRoots.some(root => pathInWorkingPath(pathToCheck, root)),
+    )
+    if (!staysInsideIsolation) {
+      return {
+        behavior: 'deny',
+        message: `Worktree agent cannot write outside its isolated worktree: ${path}`,
+        decisionReason: {
+          type: 'workingDir',
+          reason: 'Path is outside the isolated worktree write boundary',
+        },
+      }
+    }
+  }
+
   for (const pathToCheck of pathsToCheck) {
     const denyRule = matchingRuleForInput(
       pathToCheck,

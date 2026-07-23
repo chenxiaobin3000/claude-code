@@ -46,6 +46,7 @@ import type {
 import { extractRules } from 'src/utils/permissions/PermissionUpdate.js'
 import type { PermissionUpdate } from 'src/utils/permissions/PermissionUpdateSchema.js'
 import { permissionRuleValueToString } from 'src/utils/permissions/permissionRuleParser.js'
+import { classifyWorktreeGitEscape } from 'src/utils/permissions/worktreeIsolation.js'
 import {
   selectShellDecision,
   shellDecisionCategoryForResult,
@@ -1423,7 +1424,9 @@ function nestedCommandTextsForDenyScan(command: string): string[] {
     const value = match[2]?.trim()
     if (value) nested.add(value)
   }
-  for (const match of command.matchAll(/(?:^|[;&|]\s*|\s)eval\s+(['"])(.*?)\1/g)) {
+  for (const match of command.matchAll(
+    /(?:^|[;&|]\s*|\s)eval\s+(['"])(.*?)\1/g,
+  )) {
     const value = match[2]?.trim()
     if (value) nested.add(value)
   }
@@ -1744,6 +1747,29 @@ export async function bashToolHasPermission(
     astSubcommands = astResult.commands.map(c => c.text)
     astRedirects = astResult.commands.flatMap(c => c.redirects)
     astCommands = astResult.commands
+  }
+
+  const worktreeEscape = appState.toolPermissionContext.writeIsolationRoot
+    ? astCommands
+        ?.map(command =>
+          classifyWorktreeGitEscape(
+            command.argv,
+            appState.toolPermissionContext.writeIsolationRoot!,
+          ),
+        )
+        .find(reason => reason !== null)
+    : null
+  if (worktreeEscape) {
+    return {
+      behavior: 'deny',
+      decisionReason: {
+        type: 'destructiveOperation',
+        operation: 'worktree-isolation-escape',
+        reason: worktreeEscape,
+        severity: 'hard-deny',
+      },
+      message: worktreeEscape,
+    }
   }
 
   const destructiveOperation = astCommands
