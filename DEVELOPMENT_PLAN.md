@@ -202,13 +202,13 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 目标：保留源码内稳定、可验收的模型默认能力，同时允许用户在加载 `models.json` 时为单个模型显式覆盖已知 Profile 字段，不引入 endpoint 探测、名称猜测或厂商专用分支。
 
-- [ ] 扩展 `models.json` 单模型条目 Schema，允许按 `ModelProfile` 的现有字段名提供可选覆盖，包括上下文窗口、默认/最大输出 Token、推理参数、Chat Completions 参数契约、Prompt Cache 和价格；地址、模型 ID、凭据引用及展示字段保持现有语义。
-- [ ] 模型注册表加载每个条目时先按区分大小写的完整模型 ID 选择源码专用 Profile；未登记模型仍选择 `DEFAULT_MODEL_PROFILE`。随后只用该条目中明确存在的字段覆盖基础 Profile，缺失字段继续继承基础值，并生成本次会话使用的不可变 Effective Profile。
-- [ ] 嵌套配置采用字段级深合并，禁止一个局部覆盖意外清空 `reasoning`、`chatCompletions`、`promptCache` 或 `pricing` 的其他必需字段；显式 `null` 只允许用于 Schema 本来允许为空的价格项，不得等同于“未配置”。
-- [ ] 加载时统一验证 `contextWindowTokens > 0`、`defaultOutputTokens > 0`、`defaultOutputTokens <= maxOutputTokens < contextWindowTokens`、枚举值、推理参数、输出 Token 字段、Cache 能力和非负价格。任一覆盖非法时必须带模型 ID、JSON 字段路径和原因终止加载，不得静默回退或自动修正。
-- [ ] `getModelProfile()`、上下文压缩、状态栏、请求构造、Usage/价格计算和诊断摘要统一读取注册表加载出的 Effective Profile；同一模型条目的 Profile 与 endpoint、凭据一起完成加载和切换，不另设第二套配置文件或延迟能力探测。
-- [ ] 未登记且没有覆盖的模型继续使用固定默认 Profile并给出原有建议提示；未登记但提供部分覆盖时，提示“其余能力仍继承默认 Profile”；已登记模型存在覆盖时，诊断信息只记录覆盖字段名和最终非敏感能力摘要，不记录凭据或完整配置内容。
-- [ ] 扩展 `scripts/validation/model-profiles.ts` 和模型注册表轻量验证，覆盖专用 Profile 无覆盖、未知模型无覆盖、专用/未知模型部分覆盖、嵌套深合并、显式 `null`、非法 Token 关系、非法枚举、重复模型 ID、模型切换隔离以及三类构建产物读取一致性。
+- [x] 扩展 `models.json` 单模型条目 Schema，允许以可选 `profile` 对象按 `ModelProfile` 的现有字段名提供覆盖，包括上下文窗口、默认/最大输出 Token、推理参数、Chat Completions 参数契约、Prompt Cache 和价格；地址、模型 ID、凭据引用及展示字段保持现有语义。
+- [x] 模型注册表加载每个条目时先按区分大小写的完整模型 ID 选择源码专用 Profile；未登记模型仍选择 `DEFAULT_MODEL_PROFILE`。随后只用该条目中明确存在的字段覆盖基础 Profile，缺失字段继续继承基础值，并生成本次会话使用的不可变 Effective Profile。
+- [x] 嵌套配置采用字段级深合并，禁止一个局部覆盖意外清空 `reasoning`、`chatCompletions`、`promptCache` 或 `pricing` 的其他必需字段；显式 `null` 只允许用于 Schema 本来允许为空的价格项，不得等同于“未配置”。
+- [x] 加载时统一验证 `contextWindowTokens > 0`、`defaultOutputTokens > 0`、`defaultOutputTokens <= maxOutputTokens < contextWindowTokens`、枚举值、推理参数、输出 Token 字段、Cache 能力和非负价格。任一覆盖非法时必须带模型 ID、JSON 字段路径和原因终止加载，不得静默回退或自动修正。
+- [x] `getModelProfile()`、上下文压缩、状态栏、请求构造、Usage/价格计算和诊断摘要统一读取注册表加载出的 Effective Profile；同一模型条目的 Profile 与 endpoint、凭据一起完成加载和切换，不另设第二套配置文件或延迟能力探测。
+- [x] 未登记且没有覆盖的模型继续使用固定默认 Profile并给出原有建议提示；未登记但提供部分覆盖时，提示“其余能力仍继承默认 Profile”；已登记模型存在覆盖时，诊断信息只记录覆盖字段名和最终非敏感能力摘要，不记录凭据或完整配置内容。
+- [x] 扩展 `scripts/validation/model-profiles.ts` 和模型注册表轻量验证，覆盖专用 Profile 无覆盖、未知模型无覆盖、专用/未知模型部分覆盖、嵌套深合并、非法 Token 关系、非法枚举、重复模型 ID、模型切换隔离以及构建链编译覆盖。
 
 验收标准：
 

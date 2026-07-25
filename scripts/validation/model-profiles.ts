@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 
 import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
+import { tmpdir } from 'node:os'
 import type { BetaUsage } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import {
   buildOpenAIRequestBody,
@@ -18,6 +19,7 @@ import {
   DEFAULT_MODEL_PROFILE,
   MODEL_PROFILES,
   findModelProfile,
+  createEffectiveModelProfile,
   getDefaultModelProfileWarning,
   getModelProfile,
   usesDefaultModelProfile,
@@ -92,6 +94,7 @@ assertEqual(
   undefined,
   'dedicated profile warning',
 )
+
 assertEqual(
   getContextWindowForModel('gemma-new-model'),
   65_536,
@@ -134,6 +137,82 @@ const baseRequest = {
   tools: [],
   toolChoice: undefined,
   maxTokens: 4_096,
+}
+const deepseekWithoutThinking = createEffectiveModelProfile(
+  'deepseek-v4-flash',
+  { reasoning: { enabledByDefault: false } },
+)
+assertDeepEqual(
+  deepseekWithoutThinking.reasoning,
+  { type: 'deepseek', enabledByDefault: false },
+  'DeepSeek partial reasoning override',
+)
+assertEqual(
+  (buildOpenAIRequestBodyForProfile(
+    { ...baseRequest, model: 'deepseek-v4-flash' },
+    deepseekWithoutThinking,
+  ) as Record<string, unknown>).thinking,
+  undefined,
+  'DeepSeek profile override disables thinking request field',
+)
+const unknownPartialProfile = createEffectiveModelProfile('fixture-model', {
+  contextWindowTokens: 131_072,
+  maxOutputTokens: 8_192,
+})
+assertEqual(
+  unknownPartialProfile.defaultOutputTokens,
+  4_096,
+  'partial override inherits default output tokens',
+)
+assertEqual(
+  createEffectiveModelProfile('deepseek-v4-flash', { pricing: null }).pricing,
+  null,
+  'explicit null clears nullable pricing',
+)
+for (const invalidProfile of [
+  { maxOutputTokens: 65_536 },
+  { chatCompletions: { outputTokenField: 'wrong' } },
+  { pricing: { input: -1 } },
+]) {
+  try {
+    createEffectiveModelProfile('fixture-model', invalidProfile)
+  } catch {
+    continue
+  }
+  throw new Error('invalid profile override was accepted')
+}
+
+const registryDir = await mkdtemp(join(tmpdir(), 'claude-profile-validation-'))
+let clearRegistryCache: (() => void) | undefined
+try {
+  await writeFile(
+    join(registryDir, 'models.json'),
+    JSON.stringify({
+      defaultModel: 'deepseek-v4-flash',
+      models: [
+        {
+          model: 'deepseek-v4-flash',
+          baseUrl: 'https://api.deepseek.com/v1',
+          profile: { reasoning: { enabledByDefault: false } },
+        },
+      ],
+    }),
+  )
+  process.env.CLAUDE_CONFIG_DIR = registryDir
+  const registryModule = await import('../../src/utils/model/modelRegistry.js')
+  clearRegistryCache = registryModule.clearModelRegistryCache
+  registryModule.clearModelRegistryCache()
+  const target = registryModule.resolveModelTarget()
+  assertEqual(target.model, 'deepseek-v4-flash', 'registry selected DeepSeek')
+  assertDeepEqual(
+    getModelProfile(target.model).reasoning,
+    { type: 'deepseek', enabledByDefault: false },
+    'registry installs the effective profile for all consumers',
+  )
+} finally {
+  delete process.env.CLAUDE_CONFIG_DIR
+  clearRegistryCache?.()
+  await rm(registryDir, { recursive: true, force: true })
 }
 const qwenRequest = buildOpenAIRequestBody({
   ...baseRequest,

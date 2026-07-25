@@ -7,7 +7,12 @@ import {
 } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { getClaudeConfigHomeDir } from '../envUtils.js'
-import { getDefaultModelProfileWarning } from './modelProfiles.js'
+import {
+  createEffectiveModelProfile,
+  getDefaultModelProfileWarning,
+  setEffectiveModelProfiles,
+  type ModelProfile,
+} from './modelProfiles.js'
 
 export interface ModelRegistryEntry {
   model: string
@@ -15,11 +20,16 @@ export interface ModelRegistryEntry {
   apiKeyEnv?: string
   displayName?: string
   description?: string
+  profile?: unknown
+}
+
+interface LoadedModelRegistryEntry extends ModelRegistryEntry {
+  effectiveProfile: ModelProfile
 }
 
 export interface ModelRegistry {
   defaultModel: string
-  models: ModelRegistryEntry[]
+  models: LoadedModelRegistryEntry[]
 }
 
 export type ResolvedModelTarget = ModelRegistryEntry & {
@@ -38,6 +48,7 @@ export function isModelRegistryMissing(): boolean {
 
 export function clearModelRegistryCache(): void {
   cachedRegistry = null
+  setEffectiveModelProfiles(new Map())
 }
 
 export function saveSingleModelRegistry(entry: ModelRegistryEntry): void {
@@ -49,7 +60,11 @@ export function saveSingleModelRegistry(entry: ModelRegistryEntry): void {
   const temporaryPath = `${path}.${process.pid}.tmp`
 
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
-  writeFileSync(temporaryPath, `${JSON.stringify(registry, null, 2)}\n`, {
+  const serializable = {
+    defaultModel: registry.defaultModel,
+    models: registry.models.map(({ effectiveProfile: _, ...model }) => model),
+  }
+  writeFileSync(temporaryPath, `${JSON.stringify(serializable, null, 2)}\n`, {
     encoding: 'utf8',
     mode: 0o600,
   })
@@ -69,7 +84,7 @@ function optionalString(value: unknown, path: string): string | undefined {
   return requiredString(value, path)
 }
 
-function parseModelEntry(value: unknown, index: number): ModelRegistryEntry {
+function parseModelEntry(value: unknown, index: number): LoadedModelRegistryEntry {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`models.${index} must be an object`)
   }
@@ -86,6 +101,8 @@ function parseModelEntry(value: unknown, index: number): ModelRegistryEntry {
     throw new Error(`models.${index}.baseUrl must use HTTP or HTTPS`)
   }
 
+  const profile = entry.profile
+  const effectiveProfile = createEffectiveModelProfile(model, profile)
   return {
     model,
     baseUrl: baseUrl.replace(/\/+$/, ''),
@@ -98,6 +115,8 @@ function parseModelEntry(value: unknown, index: number): ModelRegistryEntry {
       entry.description,
       `models.${index}.description`,
     ),
+    ...(profile === undefined ? {} : { profile }),
+    effectiveProfile,
   }
 }
 
@@ -119,11 +138,18 @@ function parseModelRegistry(value: unknown): ModelRegistry {
     }
     seen.add(entry.model)
     const profileWarning = getDefaultModelProfileWarning(entry.model)
-    if (profileWarning) console.warn(profileWarning)
+    if (profileWarning) {
+      console.warn(
+        entry.profile === undefined
+          ? profileWarning
+          : `Warning: model ${JSON.stringify(entry.model)} has no dedicated capability profile; explicit overrides are applied and all other capabilities inherit the default Qwen profile.`,
+      )
+    }
   }
   if (!seen.has(defaultModel)) {
     throw new Error(`defaultModel is not present in models: ${defaultModel}`)
   }
+  setEffectiveModelProfiles(new Map(models.map(entry => [entry.model, entry.effectiveProfile])))
   return { defaultModel, models }
 }
 

@@ -87,6 +87,16 @@ Skill 和 MCP 发现也始终锚定启动 Project，不随临时 CWD 漂移。
 
 `apiKeyEnv` 可选，默认读取 `OPENAI_API_KEY`。配置修改后重启 CLI 生效；`/model` 使用原有选择界面切换模型，并自动路由到该模型配置的地址。仓库根目录的 `models.example.json` 可作为多模型模板。
 
+单个模型可用可选的 `profile` 对象覆盖源码默认能力。覆盖按字段深合并，只允许声明已知能力；非法值会在启动时指出模型 ID 和字段路径。它不会探测 endpoint 或在请求失败时自动改参数。例如 DeepSeek endpoint 在思考模式拒绝 `tool_choice` 时，可仅对该模型关闭默认思考：
+
+```json
+"profile": {
+  "reasoning": { "enabledByDefault": false }
+}
+```
+
+可覆盖的字段为 `contextWindowTokens`、`defaultOutputTokens`、`maxOutputTokens`、`reasoning`、`chatCompletions`、`promptCache` 和 `pricing`。模型级覆盖优先于全局默认思考开关；用户显式开启或关闭思考仍以当前会话选择为准。
+
 模型能力不从 endpoint 探测，也不按名称猜测。`src/utils/model/modelProfiles.ts` 中的精确模型 ID 优先，Profile 统一声明上下文、输出上限、推理请求格式、Prompt Cache 行为和价格。未登记模型可以直接写入 `models.json`，运行时会使用复制自 Qwen 的默认 Profile（65,536 上下文、4,096 最大输出、无推理和 Prompt Cache、本地零价格），并提示正在使用默认配置、建议补充专用 Profile。需要准确能力时再增加源码 Profile 和 `scripts/validation/model-profiles.ts` 验收样例并重新构建。
 
 Profile 同时固定 Chat Completions 的输出 Token 字段、reasoning effort、temperature 兼容性、并行工具调用和严格 Schema 策略。主流式请求与内部 `sideQuery` 共用请求构造规则：Qwen/DeepSeek 当前显式使用 `max_tokens`，DeepSeek 使用可关闭的 `thinking`；未来只有登记为 OpenAI reasoning 类型的精确模型 ID 才发送 `max_completion_tokens` 和 `reasoning_effort`。项目不根据模型名称或 endpoint 响应自动切换参数。
