@@ -240,6 +240,25 @@ function removeRepeatedPrefix(state: WriteRecoveryState, fragment: string) {
   return fragment
 }
 
+/** Split a parsed string without leaving a UTF-16 surrogate pair half intact. */
+function splitRecoveryChunk(value: string, maxChars: number): string[] {
+  const chunks: string[] = []
+  for (let start = 0; start < value.length; ) {
+    let end = Math.min(start + maxChars, value.length)
+    if (
+      end < value.length &&
+      end > start &&
+      /[\uD800-\uDBFF]/.test(value.charAt(end - 1)) &&
+      /[\uDC00-\uDFFF]/.test(value.charAt(end))
+    ) {
+      end--
+    }
+    chunks.push(value.slice(start, end))
+    start = end
+  }
+  return chunks
+}
+
 /**
  * Deterministically stages complete characters from a max-token-truncated
  * Write JSON payload. Recovery control fields are never trusted here.
@@ -351,13 +370,17 @@ export function appendWriteRecoveryChunk(input: {
       `Write recovery exceeded the ${MAX_RECOVERY_CHUNKS}-chunk limit.`,
     )
   }
-  if (!input.final && chunk.length > state.suggestedChunkChars) {
+  const chunks = input.final
+    ? [chunk]
+    : splitRecoveryChunk(chunk, state.suggestedChunkChars)
+  if (state.chunks.length + chunks.length > MAX_RECOVERY_CHUNKS) {
     throw new Error(
-      `Write recovery chunk is too large (${chunk.length} characters); use at most ${state.suggestedChunkChars}.`,
+      `Write recovery exceeded the ${MAX_RECOVERY_CHUNKS}-chunk limit.`,
     )
   }
-
-  const nextBytes = state.bytes + Buffer.byteLength(chunk, 'utf8')
+  const nextBytes =
+    state.bytes +
+    chunks.reduce((total, part) => total + Buffer.byteLength(part, 'utf8'), 0)
   if (nextBytes > MAX_RECOVERY_BYTES) {
     throw new Error(
       `Write recovery exceeded the ${MAX_RECOVERY_BYTES}-byte staging limit.`,
@@ -394,7 +417,7 @@ export function appendWriteRecoveryChunk(input: {
     }
   }
 
-  state.chunks.push(chunk)
+  state.chunks.push(...chunks)
   state.chars += chunk.length
   state.bytes = nextBytes
   return {

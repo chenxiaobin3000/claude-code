@@ -191,6 +191,40 @@ assertEqual(
   '4096-token recovery chunk budget',
 )
 
+const oversizedChunkRecovery = createWriteRecovery('unregistered-local-qwen')
+const oversizedChunk = `${'a'.repeat(2149)}😀${'b'.repeat(300)}`
+const oversizedResult = appendWriteRecoveryChunk({
+  recoveryId: oversizedChunkRecovery.id,
+  filePath: 'C:\\tmp\\oversized.txt',
+  sequence: 0,
+  chunk: oversizedChunk,
+  final: false,
+})
+assert(!oversizedResult.complete, 'oversized recovery chunk committed early')
+assertEqual(
+  oversizedResult.chunkCount,
+  2,
+  'oversized recovery chunk was not deterministically split',
+)
+const oversizedStatus = getWriteRecoveryStatus(oversizedChunkRecovery.id)!
+assertEqual(
+  oversizedStatus.stagedChars,
+  oversizedChunk.length,
+  'oversized recovery chunk lost characters while splitting',
+)
+const oversizedFinal = appendWriteRecoveryChunk({
+  recoveryId: oversizedChunkRecovery.id,
+  filePath: 'C:\\tmp\\oversized.txt',
+  sequence: oversizedStatus.nextSequence,
+  chunk: '!',
+  final: true,
+})
+assert(
+  oversizedFinal.complete && oversizedFinal.content === `${oversizedChunk}!`,
+  'oversized recovery chunk did not preserve byte-exact content',
+)
+completeWriteRecovery(oversizedChunkRecovery.id)
+
 const recovery = createWriteRecovery('unregistered-local-qwen')
 assertEqual(
   recovery.truncationAttempts,
