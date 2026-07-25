@@ -64,6 +64,7 @@
 - Git 管理的 TypeScript 源码约 2,746 个文件、56 万行。
 - 当前模型主路径由 `getAPIProvider()` 固定路由至 `openai`。Anthropic 账号登录、鉴权和官方模型直连已移除；Anthropic SDK 因大量内部消息、工具和流事件调用而继续作为兼容层保留。Bedrock Provider 已于 2026-07-15 移除；Vertex 客户端、GCP 鉴权、区域配置、专用请求行为和依赖已于 2026-07-16 移除；Foundry 客户端、Azure Identity 鉴权、专用配置和依赖也已于 2026-07-16 移除。
 - 已新增统一最小验证命令 `bun run verify`，顺序覆盖锁定安装、类型检查、Lint，以及 Bun bundle、Vite/Rollup Node bundle、Windows x64 standalone EXE 三条构建链的完整性、版本、启动、单轮模型请求和 `Read` 工具调用。验证默认使用 `~/.claude/models.json` 的默认模型，也可用 `CLAUDE_CODE_VERIFY_MODEL` 显式选择注册表中的本地模型；地址始终限制为回环或私有网络，禁止误用外部付费接口。2026-07-16 使用本地 llama.cpp（Qwen3.5-9B-Q6_K，65,536 上下文）完成三构建链全矩阵复验，所有检查通过，总耗时 69.1 秒。
+- Write 工具支持最大输出 Token 截断后的确定性恢复：流处理将未完成 Write 参数标记为不可执行，原始 JSON 仅在当前内存恢复状态中短暂保留；Runtime 只提取完整字符串和转义序列，锁定路径、序号与目标快照，并按模型 Profile 暂存。恢复请求携带最近 512 个字符锚点，Runtime 去重锚点以保留换行、空格和转义边界；中间内容不落盘，最终以同目录临时文件、flush 与原子 rename 提交。连续无新增字符最多消耗 3 次恢复预算，总暂存上限 8 MiB、32 块、30 分钟 TTL；路径/快照冲突、空块和序号错误安全失败。`scripts/validation/write-truncation-recovery.ts` 已接入唯一 `bun run verify`。2026-07-25 本地 llama.cpp 的 `Qwen3.5-9B-Q6_K`（4,096 输出 Token）真实验收：首轮截断后确定性暂存 11,000 字符，恢复补齐并得到逐字符一致的 300 行、17,099 字符文件，无临时文件或 `Error normalizing tool input`；`bun run verify -- --ci` 全矩阵通过（166.7 秒）。
 - 多模型注册表已于 2026-07-15 完成：重复模型 ID 和无效默认模型会在加载时失败；同地址模型复用 OpenAI Client，不同地址使用独立 Client；旧 `OPENAI_MODEL`、`OPENAI_BASE_URL`、角色模型环境变量、模型映射和 `providers.json` 注册表已从运行链移除。类型检查、Lint、Bun 构建、Vite 构建及 Bun/Node CLI 启动验证通过。
 - 第二模型验收已于 2026-07-16 完成：通过 `https://api.deepseek.com` 调用注册模型 `deepseek-v4-flash`，单轮流式响应和受权限约束的 `Read` 工具调用均通过；凭据只从配置指定的环境变量读取，未写入模型注册表、命令输出或诊断日志。结合本地 llama.cpp 的 Qwen3.5-9B-Q6_K 验证，至少两个 OpenAI-compatible 模型完成了流式响应和工具调用验收。
 - OpenAI-compatible 模型对齐已于 2026-07-17 完成验收：注册表、精确模型 Profile、共享 Chat Completions 请求构造、工具选择、流事件、Usage 明细和协议错误分类均由 `scripts/validation` 定向覆盖；未登记模型使用固定默认 Profile 并告警，不探测 endpoint、不按名称猜测、不自动换字段或增加厂商分支。`bun run verify -- --ci` 全矩阵通过（139.0 秒）；普通 `bun run verify` 使用本地 llama.cpp 对 Bun bundle、Vite/Node bundle 和 Windows standalone EXE 分别完成真实单轮请求及 `Read` 工具调用（159.4 秒）。
@@ -215,33 +216,6 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - 单个模型条目提供合法覆盖后，模型被加载或通过 `/model` 选中时立即使用对应 Effective Profile；其他模型不受影响，重启后结果稳定一致。
 - Profile 覆盖只改变声明的本地能力配置，不请求 endpoint 验证、不根据模型名称猜测、不自动换请求字段，也不新增非 OpenAI-compatible 适配分支。
 - `bun run verify` 覆盖 Schema、合并、消费入口、三类构建、模型请求和工具调用，非法配置在真正发起模型请求前给出可定位错误。
-
-### P1：写文件工具自动拆分与截断恢复
-
-目标：当模型生成较大的 `Write` 工具调用并因最大输出 Token 截断时，自动切换到可恢复的分段写入流程，避免无效参数被归一化为 `{}` 后反复显示笼统的 `Error writing file`。
-
-- [x] 在流处理层区分普通工具参数 JSON 错误与 `stop_reason=max_tokens` 导致的未完成 `Write` 参数（2026-07-25 完成）：新增不可执行的结构化截断标记，不再归一化为 `{}`；原始未闭合参数只在当前恢复状态的内存中短暂保留，用于确定性提取完整 JSON 字符串及转义序列，不写 Transcript、诊断日志或目标文件。
-- [x] 增加受控恢复协议（2026-07-25 完成）：首轮截断时 Runtime 从未闭合 JSON 中提取完整的 `file_path` 和已生成 `content`，按 Profile 建议上限在内存中分块暂存；后续恢复请求锁定 recovery ID、目标路径和连续序号，并携带最近 512 个已暂存字符作为重叠锚点。模型重复锚点后继续输出，Runtime 确定性去重，因此换行、空格和转义边界不会丢失；最后一块到达前不修改目标文件。
-- [x] `StreamingToolExecutor` 不执行带截断标记的 Write（2026-07-25 完成）：截断 tool call 不设置 `needsFollowUp`，恢复请求删除孤立的残缺 assistant tool call；只有完整 JSON 字符串字符会被解析并暂存，未完成转义被丢弃，路径和恢复控制字段由 Runtime 锁定，不从残缺恢复参数中猜测。
-- [x] 为同一写入任务设置恢复边界（2026-07-23 完成）：最多 3 次截断、32 块、单块采用 Profile 建议上限、总暂存 8 MiB、会话内 30 分钟 TTL；空的非最终块、序号不连续、路径变化、重复 final 状态和目标快照冲突均停止。错误包含模型 ID、输出上限、阶段与建议块大小，取消、异常或会话结束由 disposable 清理恢复状态。
-- [x] 保持并收紧文件安全语义（2026-07-23 完成）：恢复首块记录目标存在性和 SHA-256 快照，最终提交前再次核对；Write/Edit 对完整读取内容始终比较而不依赖低精度 mtime。中间块仅驻留内存，最终使用同目录临时文件、flush 和原子 rename；Write/Edit 的原子失败不再回退到直接覆盖，因此不会留下零字节文件、截断原文件或覆盖并发外部修改。
-- [x] 区分错误和提供脱敏诊断（2026-07-23 完成）：非 verbose UI 将输入 Schema 错误显示为“Write parameters are incomplete”，模型上限由专用恢复/耗尽消息显示，普通文件系统失败继续显示“Error writing file”；诊断仅记录模型 ID、输出上限、恢复次数、块序号和长度限制，不记录路径、文件内容、Prompt 或凭据。
-- [x] 增加 `scripts/validation/write-truncation-recovery.ts` 并接入 `bun run verify`（2026-07-23 完成）：固定模拟流覆盖 max_tokens 截断标记、不可执行输入、普通/恢复 Schema、4,096 Token 块预算、中间块不落盘、最终逐字节提交、路径锁定、空块、跨块截断预算、外部修改冲突、严格原子回滚、临时文件清理以及生产接线防回归，不引入测试框架。
-- [x] 修复真实本地模型恢复不收敛（2026-07-25 完成）：不再依赖模型遵守 `maxLength` 主动分块；首轮已生成字符由 Runtime 确定性暂存，恢复提示使用真实尾部锚点定位断点，完整最终块可在模型输出上限内一次提交，重复前缀由 Runtime 去重。只有连续无新增字符的恢复截断才消耗最多 3 次失败预算。
-- [x] 截断标记属于预期控制流（2026-07-25 完成）：不得进入普通 `FileWriteTool.inputSchema` 归一化或执行，也不再记录 `Error normalizing tool input`；诊断只保留结构化截断、脱敏的暂存字符数、恢复次数和耗尽信息。
-
-验收标准：
-
-- 使用当前最大输出为 4,096 Token 的本地 Qwen，生成超过单次工具参数容量的文件时能够自动完成写入，不再循环产生空参数 `Write`。
-- 自动拆分后的文件内容与目标内容逐字节一致；中途失败时原文件保持不变，并给出明确、可操作的错误。
-- 普通短文件仍保持一次 `Write` 完成，不因恢复机制增加不必要的工具调用。
-- Bun bundle、Vite/Node bundle 和 Windows standalone EXE 均通过长文件写入与失败恢复冒烟，`bun run verify` 全矩阵通过。
-
-验证记录（2026-07-23）：`bun run verify --ci` 全矩阵通过（169.5 秒），包括固定 4,096 Token 截断流、逐字节恢复、冲突/回滚、17 个 workspace、Bun/Vite 构建和 Windows standalone EXE。非 CI `bun run verify` 的全部本地检查通过后，在真实模型阶段因当前验证 endpoint 为 `https://api.deepseek.com` 而按策略停止（验证器只允许本地 llama.cpp，未向外部接口发请求）；切换回本地 Qwen/llama.cpp 后仍需补做真实长文件生成验收。
-
-验收记录（2026-07-25，**未通过**）：`bun scripts/validation/write-truncation-recovery.ts` 通过；本地 llama.cpp 的 `Qwen3.5-9B-Q6_K`（65,536 上下文、4,096 最大输出）完成普通小文件真实 `Write`，工具事件、落盘内容和后续响应均正常。长文件测试首轮产生真实 `Write` tool call 并准确以 `stop_reason=max_tokens`、`output_tokens=4096` 截断，目标文件和临时文件均未创建，证明未执行残缺参数及失败不落盘有效；随后三次恢复请求均再次生成 4,096 Token 的未完成 Write 参数，没有遵守 2,150 字符建议块上限，达到恢复预算后仍未生成目标文件。同时每次结构化截断标记都会在 `messagesRuntime.ts` 记录一次 `Error normalizing tool input`。因此“真实本地 Qwen 自动完成长文件写入”和“错误路径无误报”尚未满足，本项不得移入能力基线。验收命令不得使用 `--bare`，因为 simple 模式只暴露 Bash、Read、Edit，会把 `--tools Write` 过滤为空工具集。
-
-修复后验收记录（2026-07-25，**通过**）：本地 llama.cpp 的 `Qwen3.5-9B-Q6_K` 在首轮 `Write` 达到 4,096 Token 后，Runtime 从截断 JSON 中确定性暂存 11,000 个完整字符；第二轮依据 512 字符尾部锚点补齐剩余内容并原子提交，第三轮仅返回完成确认。最终文件为严格 300 行、17,099 字符，与固定期望逐字符一致，首行为 `WRITE_RECOVERY_0001`、末行为 `WRITE_RECOVERY_0300`；最终提交前目标文件不存在，无临时文件残留，诊断中 `Error normalizing tool input` 为 0。`bun scripts/validation/write-truncation-recovery.ts`、`bun run typecheck`、`bun run lint` 均通过；`bun run verify -- --ci` 全矩阵通过（166.7 秒），覆盖 17 个 workspace、全部源验证、Bun bundle、Vite/Node bundle 和 Windows standalone EXE 的完整性、版本及启动冒烟。
 
 ### P1：排障和会话体验
 
