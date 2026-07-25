@@ -172,6 +172,7 @@ assertEqual(
 for (const invalidProfile of [
   { maxOutputTokens: 65_536 },
   { chatCompletions: { outputTokenField: 'wrong' } },
+  { chatCompletions: { toolChoice: 'wrong' } },
   { pricing: { input: -1 } },
 ]) {
   try {
@@ -265,6 +266,7 @@ const openAIReasoningProfile: ModelProfile = {
   },
   chatCompletions: {
     outputTokenField: 'max_completion_tokens',
+    toolChoice: 'openai_standard',
     parallelToolCalls: true,
     strictToolSchemas: false,
     temperature: 'unsupported_with_reasoning',
@@ -293,6 +295,42 @@ assertEqual(
   4_096,
   'OpenAI reasoning output token field',
 )
+
+const namedToolChoice = {
+  type: 'function' as const,
+  function: { name: 'Fixture' },
+}
+for (const [label, profile, shouldThrow] of [
+  ['Qwen named tool choice', getModelProfile('Qwen3.5-9B-Q6_K'), true],
+  ['OpenAI named tool choice', openAIReasoningProfile, false],
+] as const) {
+  try {
+    const request = buildOpenAIRequestBodyForProfile(
+      {
+        ...baseRequest,
+        model: 'fixture-tool-choice',
+        endpoint: 'http://127.0.0.1:8080/v1',
+        querySource: 'validation',
+        tools: [
+          {
+            type: 'function',
+            function: { name: 'Fixture', parameters: { type: 'object' } },
+          },
+        ],
+        toolChoice: namedToolChoice,
+      },
+      profile,
+    ) as Record<string, unknown>
+    if (shouldThrow) throw new Error(`${label} unexpectedly succeeded`)
+    assertDeepEqual(request.tool_choice, namedToolChoice, `${label} is preserved`)
+  } catch (error) {
+    if (!shouldThrow) throw error
+    const message = error instanceof Error ? error.message : String(error)
+    if (!message.includes('only supports string tool_choice') || !message.includes('127.0.0.1:8080')) {
+      throw new Error(`${label} returned an unclear error: ${message}`)
+    }
+  }
+}
 assertEqual(
   openAIReasoningRequest.max_tokens,
   undefined,

@@ -333,6 +333,8 @@ async function sideQueryViaOpenAICompatible(
     messages: openaiMessages,
     tools: openaiTools ?? [],
     toolChoice: openaiToolChoice,
+    endpoint: target.baseUrl,
+    querySource: opts.querySource,
     thinkingConfig:
       thinking === false
         ? { type: 'disabled' }

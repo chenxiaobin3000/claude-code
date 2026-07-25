@@ -5,7 +5,12 @@
       "model": "Qwen3.5-9B-Q6_K",
       "baseUrl": "http://127.0.0.1:8080/v1",
       "displayName": "Qwen 3.5 9B",
-      "description": "Local llama.cpp model"
+      "description": "Local llama.cpp model",
+      "profile": {
+        "chatCompletions": {
+          "toolChoice": "strings_only"
+        }
+      }
     },
     {
       "model": "deepseek-v4-flash",
@@ -15,6 +20,9 @@
       "profile": {
         "reasoning": {
           "enabledByDefault": false
+        },
+        "chatCompletions": {
+          "toolChoice": "openai_standard"
         }
       }
     }

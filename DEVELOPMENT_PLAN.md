@@ -37,7 +37,7 @@
 - 不规划任何非 OpenAI-compatible 协议的专用模型接入。
 - OpenAI-compatible 请求失败统一分类为鉴权、限流、上下文、模型不存在、网络、超时、路由、请求字段、响应结构、服务端和未知错误；路由/字段/JSON/SSE 不兼容必须明确指出协议边界，不允许自动删字段重试、备用路由或厂商专用适配分支。
 - 2026-07-17 协议错误分类完成验收：`bun run verify -- --ci` 的静态检查、18 个 workspace、轻量验证和三类构建产物全部通过（120.4 秒）；普通 `bun run verify` 使用本地 llama.cpp 对 Bun bundle、Vite/Node bundle 和 Windows standalone EXE 分别完成真实流式单轮请求及 `Read` 工具调用（145.1 秒），新增响应结构守卫未误判实际 SSE。
-- Chat Completions 参数契约由精确模型 Profile 固定：输出字段只能是 `max_tokens` 或 `max_completion_tokens`，推理只能是无推理、DeepSeek `thinking` 或 OpenAI `reasoning_effort`，并显式声明 temperature、并行工具调用和严格 Schema 策略。主请求与 `sideQuery` 复用同一构造规则；`thinkingConfig` 和适用模型的 `effortValue` 必须进入请求，禁止根据错误响应动态换字段。
+- Chat Completions 参数契约由精确模型 Profile 固定：输出字段只能是 `max_tokens` 或 `max_completion_tokens`，推理只能是无推理、DeepSeek `thinking` 或 OpenAI `reasoning_effort`，并显式声明 `tool_choice` 形态、temperature、并行工具调用和严格 Schema 策略。`strings_only` 模型只能发送字符串形式的工具选择，`openai_standard` 模型才可发送指定函数的对象；对象不兼容时在本地带模型与 endpoint 清晰失败，禁止静默改为 `auto` 或根据错误响应重试。主请求与 `sideQuery` 复用同一构造规则；`thinkingConfig` 和适用模型的 `effortValue` 必须进入请求，禁止根据错误响应动态换字段；思考开关不影响 `tool_choice` 形态。2026-07-26 验收：`scripts/validation/model-profiles.ts` 覆盖两种能力、非法覆盖与对象预检；`bun run verify -- --ci` 通过（162.3 秒），本地 llama.cpp 的 `Qwen3.5-9B-Q6_K` 完整 `bun run verify` 通过（173.1 秒），三条产物的普通单轮请求与 `Read` 工具调用均成功。
 - 流适配必须保留 text/refusal/reasoning、交错并行工具参数、停止原因和 Usage 明细；无 `finish_reason`、遗留 `function_call`、无函数名或无效 JSON 属于协议错误。内部 Usage 保留 raw input、cache read/write、reasoning、total 和完整性标记；`completion_tokens` 包含 reasoning token，不得重复计费，缺少尾部 Usage 时必须明确记录不完整。
 
 ### 2.3 已知工程状态
@@ -197,21 +197,6 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - 失败时能定位 Provider、模型注册与解析、鉴权或流解析阶段。
 
 ## 6. 后续开发路线图
-
-### P1：llama.cpp 工具选择兼容性
-
-目标：通过模型 Profile 显式声明 llama.cpp 的 Chat Completions `tool_choice` 参数能力，避免向只接受字符串的 endpoint 发送对象形式；不增加厂商专用 Provider 或基于错误响应的自动重试。
-
-- [ ] 在 `ModelProfile.chatCompletions` 增加 `toolChoice` 形态能力（至少区分仅字符串与字符串/对象），由 `models.json` 的 Profile 覆盖沿用现有深合并和加载期校验。
-- [ ] 为当前 llama.cpp/Qwen 专用 Profile 明确声明仅支持字符串；请求构造在需要对象形式的强制工具选择时，于发请求前给出包含模型 ID、endpoint 和不兼容字段的清晰错误，常规 `auto`/`none` 保持字符串发送。
-- [ ] 不把该限制与推理模式混为一谈：是否启用 Qwen 思考仍只由 `reasoning` Profile 和会话设置决定；关闭思考不得作为 `tool_choice` 类型不兼容的规避手段。
-- [ ] 扩展 `scripts/validation/model-profiles.ts` 与 OpenAI 请求构造验证，覆盖字符串能力、对象能力、非法覆盖、对象形式的预检失败和普通工具调用的请求字段。
-
-验收标准：
-
-- llama.cpp 不再出现“Expected 'string' … tool_choice … is object”的服务端警告。
-- 支持对象形式 `tool_choice` 的模型仍可保留精确强制工具选择；不支持的模型不静默降级为 `auto`。
-- `bun run verify -- --ci` 通过；本地 llama.cpp 对普通工具调用的真实验证通过。
 
 ### P1：排障和会话体验
 

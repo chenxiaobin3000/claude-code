@@ -18,6 +18,7 @@ export type OpenAIReasoningEffort =
 
 export type ModelChatCompletionsProfile = {
   outputTokenField: 'max_tokens' | 'max_completion_tokens'
+  toolChoice: 'strings_only' | 'openai_standard'
   parallelToolCalls: boolean
   strictToolSchemas: boolean
   temperature: 'supported' | 'unsupported_with_reasoning'
@@ -70,6 +71,7 @@ export const DEFAULT_MODEL_PROFILE: ModelProfile = {
   reasoning: { type: 'none' },
   chatCompletions: {
     outputTokenField: 'max_tokens',
+    toolChoice: 'strings_only',
     parallelToolCalls: false,
     strictToolSchemas: false,
     temperature: 'supported',
@@ -100,6 +102,7 @@ export const MODEL_PROFILES = {
     reasoning: { type: 'deepseek', enabledByDefault: true },
     chatCompletions: {
       outputTokenField: 'max_tokens',
+      toolChoice: 'openai_standard',
       parallelToolCalls: false,
       strictToolSchemas: false,
       temperature: 'unsupported_with_reasoning',
@@ -228,7 +231,7 @@ export function createEffectiveModelProfile(
   let chatCompletions = base.chatCompletions
   if (override.chatCompletions !== undefined) {
     if (!isRecord(override.chatCompletions)) profileError(model, 'chatCompletions', 'must be an object')
-    assertKnownKeys(override.chatCompletions, ['outputTokenField', 'parallelToolCalls', 'strictToolSchemas', 'temperature'], model, 'chatCompletions')
+    assertKnownKeys(override.chatCompletions, ['outputTokenField', 'toolChoice', 'parallelToolCalls', 'strictToolSchemas', 'temperature'], model, 'chatCompletions')
     chatCompletions = { ...base.chatCompletions, ...override.chatCompletions }
   }
   let promptCache = base.promptCache
@@ -262,6 +265,7 @@ export function createEffectiveModelProfile(
   }
   if (profile.defaultOutputTokens > profile.maxOutputTokens || profile.maxOutputTokens >= profile.contextWindowTokens) profileError(model, 'tokens', 'must satisfy defaultOutputTokens <= maxOutputTokens < contextWindowTokens')
   if (!['max_tokens', 'max_completion_tokens'].includes(profile.chatCompletions.outputTokenField)) profileError(model, 'chatCompletions.outputTokenField', 'is invalid')
+  if (!['strings_only', 'openai_standard'].includes(profile.chatCompletions.toolChoice)) profileError(model, 'chatCompletions.toolChoice', 'is invalid')
   if (!['supported', 'unsupported_with_reasoning'].includes(profile.chatCompletions.temperature)) profileError(model, 'chatCompletions.temperature', 'is invalid')
   if (profile.pricing) {
     if (profile.pricing.currency !== 'USD' || profile.pricing.perTokens !== 1_000_000) profileError(model, 'pricing', 'must use USD per 1,000,000 tokens')

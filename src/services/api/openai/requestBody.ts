@@ -22,6 +22,8 @@ type CommonRequestParams = {
   messages: ChatCompletionMessageParam[]
   tools: ChatCompletionTool[]
   toolChoice?: ChatCompletionToolChoiceOption
+  endpoint?: string
+  querySource?: string
   thinkingConfig?: ThinkingConfig
   effortValue?: EffortValue
   maxTokens: number
@@ -95,6 +97,25 @@ function buildCommonRequestBody(
   params: CommonRequestParams,
   profile: ModelProfile = getModelProfile(params.model),
 ): Record<string, unknown> {
+  if (
+    params.toolChoice !== undefined &&
+    typeof params.toolChoice !== 'string' &&
+    profile.chatCompletions.toolChoice === 'strings_only'
+  ) {
+    let endpoint = 'the configured endpoint'
+    if (params.endpoint) {
+      try {
+        const url = new URL(params.endpoint)
+        endpoint = url.origin
+      } catch {
+        // The registry validates endpoints separately; never expose a raw URL here.
+      }
+    }
+    const source = params.querySource ? ` for ${params.querySource}` : ''
+    throw new Error(
+      `OpenAI compatibility error: model ${params.model} at ${endpoint} only supports string tool_choice values; a named-tool object was required${source}. Use an endpoint with OpenAI-standard tool_choice support, or explicitly set profile.chatCompletions.toolChoice to "openai_standard" only after confirming that support.`,
+    )
+  }
   const reasoningEffort = resolveReasoningEffort(
     profile,
     params.thinkingConfig,

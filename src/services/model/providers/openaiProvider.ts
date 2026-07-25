@@ -114,6 +114,8 @@ export const openAIProvider: ModelProvider = {
           messages,
           tools,
           toolChoice,
+          endpoint: target.baseUrl,
+          querySource: request.options.querySource,
           thinkingConfig: request.thinkingConfig,
           effortValue,
           maxTokens: maxOutputTokens,

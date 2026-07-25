@@ -99,7 +99,7 @@ Skill 和 MCP 发现也始终锚定启动 Project，不随临时 CWD 漂移。
 
 模型能力不从 endpoint 探测，也不按名称猜测。`src/utils/model/modelProfiles.ts` 中的精确模型 ID 优先，Profile 统一声明上下文、输出上限、推理请求格式、Prompt Cache 行为和价格。未登记模型可以直接写入 `models.json`，运行时会使用复制自 Qwen 的默认 Profile（65,536 上下文、4,096 最大输出、无推理和 Prompt Cache、本地零价格），并提示正在使用默认配置、建议补充专用 Profile。需要准确能力时再增加源码 Profile 和 `scripts/validation/model-profiles.ts` 验收样例并重新构建。
 
-Profile 同时固定 Chat Completions 的输出 Token 字段、reasoning effort、temperature 兼容性、并行工具调用和严格 Schema 策略。主流式请求与内部 `sideQuery` 共用请求构造规则：Qwen/DeepSeek 当前显式使用 `max_tokens`，DeepSeek 使用可关闭的 `thinking`；未来只有登记为 OpenAI reasoning 类型的精确模型 ID 才发送 `max_completion_tokens` 和 `reasoning_effort`。项目不根据模型名称或 endpoint 响应自动切换参数。
+Profile 同时固定 Chat Completions 的输出 Token 字段、`tool_choice` 形态、reasoning effort、temperature 兼容性、并行工具调用和严格 Schema 策略。`chatCompletions.toolChoice` 可为 `strings_only`（仅 `auto`、`none`、`required`）或 `openai_standard`（也允许指定函数的对象）；默认与本地 llama.cpp/Qwen 使用前者，DeepSeek 使用后者。主流式请求与内部 `sideQuery` 共用请求构造规则：对仅支持字符串的模型，指定某个工具会在本地给出兼容性错误，绝不静默改成 `auto` 或把对象发给 endpoint。Qwen 是否思考与此独立；DeepSeek 使用可关闭的 `thinking`。未来只有登记为 OpenAI reasoning 类型的精确模型 ID 才发送 `max_completion_tokens` 和 `reasoning_effort`。项目不根据模型名称或 endpoint 响应自动切换参数。
 
 流适配覆盖文本、refusal、`reasoning_content`、交错并行 `tool_calls`、主要 `finish_reason` 和尾部 Usage；缺少结束原因、遗留 `function_call`、无函数名或无效工具 JSON 会作为协议错误退出。Usage 保留原始输入、缓存命中/写入、reasoning、总 Token 和最终块完整性；`completion_tokens` 已包含 reasoning token，成本不会重复计算。Chat Completions 工具 Schema 维持非严格模式，只有模型 Profile 和全部工具 Schema 同时完成严格模式验收后才能启用。
 
