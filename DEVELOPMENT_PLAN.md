@@ -197,38 +197,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 ## 6. 后续开发路线图
 
-### P0：权限、Sandbox 和 Worktree 安全
-
-目标：优先补齐最新版最重要的安全差异。
-
-- [x] 审计 Bash、PowerShell 命令解析与权限分类（2026-07-19 完成源码级审计；2026-07-22 完成 Bash 审计问题整改和危险操作权限升级）。PowerShell 使用原生 AST，并对解析失败、动态命令名、别名/模块前缀、Unicode 参数前缀、脚本块、子表达式、Splatting、`--%`、Provider/UNC、嵌套 PowerShell、`Start-Process`、WMI/CIM、模块加载和路径变化做了专项处理。Bash 已将 Tree-sitter 兼容 AST 固化为无条件权威入口，完整权限链对解析不可用、资源限制、未知节点和语义拒绝统一返回 `ask`；显式 deny 仍优先，allow、Sandbox、模式、只读和 classifier 均不能覆盖失败关闭结果。危险 Git、文件删除、磁盘、数据库和基础设施操作已由解析后的命令与参数进入不可持久化权限约束，不再依赖展示层正则。
-- [x] 将 Bash Tree-sitter 权威解析路径升为稳定默认能力（2026-07-22 完成）：补齐与真实 Bash/Git Bash 的差分样例，覆盖解析不可用、超长、超时、节点预算、未知 AST 节点和语义拒绝；任何无法证明为简单命令的输入均返回 `ask`，不回落到更宽松的自动允许路径。已删除仅用于 Shadow/GrowthBook 的分支和安全决策链中的重复遗留解析层，仅保留解析失败直接审批的最小故障兜底。
-  - [x] 阶段一（2026-07-22）：新增 `bash-authoritative-parser.ts`，使用真实 Bash/Git Bash 校验语法与 argv 差分，并对解析不可用、超长、确定性超时、节点预算、未知 AST 节点、解析中止和语义拒绝执行完整 `bashToolHasPermission` 验证；确认即使存在精确 allow 也返回 `ask`，不生成持久 allow 建议或 classifier 自动批准，同时保留显式 deny 优先。
-  - [x] Windows Bash 发现修复（2026-07-22）：保持显式覆盖、PATH、Git 推导和默认位置的既有优先级，不按路径名称写死排除候选；每一级按原顺序对全部候选执行真实 Bash 标记命令和当前 Windows cwd 兼容性探测，第一个可用候选生效，不可用则继续，全部失败才报错。生产发现与 `bash-authoritative-parser.ts` 共用同一入口，固定覆盖高优先级候选不可用、PATH 后续候选、Git 推导、无效显式覆盖和全部失败场景；本机无临时覆盖时从不可用候选继续选中 `D:\AI\Git\bin\bash.exe`，`bun run verify -- --ci` 全矩阵通过（131.3 秒）。
-  - [x] 阶段二（2026-07-22）：将权威 AST 路径改为无条件稳定默认，移除 Shadow、GrowthBook killswitch 和关闭注入检查的环境变量入口。
-  - [x] 阶段三（2026-07-22）：权限、只读、路径、Sandbox、sed 与 operator 共享 AST/argv；安全决策链不再使用 `shell-quote`、正则或字符串拆分作为权威 fallback，解析失败只会直接进入 `ask`。
-- [x] 收紧 `CLAUDE_CODE_DISABLE_COMMAND_INJECTION_CHECK`（2026-07-22 随 Bash 权威解析整改完成）：已删除该关闭入口，并由验证脚本防止其在权限主链中恢复。
-- [x] 将危险操作从“UI 提示”提升为权限分类约束（2026-07-22 完成）。共享分类器直接消费 Bash AST argv 或 PowerShell 原生 AST 命令/参数，覆盖 `git reset --hard`、强制 clean、`checkout/restore -- .`、stash 删除、分支强删、强制 push、危险 `rm`/`Remove-Item`、`Clear-Disk`、`Format-Volume`、Terraform destroy、kubectl delete，以及数据库 DROP/TRUNCATE/无 WHERE DELETE。危险结果使用结构化 `destructiveOperation` 原因，优先于精确/宽泛 allow、Accept Edits、Sandbox、classifier、auto 和 bypass，且不提供持久授权入口；关键路径硬拒绝优先于显式 deny，普通危险审批低于显式 deny。原 Bash/PowerShell 展示层正则已删除，UI 只展示权限分类结果。`destructive-permissions.ts` 已覆盖复合命令、PowerShell 嵌套命令/别名/Unicode 参数、dry-run 反例、SQL 字面量/CTE、关键路径和完整权限模式。
-- [x] 统一 Bash 与 PowerShell 决策优先级（2026-07-22 完成）：新增共用 `shellDecision.ts`，固定为硬安全拒绝 > 显式 deny > 不可绕过安全审批 > 显式 ask > 精确 allow > 受约束的模式/只读自动允许 > 默认 ask。通用权限入口对 Shell 先执行完整专用检查，再归并工具级 deny/ask/allow，`Bash(*)`、`PowerShell(*)`、bypass、Sandbox 和模式允许均不能提前短路安全结果。Bash 管道、控制流和每个子命令改为先收集后归并，原始重定向与段结果共同检查；`command` 等包装器和 `$()`、反引号、`eval`、嵌套 shell 只执行保守 deny 扫描，不参与自动允许。PowerShell 原有 collect-then-reduce 已切换到共用等级，覆盖别名、模块限定名、调用运算符、嵌套命令、路径型可执行文件和解析失败降级，系统关键路径删除使用结构化 `hard-deny`。完整判定覆盖已统一到 `shell-permission-matrix.ts` 并入 `bun run verify`；普通 `bun run verify` 使用本地 llama.cpp 对三类产物完成真实请求和 `Read` 工具调用（145.9 秒）。
-- [x] 完整 Shell 权限决策矩阵（2026-07-23 完成）：新增 `shell-permission-matrix.ts`，直接调用 `bashToolHasPermission` 和 `powershellToolHasPermission`，使用固定 `ToolUseContext`、规则集合、cwd 和预期 `allow`/`ask`/`deny` 判定，不引入测试框架。Bash 覆盖包装器、管道/控制符、命令/进程替换、变量、`eval`/`source`/嵌套 shell、heredoc、重定向、控制字符、Unicode、超过 50 个子命令、cwd 变化和符号链接；PowerShell 覆盖别名和模块前缀、动态调用、EncodedCommand、`Invoke-Expression`、`Start-Process`、脚本块、Splatting、Provider/UNC、Unicode dash、`--%`、变量路径、cwd 变化和链接创建。脚本已并入唯一入口 `bun run verify`：Linux 强制验证无 PowerShell 时的安全降级，Windows 分别使用真实 PowerShell 5.1/7 AST；CI 缺少任一 Windows 版本即失败。定向矩阵、类型检查和 Biome 均通过，最终 `bun run verify -- --ci` 全矩阵通过（148.2 秒）。
-- [x] 增加 `sandbox.credentials`（2026-07-23 完成）：配置默认关闭，显式启用后以硬拒绝保护常见 `.env`、SSH、云平台、包管理器和私钥文件，并支持追加文件/环境变量模式；Read/Glob/Grep 在应用层拒绝或隐藏凭据路径，Sandbox Runtime 合并不可被 `allowRead` 覆盖的 `denyRead`，Bash/PowerShell 在 Provider 和 session 环境覆盖完成后裁剪秘密变量，主进程模型 Provider、MCP 和 Hook 不受影响。凭据保护不允许非 Sandbox Shell，Sandbox 不可用时按强制策略退出；`sandbox-credentials.ts` 已并入统一 `bun run verify`，定向验证、TypeScript、Biome 及最终 `bun run verify -- --ci` 全矩阵通过（154.6 秒）。
-- [x] 对齐官方 `Tool(specifier)` 权限规则（2026-07-23 完成）：建立工具专用 specifier 契约，统一登记 Bash/PowerShell 命令通配、Read/Edit/Write/Glob/Notebook 路径模式、WebFetch `domain:`、Agent/Skill 名称以及 MCP 工具名通配；不提供任意工具 JSON 参数的通用 `param:value` 匹配。PowerShell 已纳入大小写不敏感的 Shell 规则类型；WebFetch 域名通配按单个 DNS 标签匹配，不能跨标签、匹配根域或伪造后缀，显式 deny/ask 优先于内置预批准站点；Agent 的名称 specifier 仅接受精确名称，通用 `Tool(*)` 仍按官方规则等价于整个工具，MCP 继续只接受 `mcp__server__*` 工具名形式。畸形括号、尾随内容、非法域名/通配和不受支持的工具规则在加载时告警并跳过，旧 Bash/PowerShell `:*` 尾部前缀语法继续兼容。`tool-permissions.ts` 已覆盖解析/序列化、exact/prefix/wildcard、转义、大小写、工具契约、非法规则、WebFetch 运行时接线和规则优先级。
-- [x] 验证 Worktree Agent 无法修改主工作区（2026-07-23 完成）：`runAgent` 在同步、异步和 resume 路径为 worktree Agent 注入 `writeIsolationRoot`，文件写权限在内部路径、模式、继承 allow、附加目录和 bypass 之前强制检查词法路径与符号链接真实目标，worktree 内相对写入按隔离根判定，主 checkout 绝对路径和指回主目录的链接均硬拒绝。Bash/PowerShell 基于解析后的 argv 硬拒绝 `git -C`、`--work-tree`、`--git-dir` 指向隔离根外以及 `git worktree` 管理命令，宽泛 Shell allow 和 bypass 不能覆盖；普通 `git status/add/commit` 仍在 Agent cwd 中运行。新增 `worktree-agent-isolation.ts` 使用真实临时 Git 仓库和 linked worktree，验证 Agent 的 cwd、文件修改、提交和分支只落在独立 worktree，主 checkout 内容、HEAD 与 status 保持不变，并覆盖符号链接、并发 Agent AsyncLocalStorage cwd 隔离和生产接线防回归。
-- [x] 验证符号链接、目录切换、后台命令不会绕过写入边界（2026-07-23 完成）：Worktree Agent 的 Bash/PowerShell 权限检查基于权威 AST 按执行顺序跟踪 `cd`、`pushd`、`Set-Location` 和 `Push-Location`，对输出重定向及已知写命令目标复用链接链/最深既有祖先解析，真实落点越出隔离根即硬拒绝；动态目录栈、解析失败、未知写参数、嵌套 Shell 执行均按不可证明安全处理。显式 `run_in_background`、Bash `&`、`nohup`、PowerShell Job/`Start-Process` 被拒绝，运行层同时关闭 worktree Agent 的超时自动后台化、Ctrl+B 注册和中断转后台路径。真实 linked worktree 验证覆盖绝对路径、指回主 checkout 的 junction/symlink、目录切换后相对写入、直接写命令、重定向、嵌套 Shell 与后台入口，并确认宽泛 `Bash(*)`/`PowerShell(*)` 和 `bypassPermissions` 无法覆盖硬边界。
-- [x] 跨 Session 消息默认不继承用户权限（2026-07-23 完成）：为 UDS/pipe 跨 Session 消息增加不可伪造的内部来源标记，QueryEngine 将来源写入当前用户轮次；权限主入口在该轮次内强制关闭 bypass、Accept Edits、auto 等会继承当前用户权限的模式，并把所有仍需询问的结果收紧为 deny，同时保留接收端本地明确配置的 allow 和内置安全工具。跨 Session `permission_request` 不再转发到主会话审批，而是由接收端直接拒绝；工具结果不会清除来源边界，下一条本地用户消息会恢复本地权限语义。`cross-session-authority.ts` 已覆盖交互/非交互接线、消息转义、模式隔离、本地显式规则及权限请求拒绝。
-- [x] 对未知或无效权限规则启动时告警（2026-07-23 完成）：设置加载阶段逐条过滤畸形语法、非法 specifier、非字符串规则以及 allow/ask 工具名通配并保留可定位告警，避免单条错误使整个设置文件失效；运行时工具注册完成后审计未知精确 deny 工具名，规则继续保留以维持 fail-safe，但交互模式显示设置告警、非交互模式写入 stderr。MCP 工具名和 deny 工具名 glob 不误报；`tool-permissions.ts` 固定验证过滤、保留、未知规则识别和两类启动接线。
-
-验收标准：
-
-- 默认构建的 Bash 权限判定使用已验收的 AST 路径；解析器不可用、被攻击性输入耗尽预算或遇到未知结构时只能拒绝自动允许，不存在关闭注入检查后扩大权限的环境变量路径。
-- Bash 与 PowerShell 的固定恶意样例矩阵逐项证明 deny 优先、危险操作不可被宽泛规则静默放行、路径/重定向/嵌套命令无法绕过分类；Windows 同时验证 PowerShell 5.1 和 PowerShell 7 的真实 AST，跨平台 CI 验证无 PowerShell 时的安全降级。
-- 隔离 Agent 的 Git 写操作只能影响自己的工作树。
-- 未经明确授权，模型不能读取凭据或执行破坏性命令。
-- Bash 和 PowerShell 对相同危险操作给出一致决策。
-
-最终验收（2026-07-25）：上述 P0 验收项已由 `bash-authoritative-parser.ts`、`shell-permission-matrix.ts`、`destructive-permissions.ts`、`sandbox-credentials.ts`、`tool-permissions.ts`、`worktree-agent-isolation.ts` 和 `cross-session-authority.ts` 覆盖，并已接入统一 `bun run verify --ci`。最新完整 CI 验证通过；P0 作为基线能力完成，不再保留“需专项审计”的未完成状态。
-
-### P1：模型 Profile 配置覆盖
+### P0：模型 Profile 配置覆盖
 
 目标：保留源码内稳定、可验收的模型默认能力，同时允许用户在加载 `models.json` 时为单个模型显式覆盖已知 Profile 字段，不引入 endpoint 探测、名称猜测或厂商专用分支。
 
