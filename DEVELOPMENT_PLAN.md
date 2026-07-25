@@ -33,7 +33,7 @@
 - 模型注册表入口：`src/utils/model/modelRegistry.ts`；`/model` 直接展示注册表中的模型。
 - 模型查询入口：`src/services/model/query.ts`；`src/services/api/claude.ts` 仅保留兼容重导出。
 - OpenAI-compatible Provider：`src/services/model/providers/openaiProvider.ts`；协议结果编排位于 `src/services/api/openai/index.ts`。
-- 模型能力统一由 `src/utils/model/modelProfiles.ts` 显式硬编码，不在启动时请求 endpoint 探测能力，也不根据响应或名称相似度猜测能力。区分大小写的完整模型 ID 优先匹配专用 Profile；未登记模型统一使用复制自 Qwen 的显式默认 Profile（65,536 上下文、4,096 最大输出、无推理和 Prompt Cache、本地零价格），加载时必须警告正在使用默认配置并建议增加专用 Profile。当前专用登记 `Qwen3.5-9B-Q6_K` 与 `deepseek-v4-flash`；无法确认的 DeepSeek Cache 价格保持 `null`，不借用其他模型价格。`models.json` 只负责模型、地址、凭据引用及展示信息。
+- 模型能力统一由 `src/utils/model/modelProfiles.ts` 显式硬编码，不在启动时请求 endpoint 探测能力，也不根据响应或名称相似度猜测能力。区分大小写的完整模型 ID 优先匹配专用 Profile；未登记模型统一使用复制自 Qwen 的显式默认 Profile（65,536 上下文、4,096 最大输出、无推理和 Prompt Cache、本地零价格），加载时必须警告正在使用默认配置并建议增加专用 Profile。当前专用登记 `Qwen3.5-9B-Q6_K` 与 `deepseek-v4-flash`；无法确认的 DeepSeek Cache 价格保持 `null`，不借用其他模型价格。`models.json` 条目可选 `profile` 对象按现有 Profile 字段覆盖上下文、输出、推理、Chat Completions、Cache 与价格；加载时基于专用或默认 Profile 字段级深合并为不可变 Effective Profile，严格校验 Token 关系、枚举、Cache 和价格。覆盖非法时必须带模型 ID、JSON 路径和原因终止加载，不能静默修正；覆盖只改变本地声明能力，不引入 endpoint 探测、自动换字段或厂商专用分支。上下文压缩、状态栏、请求、Usage、价格和诊断统一使用 Effective Profile；诊断仅记录覆盖字段名和非敏感摘要。`scripts/validation/model-profiles.ts` 已覆盖基准/未知模型、部分深合并、非法覆盖、重复模型 ID 与模型切换隔离，2026-07-25 `bun run verify -- --ci` 通过。
 - 不规划任何非 OpenAI-compatible 协议的专用模型接入。
 - OpenAI-compatible 请求失败统一分类为鉴权、限流、上下文、模型不存在、网络、超时、路由、请求字段、响应结构、服务端和未知错误；路由/字段/JSON/SSE 不兼容必须明确指出协议边界，不允许自动删字段重试、备用路由或厂商专用适配分支。
 - 2026-07-17 协议错误分类完成验收：`bun run verify -- --ci` 的静态检查、18 个 workspace、轻量验证和三类构建产物全部通过（120.4 秒）；普通 `bun run verify` 使用本地 llama.cpp 对 Bun bundle、Vite/Node bundle 和 Windows standalone EXE 分别完成真实流式单轮请求及 `Read` 工具调用（145.1 秒），新增响应结构守卫未误判实际 SSE。
@@ -198,24 +198,20 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 ## 6. 后续开发路线图
 
-### P0：模型 Profile 配置覆盖
+### P1：llama.cpp 工具选择兼容性
 
-目标：保留源码内稳定、可验收的模型默认能力，同时允许用户在加载 `models.json` 时为单个模型显式覆盖已知 Profile 字段，不引入 endpoint 探测、名称猜测或厂商专用分支。
+目标：通过模型 Profile 显式声明 llama.cpp 的 Chat Completions `tool_choice` 参数能力，避免向只接受字符串的 endpoint 发送对象形式；不增加厂商专用 Provider 或基于错误响应的自动重试。
 
-- [x] 扩展 `models.json` 单模型条目 Schema，允许以可选 `profile` 对象按 `ModelProfile` 的现有字段名提供覆盖，包括上下文窗口、默认/最大输出 Token、推理参数、Chat Completions 参数契约、Prompt Cache 和价格；地址、模型 ID、凭据引用及展示字段保持现有语义。
-- [x] 模型注册表加载每个条目时先按区分大小写的完整模型 ID 选择源码专用 Profile；未登记模型仍选择 `DEFAULT_MODEL_PROFILE`。随后只用该条目中明确存在的字段覆盖基础 Profile，缺失字段继续继承基础值，并生成本次会话使用的不可变 Effective Profile。
-- [x] 嵌套配置采用字段级深合并，禁止一个局部覆盖意外清空 `reasoning`、`chatCompletions`、`promptCache` 或 `pricing` 的其他必需字段；显式 `null` 只允许用于 Schema 本来允许为空的价格项，不得等同于“未配置”。
-- [x] 加载时统一验证 `contextWindowTokens > 0`、`defaultOutputTokens > 0`、`defaultOutputTokens <= maxOutputTokens < contextWindowTokens`、枚举值、推理参数、输出 Token 字段、Cache 能力和非负价格。任一覆盖非法时必须带模型 ID、JSON 字段路径和原因终止加载，不得静默回退或自动修正。
-- [x] `getModelProfile()`、上下文压缩、状态栏、请求构造、Usage/价格计算和诊断摘要统一读取注册表加载出的 Effective Profile；同一模型条目的 Profile 与 endpoint、凭据一起完成加载和切换，不另设第二套配置文件或延迟能力探测。
-- [x] 未登记且没有覆盖的模型继续使用固定默认 Profile并给出原有建议提示；未登记但提供部分覆盖时，提示“其余能力仍继承默认 Profile”；已登记模型存在覆盖时，诊断信息只记录覆盖字段名和最终非敏感能力摘要，不记录凭据或完整配置内容。
-- [x] 扩展 `scripts/validation/model-profiles.ts` 和模型注册表轻量验证，覆盖专用 Profile 无覆盖、未知模型无覆盖、专用/未知模型部分覆盖、嵌套深合并、非法 Token 关系、非法枚举、重复模型 ID、模型切换隔离以及构建链编译覆盖。
+- [ ] 在 `ModelProfile.chatCompletions` 增加 `toolChoice` 形态能力（至少区分仅字符串与字符串/对象），由 `models.json` 的 Profile 覆盖沿用现有深合并和加载期校验。
+- [ ] 为当前 llama.cpp/Qwen 专用 Profile 明确声明仅支持字符串；请求构造在需要对象形式的强制工具选择时，于发请求前给出包含模型 ID、endpoint 和不兼容字段的清晰错误，常规 `auto`/`none` 保持字符串发送。
+- [ ] 不把该限制与推理模式混为一谈：是否启用 Qwen 思考仍只由 `reasoning` Profile 和会话设置决定；关闭思考不得作为 `tool_choice` 类型不兼容的规避手段。
+- [ ] 扩展 `scripts/validation/model-profiles.ts` 与 OpenAI 请求构造验证，覆盖字符串能力、对象能力、非法覆盖、对象形式的预检失败和普通工具调用的请求字段。
 
 验收标准：
 
-- 不修改 `models.json` 时，`Qwen3.5-9B-Q6_K`、`deepseek-v4-flash` 和未知模型的行为与当前基线完全一致。
-- 单个模型条目提供合法覆盖后，模型被加载或通过 `/model` 选中时立即使用对应 Effective Profile；其他模型不受影响，重启后结果稳定一致。
-- Profile 覆盖只改变声明的本地能力配置，不请求 endpoint 验证、不根据模型名称猜测、不自动换请求字段，也不新增非 OpenAI-compatible 适配分支。
-- `bun run verify` 覆盖 Schema、合并、消费入口、三类构建、模型请求和工具调用，非法配置在真正发起模型请求前给出可定位错误。
+- llama.cpp 不再出现“Expected 'string' … tool_choice … is object”的服务端警告。
+- 支持对象形式 `tool_choice` 的模型仍可保留精确强制工具选择；不支持的模型不静默降级为 `auto`。
+- `bun run verify -- --ci` 通过；本地 llama.cpp 对普通工具调用的真实验证通过。
 
 ### P1：排障和会话体验
 
@@ -300,7 +296,6 @@ standalone EXE 构建与完整性检查。
 以下能力应单独评估，不作为核心兼容阻塞项：
 
 - [ ] 验收内置 `claude-in-chrome`：确认 `--chrome`、`CLAUDE_CODE_ENABLE_CFC=true` 和 `claudeInChromeDefaultEnabled` 三种显式入口能够在重启后加载同一套进程内 MCP；Chrome Native Messaging Host 与扩展连接成功，`/mcp` 正确显示 `claude-in-chrome` 状态，并至少完成标签页上下文读取、页面导航、点击、输入、截图和控制台日志读取。扩展未安装、Native Host 注册失败或连接断开时必须给出可定位错误并安全退出或降级，未启用时不得注册 Host、启动 MCP 或产生浏览器副作用。Bun bundle、Vite/Node bundle 和 Windows standalone EXE 均需通过启用/禁用启动冒烟；不得恢复已移除的第三方 `mcp-chrome`、固定本地 HTTP 地址或 Bridge 依赖。
-- [ ] VS Code 插件：提供会话交互、代码上下文传递、Diff 预览与权限确认，并通过稳定的公开协议连接 CLI，避免与编辑器进程内实现强耦合。
 
 ## 7. 推荐实施顺序
 
