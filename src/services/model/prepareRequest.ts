@@ -41,6 +41,16 @@ export async function prepareTools(
   tools: Tools,
   options: ModelQueryOptions,
 ): Promise<PreparedTools> {
+  if (options.toolSchemasOverride) {
+    return {
+      allTools: tools,
+      filteredTools: tools,
+      toolSchemas: options.toolSchemasOverride,
+      deferredToolNames: new Set<string>(),
+      useSearchExtraTools: false,
+    }
+  }
+
   let useSearchExtraTools = await isSearchExtraToolsEnabled(
     options.model,
     tools,

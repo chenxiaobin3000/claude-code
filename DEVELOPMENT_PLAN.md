@@ -220,13 +220,15 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 
 目标：当模型生成较大的 `Write` 工具调用并因最大输出 Token 截断时，自动切换到可恢复的分段写入流程，避免无效参数被归一化为 `{}` 后反复显示笼统的 `Error writing file`。
 
-- [x] 在流处理层区分普通工具参数 JSON 错误与 `stop_reason=max_tokens` 导致的未完成 `Write` 参数（2026-07-23 完成）：新增不可执行的结构化截断标记，只保留工具名、截断原因和接收字符数；截断场景不记录原始 JSON 前缀，不再归一化为 `{}`。
-- [x] 增加受控恢复协议（2026-07-23 完成）：恢复消息下发随机 recovery ID、固定目标路径、连续块序号、final 标记和建议块上限；模型只生成完整的 bounded Write 参数，Runtime 在内存中暂存块，最后一块到达前不修改目标文件。块上限由当前模型 Profile 的 `maxOutputTokens` 扣除 25%/至少 1,024 Token 安全余量后保守换算，不按模型名称猜测。
-- [x] 拆分只发生在模型重新生成可验证的完整工具参数之后（2026-07-23 完成）：`StreamingToolExecutor` 不执行带截断标记的 Write，恢复请求删除孤立的残缺 assistant tool call；不解析、修补或落盘残缺 JSON，也不猜测 `file_path`/`content`。
+- [x] 在流处理层区分普通工具参数 JSON 错误与 `stop_reason=max_tokens` 导致的未完成 `Write` 参数（2026-07-25 完成）：新增不可执行的结构化截断标记，不再归一化为 `{}`；原始未闭合参数只在当前恢复状态的内存中短暂保留，用于确定性提取完整 JSON 字符串及转义序列，不写 Transcript、诊断日志或目标文件。
+- [x] 增加受控恢复协议（2026-07-25 完成）：首轮截断时 Runtime 从未闭合 JSON 中提取完整的 `file_path` 和已生成 `content`，按 Profile 建议上限在内存中分块暂存；后续恢复请求锁定 recovery ID、目标路径和连续序号，并携带最近 512 个已暂存字符作为重叠锚点。模型重复锚点后继续输出，Runtime 确定性去重，因此换行、空格和转义边界不会丢失；最后一块到达前不修改目标文件。
+- [x] `StreamingToolExecutor` 不执行带截断标记的 Write（2026-07-25 完成）：截断 tool call 不设置 `needsFollowUp`，恢复请求删除孤立的残缺 assistant tool call；只有完整 JSON 字符串字符会被解析并暂存，未完成转义被丢弃，路径和恢复控制字段由 Runtime 锁定，不从残缺恢复参数中猜测。
 - [x] 为同一写入任务设置恢复边界（2026-07-23 完成）：最多 3 次截断、32 块、单块采用 Profile 建议上限、总暂存 8 MiB、会话内 30 分钟 TTL；空的非最终块、序号不连续、路径变化、重复 final 状态和目标快照冲突均停止。错误包含模型 ID、输出上限、阶段与建议块大小，取消、异常或会话结束由 disposable 清理恢复状态。
 - [x] 保持并收紧文件安全语义（2026-07-23 完成）：恢复首块记录目标存在性和 SHA-256 快照，最终提交前再次核对；Write/Edit 对完整读取内容始终比较而不依赖低精度 mtime。中间块仅驻留内存，最终使用同目录临时文件、flush 和原子 rename；Write/Edit 的原子失败不再回退到直接覆盖，因此不会留下零字节文件、截断原文件或覆盖并发外部修改。
 - [x] 区分错误和提供脱敏诊断（2026-07-23 完成）：非 verbose UI 将输入 Schema 错误显示为“Write parameters are incomplete”，模型上限由专用恢复/耗尽消息显示，普通文件系统失败继续显示“Error writing file”；诊断仅记录模型 ID、输出上限、恢复次数、块序号和长度限制，不记录路径、文件内容、Prompt 或凭据。
 - [x] 增加 `scripts/validation/write-truncation-recovery.ts` 并接入 `bun run verify`（2026-07-23 完成）：固定模拟流覆盖 max_tokens 截断标记、不可执行输入、普通/恢复 Schema、4,096 Token 块预算、中间块不落盘、最终逐字节提交、路径锁定、空块、跨块截断预算、外部修改冲突、严格原子回滚、临时文件清理以及生产接线防回归，不引入测试框架。
+- [x] 修复真实本地模型恢复不收敛（2026-07-25 完成）：不再依赖模型遵守 `maxLength` 主动分块；首轮已生成字符由 Runtime 确定性暂存，恢复提示使用真实尾部锚点定位断点，完整最终块可在模型输出上限内一次提交，重复前缀由 Runtime 去重。只有连续无新增字符的恢复截断才消耗最多 3 次失败预算。
+- [x] 截断标记属于预期控制流（2026-07-25 完成）：不得进入普通 `FileWriteTool.inputSchema` 归一化或执行，也不再记录 `Error normalizing tool input`；诊断只保留结构化截断、脱敏的暂存字符数、恢复次数和耗尽信息。
 
 验收标准：
 
@@ -236,6 +238,10 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - Bun bundle、Vite/Node bundle 和 Windows standalone EXE 均通过长文件写入与失败恢复冒烟，`bun run verify` 全矩阵通过。
 
 验证记录（2026-07-23）：`bun run verify --ci` 全矩阵通过（169.5 秒），包括固定 4,096 Token 截断流、逐字节恢复、冲突/回滚、17 个 workspace、Bun/Vite 构建和 Windows standalone EXE。非 CI `bun run verify` 的全部本地检查通过后，在真实模型阶段因当前验证 endpoint 为 `https://api.deepseek.com` 而按策略停止（验证器只允许本地 llama.cpp，未向外部接口发请求）；切换回本地 Qwen/llama.cpp 后仍需补做真实长文件生成验收。
+
+验收记录（2026-07-25，**未通过**）：`bun scripts/validation/write-truncation-recovery.ts` 通过；本地 llama.cpp 的 `Qwen3.5-9B-Q6_K`（65,536 上下文、4,096 最大输出）完成普通小文件真实 `Write`，工具事件、落盘内容和后续响应均正常。长文件测试首轮产生真实 `Write` tool call 并准确以 `stop_reason=max_tokens`、`output_tokens=4096` 截断，目标文件和临时文件均未创建，证明未执行残缺参数及失败不落盘有效；随后三次恢复请求均再次生成 4,096 Token 的未完成 Write 参数，没有遵守 2,150 字符建议块上限，达到恢复预算后仍未生成目标文件。同时每次结构化截断标记都会在 `messagesRuntime.ts` 记录一次 `Error normalizing tool input`。因此“真实本地 Qwen 自动完成长文件写入”和“错误路径无误报”尚未满足，本项不得移入能力基线。验收命令不得使用 `--bare`，因为 simple 模式只暴露 Bash、Read、Edit，会把 `--tools Write` 过滤为空工具集。
+
+修复后验收记录（2026-07-25，**通过**）：本地 llama.cpp 的 `Qwen3.5-9B-Q6_K` 在首轮 `Write` 达到 4,096 Token 后，Runtime 从截断 JSON 中确定性暂存 11,000 个完整字符；第二轮依据 512 字符尾部锚点补齐剩余内容并原子提交，第三轮仅返回完成确认。最终文件为严格 300 行、17,099 字符，与固定期望逐字符一致，首行为 `WRITE_RECOVERY_0001`、末行为 `WRITE_RECOVERY_0300`；最终提交前目标文件不存在，无临时文件残留，诊断中 `Error normalizing tool input` 为 0。`bun scripts/validation/write-truncation-recovery.ts`、`bun run typecheck`、`bun run lint` 均通过；`bun run verify -- --ci` 全矩阵通过（166.7 秒），覆盖 17 个 workspace、全部源验证、Bun bundle、Vite/Node bundle 和 Windows standalone EXE 的完整性、版本及启动冒烟。
 
 ### P1：排障和会话体验
 

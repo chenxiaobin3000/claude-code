@@ -24,6 +24,7 @@ export type ModelQueryOptions = {
   getToolPermissionContext: () => Promise<ToolPermissionContext>
   model: string
   toolChoice?: BetaToolChoiceTool | BetaToolChoiceAuto
+  toolSchemasOverride?: BetaToolUnion[]
   isNonInteractiveSession: boolean
   extraToolSchemas?: BetaToolUnion[]
   maxOutputTokensOverride?: number

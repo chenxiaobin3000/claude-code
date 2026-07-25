@@ -109,10 +109,13 @@ import { StreamingToolExecutor } from './services/tools/StreamingToolExecutor.js
 import { isTruncatedToolInput } from './services/tools/truncatedToolInput.js'
 import {
   abortWriteRecovery,
+  createWriteRecoveryInstruction,
+  createWriteRecoveryToolSchema,
   createWriteRecovery,
   getWriteRecoveryStatus,
   MAX_WRITE_RECOVERY_TRUNCATIONS,
   noteWriteRecoveryTruncation,
+  stageTruncatedWriteInput,
 } from './services/tools/writeRecovery.js'
 import { getModelProfile } from './utils/model/modelProfiles.js'
 import { FILE_WRITE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/FileWriteTool/prompt.js'
@@ -868,6 +871,21 @@ async function* queryLoop(
     }
 
     let attemptWithFallback = true
+    let activeWriteRecovery = activeWriteRecoveryId
+      ? getWriteRecoveryStatus(activeWriteRecoveryId)
+      : undefined
+    if (activeWriteRecoveryId && !activeWriteRecovery) {
+      activeWriteRecoveryId = undefined
+    }
+    const modelMessages = activeWriteRecovery
+      ? [
+          ...messagesForQuery,
+          createUserMessage({
+            content: createWriteRecoveryInstruction(activeWriteRecovery),
+            isMeta: true,
+          }),
+        ]
+      : messagesForQuery
 
     queryCheckpoint('query_api_loop_start')
     try {
@@ -877,7 +895,7 @@ async function* queryLoop(
           let streamingFallbackOccured = false
           queryCheckpoint('query_api_streaming_start')
           for await (const message of deps.callModel({
-            messages: prependUserContext(messagesForQuery, userContext),
+            messages: prependUserContext(modelMessages, userContext),
             systemPrompt: fullSystemPrompt,
             thinkingConfig: toolUseContext.options.thinkingConfig,
             tools: toolUseContext.options.tools,
@@ -891,7 +909,12 @@ async function* queryLoop(
               ...(config.gates.fastModeEnabled && {
                 fastMode: appState.fastMode,
               }),
-              toolChoice: undefined,
+              toolChoice: activeWriteRecovery
+                ? { type: 'tool', name: FILE_WRITE_TOOL_NAME }
+                : undefined,
+              toolSchemasOverride: activeWriteRecovery
+                ? [createWriteRecoveryToolSchema(activeWriteRecovery)]
+                : undefined,
               isNonInteractiveSession:
                 toolUseContext.options.isNonInteractiveSession,
               fallbackModel,
@@ -1069,7 +1092,12 @@ async function* queryLoop(
               ).filter(
                 (content: { type: string }) => content.type === 'tool_use',
               ) as ToolUseBlock[]
-              if (msgToolUseBlocks.length > 0) {
+              const truncatedWrite = findTruncatedWriteToolUse(assistantMessage)
+              // A max-token Write block is not executable: its JSON payload is
+              // incomplete and must enter the bounded recovery path below.
+              // Keeping it in toolUseBlocks sets needsFollowUp and bypasses
+              // that path, causing the model to regenerate the full payload.
+              if (!truncatedWrite && msgToolUseBlocks.length > 0) {
                 toolUseBlocks.push(...msgToolUseBlocks)
                 needsFollowUp = true
               }
@@ -1077,7 +1105,7 @@ async function* queryLoop(
               if (
                 streamingToolExecutor &&
                 !toolUseContext.abortController.signal.aborted &&
-                !findTruncatedWriteToolUse(assistantMessage)
+                !truncatedWrite
               ) {
                 for (const toolBlock of msgToolUseBlocks) {
                   streamingToolExecutor.addTool(toolBlock, assistantMessage)
@@ -1464,46 +1492,51 @@ async function* queryLoop(
           let recovery = activeWriteRecoveryId
             ? getWriteRecoveryStatus(activeWriteRecoveryId)
             : undefined
-          if (
-            recovery &&
-            recovery.truncationAttempts >= MAX_WRITE_RECOVERY_TRUNCATIONS
-          ) {
-            yield createAssistantAPIErrorMessage({
-              content:
-                `Write recovery stopped after ${MAX_WRITE_RECOVERY_TRUNCATIONS} truncated attempts. ` +
-                `Model ${currentModel} has a ${getModelProfile(currentModel).maxOutputTokens}-token output limit. ` +
-                'Retry with smaller complete chunks.',
-              apiError: 'max_output_tokens',
-              error: 'max_output_tokens',
-            })
-            return { reason: 'model_error' }
-          }
+          const wasRecoveryAttempt = recovery !== undefined
           if (!recovery) {
             recovery = createWriteRecovery(currentModel)
             activeWriteRecoveryId = recovery.id
+          }
+
+          const truncatedInput = truncatedWrite.input
+          const staged = isTruncatedToolInput(truncatedInput)
+            ? stageTruncatedWriteInput({
+                recoveryId: recovery.id,
+                input: truncatedInput,
+                originalWrite: !wasRecoveryAttempt,
+              })
+            : { appendedChars: 0, stagedChars: recovery.stagedChars }
+          recovery = getWriteRecoveryStatus(recovery.id) ?? recovery
+
+          if (wasRecoveryAttempt && staged.appendedChars === 0) {
+            recovery = noteWriteRecoveryTruncation(recovery.id)!
+            if (recovery.truncationAttempts >= MAX_WRITE_RECOVERY_TRUNCATIONS) {
+              yield createAssistantAPIErrorMessage({
+                content:
+                  `Write recovery stopped after ${MAX_WRITE_RECOVERY_TRUNCATIONS} truncated recovery attempts. ` +
+                  `Model ${currentModel} has a ${getModelProfile(currentModel).maxOutputTokens}-token output limit. ` +
+                  'No file content was written; retry with a smaller requested file.',
+                apiError: 'max_output_tokens',
+                error: 'max_output_tokens',
+              })
+              return { reason: 'model_error' }
+            }
+          }
+
+          if (!wasRecoveryAttempt) {
             logForDebugging(
-              `Write recovery started: model=${currentModel}, maxOutputTokens=${recovery.maxOutputTokens}, suggestedChunkChars=${recovery.suggestedChunkChars}`,
+              `Write recovery started: model=${currentModel}, maxOutputTokens=${recovery.maxOutputTokens}, stagedChars=${staged.stagedChars}, salvagedChars=${staged.appendedChars}, suggestedChunkChars=${recovery.suggestedChunkChars}`,
               { level: 'warn' },
             )
           } else {
-            recovery = noteWriteRecoveryTruncation(recovery.id)!
             logForDebugging(
-              `Write recovery resumed: model=${currentModel}, attempt=${recovery.truncationAttempts}, nextSequence=${recovery.nextSequence}`,
+              `Write recovery resumed: model=${currentModel}, attempt=${recovery.truncationAttempts}, salvagedChars=${staged.appendedChars}, stagedChars=${staged.stagedChars}, nextSequence=${recovery.nextSequence}, suggestedChunkChars=${recovery.suggestedChunkChars}`,
               { level: 'warn' },
             )
           }
-          const recoveryMessage = createUserMessage({
-            content:
-              `The Write tool input was truncated at the model output limit; no file content was written. ` +
-              `Recover using complete bounded Write calls with recovery fields. Use recovery_id=${JSON.stringify(recovery.id)}, ` +
-              `sequence=${recovery.nextSequence}, chunk strings no longer than ${recovery.suggestedChunkChars} characters, ` +
-              `and final=false until the last chunk. Keep file_path identical on every chunk. ` +
-              `The final chunk must set final=true. Do not resend the entire file in one call and do not use empty non-final chunks.`,
-            isMeta: true,
-          })
 
           state = {
-            messages: [...messagesForQuery, recoveryMessage],
+            messages: messagesForQuery,
             toolUseContext,
             autoCompactTracking: tracking,
             maxOutputTokensRecoveryCount: maxOutputTokensRecoveryCount + 1,

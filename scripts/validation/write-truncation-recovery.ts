@@ -13,15 +13,24 @@ import { join } from 'node:path'
 import type { BetaRawMessageStreamEvent } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import { FileWriteTool } from '../../packages/builtin-tools/src/tools/FileWriteTool/FileWriteTool.js'
 import { processModelStream } from '../../src/services/model/streamProcessor.js'
-import { isTruncatedToolInput } from '../../src/services/tools/truncatedToolInput.js'
+import {
+  createTruncatedToolInput,
+  extractPartialJsonStringField,
+  isTruncatedToolInput,
+} from '../../src/services/tools/truncatedToolInput.js'
 import {
   appendWriteRecoveryChunk,
   calculateWriteRecoveryChunkChars,
   completeWriteRecovery,
+  createWriteRecoveryInstruction,
+  createWriteRecoveryToolSchema,
   createWriteRecovery,
+  getWriteRecoveryStatus,
   MAX_WRITE_RECOVERY_TRUNCATIONS,
   noteWriteRecoveryTruncation,
+  stageTruncatedWriteInput,
 } from '../../src/services/tools/writeRecovery.js'
+import { prepareTools } from '../../src/services/model/prepareRequest.js'
 import { writeTextContent } from '../../src/utils/file.js'
 import { FileStateCache } from '../../src/utils/fileStateCache.js'
 import {
@@ -31,7 +40,7 @@ import {
 } from '../../src/utils/fsOperations.js'
 import { assert, assertEqual, collectAsync } from './assertions.js'
 
-(globalThis as typeof globalThis & { MACRO: { VERSION: string } }).MACRO = {
+;(globalThis as typeof globalThis & { MACRO: { VERSION: string } }).MACRO = {
   VERSION: 'write-truncation-recovery-validation',
 }
 
@@ -112,11 +121,51 @@ assert(
 assert(
   streamed.some(
     message =>
-      message.type === 'assistant' &&
-      message.apiError === 'max_output_tokens',
+      message.type === 'assistant' && message.apiError === 'max_output_tokens',
   ),
   'max_tokens stream did not retain the truncation reason',
 )
+assertEqual(
+  extractPartialJsonStringField('{"content":"line 1\\nline 2\\u0021', 'content')
+    ?.value,
+  'line 1\nline 2!',
+  'partial JSON string extraction lost complete escapes',
+)
+
+const salvagedRecovery = createWriteRecovery('unregistered-local-qwen')
+const salvagedOriginal = stageTruncatedWriteInput({
+  recoveryId: salvagedRecovery.id,
+  input: truncatedBlock.input,
+  originalWrite: true,
+})
+assertEqual(
+  salvagedOriginal.appendedChars,
+  'unfinished'.length,
+  'original truncated Write content was not staged',
+)
+const salvagedContinuation = stageTruncatedWriteInput({
+  recoveryId: salvagedRecovery.id,
+  input: createTruncatedToolInput(28, '{"chunk":"unfinished-more'),
+  originalWrite: false,
+})
+assertEqual(
+  salvagedContinuation.appendedChars,
+  '-more'.length,
+  'restarted recovery content was not deterministically de-duplicated',
+)
+const salvagedStatus = getWriteRecoveryStatus(salvagedRecovery.id)!
+const salvagedFinal = appendWriteRecoveryChunk({
+  recoveryId: salvagedRecovery.id,
+  filePath: 'C:\\tmp\\large.txt',
+  sequence: salvagedStatus.nextSequence,
+  chunk: '!',
+  final: true,
+})
+assert(
+  salvagedFinal.complete && salvagedFinal.content === 'unfinished-more!',
+  'salvaged recovery did not preserve byte-exact content',
+)
+completeWriteRecovery(salvagedRecovery.id)
 
 assert(
   FileWriteTool.inputSchema.safeParse({
@@ -143,6 +192,64 @@ assertEqual(
 )
 
 const recovery = createWriteRecovery('unregistered-local-qwen')
+assertEqual(
+  recovery.truncationAttempts,
+  0,
+  'new recovery counted the original truncation as a recovery attempt',
+)
+const recoverySchema = createWriteRecoveryToolSchema(recovery) as unknown as {
+  name: string
+  input_schema: {
+    required: string[]
+    properties: Record<string, Record<string, unknown>>
+  }
+}
+assertEqual(recoverySchema.name, 'Write', 'recovery schema tool name')
+assert(
+  !('content' in recoverySchema.input_schema.properties),
+  'recovery schema still permits normal content',
+)
+assertEqual(
+  recoverySchema.input_schema.properties.recovery_id?.const,
+  recovery.id,
+  'recovery schema did not lock the recovery ID',
+)
+assertEqual(
+  recoverySchema.input_schema.properties.sequence?.const,
+  0,
+  'recovery schema did not lock the next sequence',
+)
+assertEqual(
+  recoverySchema.input_schema.properties.chunk?.maxLength,
+  2150,
+  'recovery schema did not enforce the chunk limit',
+)
+assert(
+  createWriteRecoveryInstruction(recovery).includes(
+    'Do not use the normal content field',
+  ),
+  'recovery instruction permits a normal Write call',
+)
+const preparedRecoveryTools = await prepareTools([FileWriteTool], {
+  model: 'unregistered-local-qwen',
+  toolSchemasOverride: [recoverySchema as never],
+} as never)
+assertEqual(
+  preparedRecoveryTools.toolSchemas.length,
+  1,
+  'recovery request did not replace the normal tool schemas',
+)
+assert(
+  !(
+    'content' in
+    (
+      preparedRecoveryTools.toolSchemas[0] as unknown as {
+        input_schema: { properties: Record<string, unknown> }
+      }
+    ).input_schema.properties
+  ),
+  'prepared recovery request restored the normal Write schema',
+)
 const first = appendWriteRecoveryChunk({
   recoveryId: recovery.id,
   filePath: 'C:\\tmp\\large.txt',
@@ -155,12 +262,37 @@ const final = appendWriteRecoveryChunk({
   recoveryId: recovery.id,
   filePath: 'C:\\tmp\\large.txt',
   sequence: 1,
-  chunk: 'βeta',
+  chunk: 'βeta'.repeat(1000),
   final: true,
 })
 assert(final.complete, 'final recovery chunk did not complete')
-assertEqual(final.content, 'alphaβeta', 'recovery content was not byte-exact')
+assertEqual(
+  final.content,
+  `alpha${'βeta'.repeat(1000)}`,
+  'recovery content was not byte-exact',
+)
 completeWriteRecovery(recovery.id)
+
+const anchoredRecovery = createWriteRecovery('unregistered-local-qwen')
+appendWriteRecoveryChunk({
+  recoveryId: anchoredRecovery.id,
+  filePath: 'C:\\tmp\\anchored.txt',
+  sequence: 0,
+  chunk: 'line1',
+  final: false,
+})
+const anchoredFinal = appendWriteRecoveryChunk({
+  recoveryId: anchoredRecovery.id,
+  filePath: 'C:\\tmp\\anchored.txt',
+  sequence: 1,
+  chunk: 'line1\nline2',
+  final: true,
+})
+assert(
+  anchoredFinal.complete && anchoredFinal.content === 'line1\nline2',
+  'recovery tail anchor did not preserve the boundary newline',
+)
+completeWriteRecovery(anchoredRecovery.id)
 
 const stagedWriteDir = mkdtempSync(join(tmpdir(), 'write-recovery-commit-'))
 const stagedWriteTarget = join(stagedWriteDir, 'complete.txt')
@@ -254,6 +386,11 @@ assertEqual(
   3,
   'recovery truncation budget was not tracked across chunks',
 )
+assertEqual(
+  retryStatus.suggestedChunkChars,
+  268,
+  'recovery chunk limit did not shrink after repeated truncation',
+)
 
 const conflictDir = mkdtempSync(join(tmpdir(), 'write-recovery-conflict-'))
 const conflictTarget = join(conflictDir, 'existing.txt')
@@ -266,6 +403,22 @@ appendWriteRecoveryChunk({
   chunk: 'replacement-',
   final: false,
 })
+const lockedStatus = getWriteRecoveryStatus(pathLocked.id)!
+const lockedSchema = createWriteRecoveryToolSchema(lockedStatus) as unknown as {
+  input_schema: {
+    properties: Record<string, Record<string, unknown>>
+  }
+}
+assertEqual(
+  lockedSchema.input_schema.properties.file_path?.const,
+  'C:\\tmp\\one.txt',
+  'recovery schema did not lock the established target path',
+)
+assertEqual(
+  lockedStatus.truncationAttempts,
+  0,
+  'successful recovery chunk did not reset the sequence retry count',
+)
 writeFileSync(conflictTarget, 'external', 'utf8')
 let conflictRejected = false
 try {
@@ -321,20 +474,30 @@ const querySource = await Bun.file('src/query.ts').text()
 assert(
   querySource.includes('findTruncatedWriteToolUse') &&
     querySource.includes('createWriteRecovery') &&
-    querySource.includes('!findTruncatedWriteToolUse(assistantMessage)'),
+    querySource.includes(
+      'if (!truncatedWrite && msgToolUseBlocks.length > 0)',
+    ) &&
+    querySource.includes('createWriteRecoveryToolSchema') &&
+    querySource.includes("type: 'tool', name: FILE_WRITE_TOOL_NAME") &&
+    querySource.includes('toolSchemasOverride'),
   'query no longer blocks or recovers truncated Write calls',
 )
 const messageSource = await Bun.file('src/utils/messagesRuntime.ts').text()
 assert(
   messageSource.includes("stopReason === 'max_tokens'") &&
-    messageSource.includes('createTruncatedToolInput'),
+    messageSource.includes('truncatedToolInput.createFromRaw') &&
+    messageSource.includes(
+      '!truncatedToolInput.isTruncatedToolInput(normalizedInput)',
+    ),
   'message normalization no longer preserves truncated tool input state',
 )
 const fileWriteSource = await Bun.file(
   'packages/builtin-tools/src/tools/FileWriteTool/FileWriteTool.ts',
 ).text()
 assert(
-  fileWriteSource.includes("writeTextContent(fullFilePath, content, enc, 'LF', true)"),
+  fileWriteSource.includes(
+    "writeTextContent(fullFilePath, content, enc, 'LF', true)",
+  ),
   'Write no longer requires strict atomic replacement',
 )
 

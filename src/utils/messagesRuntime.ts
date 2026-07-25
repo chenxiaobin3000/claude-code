@@ -2007,7 +2007,7 @@ import {
   smooshIntoToolResult,
   smooshSystemReminderSiblings,
 } from './messages/contentMerge.js'
-import { createTruncatedToolInput } from '../services/tools/truncatedToolInput.js'
+import * as truncatedToolInput from '../services/tools/truncatedToolInput.js'
 
 // Sometimes the API returns empty messages (eg. "\n\n"). We need to filter these out,
 // otherwise they will give an API error when we send them to the API next time we call query().
@@ -2061,14 +2061,18 @@ export function normalizeContentFromAPI(
           normalizedInput =
             parsed ??
             (stopReason === 'max_tokens'
-              ? createTruncatedToolInput(contentBlock.input.length)
+              ? truncatedToolInput.createFromRaw(contentBlock.input)
               : {})
         } else {
           normalizedInput = contentBlock.input
         }
 
         // Then apply tool-specific corrections
-        if (typeof normalizedInput === 'object' && normalizedInput !== null) {
+        if (
+          typeof normalizedInput === 'object' &&
+          normalizedInput !== null &&
+          !truncatedToolInput.isTruncatedToolInput(normalizedInput)
+        ) {
           const tool = findToolByName(tools, contentBlock.name)
           if (tool) {
             try {
