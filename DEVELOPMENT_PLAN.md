@@ -91,7 +91,7 @@
 | 权限规则 | 支持工具输入参数匹配及更严格危险命令分类 | 部分 | 本地有权限系统，但未完整对齐最新规则 |
 | Hook | MCP Tool Hook、参数数组、`continueOnBlock`、`MessageDisplay` 等 | 部分 | 基础 Hook 和 MCP 存在，新字段不完整 |
 | Agent | Dashboard、attach/detach、嵌套子 Agent、默认后台运行 | 部分 | 本地有后台 Agent/Coordinator，但行为和协议可能不同 |
-| Worktree 隔离 | 持续修复跨工作树写入和 Git 命令逃逸 | 部分 | 需要专项安全审计和回归 |
+| Worktree 隔离 | 跨工作树写入和 Git 命令逃逸防护 | 已完成 | P0 已完成专项安全审计与真实 linked worktree 回归；后续仅随新功能增量复核 |
 | Plugin | prune、依赖检查、最低版本、搜索和动态重载 | 部分 | 未发现 `plugin prune`、`requiredMinimumVersion` 等完整能力 |
 | MCP | CLI OAuth 登录、启动重试、审批状态和会话重连 | 部分 | 基础能力存在，需按最新协议逐项核对 |
 | Doctor | 安装健康、设置、MCP 和上下文诊断 | 已有 | 本地已覆盖官方核心诊断范围，不扩展 Provider、凭据、模型或完整权限检查 |
@@ -225,6 +225,8 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - 隔离 Agent 的 Git 写操作只能影响自己的工作树。
 - 未经明确授权，模型不能读取凭据或执行破坏性命令。
 - Bash 和 PowerShell 对相同危险操作给出一致决策。
+
+最终验收（2026-07-25）：上述 P0 验收项已由 `bash-authoritative-parser.ts`、`shell-permission-matrix.ts`、`destructive-permissions.ts`、`sandbox-credentials.ts`、`tool-permissions.ts`、`worktree-agent-isolation.ts` 和 `cross-session-authority.ts` 覆盖，并已接入统一 `bun run verify --ci`。最新完整 CI 验证通过；P0 作为基线能力完成，不再保留“需专项审计”的未完成状态。
 
 ### P1：模型 Profile 配置覆盖
 
