@@ -25,6 +25,7 @@ import {
 } from 'src/utils/fileHistory.js'
 import { logFileOperation } from 'src/utils/fileOperationAnalytics.js'
 import { readFileSyncWithMetadata } from 'src/utils/fileRead.js'
+import { isFullFileRead } from 'src/utils/fileStateCache.js'
 import { getFsImplementation } from 'src/utils/fsOperations.js'
 import { fetchSingleFileGitDiff, type ToolUseDiff } from 'src/utils/gitDiff.js'
 import { lazySchema } from 'src/utils/lazySchema.js'
@@ -357,13 +358,9 @@ export const FileWriteTool = buildTool({
 
     if (meta !== null) {
       const lastRead = readFileState.get(fullFilePath)
-      const isFullRead =
-        lastRead &&
-        lastRead.offset === undefined &&
-        lastRead.limit === undefined
       // Compare the content even when mtime granularity hides a fast external
       // edit. meta.content is CRLF-normalized like readFileState.
-      if (!isFullRead || meta.content !== lastRead.content) {
+      if (!isFullFileRead(lastRead) || meta.content !== lastRead.content) {
         throw new Error(FILE_UNEXPECTEDLY_MODIFIED_ERROR)
       }
     }

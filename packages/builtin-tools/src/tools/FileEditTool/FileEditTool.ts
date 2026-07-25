@@ -34,6 +34,7 @@ import {
   type LineEndingType,
   readFileSyncWithMetadata,
 } from 'src/utils/fileRead.js'
+import { isFullFileRead } from 'src/utils/fileStateCache.js'
 import { formatFileSize } from 'src/utils/format.js'
 import { getFsImplementation } from 'src/utils/fsOperations.js'
 import { fetchSingleFileGitDiff, type ToolUseDiff } from 'src/utils/gitDiff.js'
@@ -272,10 +273,7 @@ export const FileEditTool = buildTool({
         // Timestamp indicates modification, but on Windows timestamps can change
         // without content changes (cloud sync, antivirus, etc.). For full reads,
         // compare content as a fallback to avoid false positives.
-        const isFullRead =
-          readTimestamp.offset === undefined &&
-          readTimestamp.limit === undefined
-        if (isFullRead && fileContent === readTimestamp.content) {
+        if (isFullFileRead(readTimestamp) && fileContent === readTimestamp.content) {
           // Content unchanged, safe to proceed
         } else {
           return {
@@ -429,12 +427,8 @@ export const FileEditTool = buildTool({
 
     if (fileExists) {
       const lastRead = readFileState.get(absoluteFilePath)
-      const isFullRead =
-        lastRead &&
-        lastRead.offset === undefined &&
-        lastRead.limit === undefined
       const contentUnchanged =
-        isFullRead && originalFileContents === lastRead.content
+        isFullFileRead(lastRead) && originalFileContents === lastRead.content
       if (!contentUnchanged) {
         throw new Error(FILE_UNEXPECTEDLY_MODIFIED_ERROR)
       }

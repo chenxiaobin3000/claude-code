@@ -35,6 +35,7 @@ const validationScripts = [
   'scripts/validation/model-profiles.ts',
   'scripts/validation/message-conversion.ts',
   'scripts/validation/message-utils.ts',
+  'scripts/validation/file-read-state.ts',
   'scripts/validation/session-transcript.ts',
   'scripts/validation/temporary-cd.ts',
   'scripts/validation/hook-protocol.ts',

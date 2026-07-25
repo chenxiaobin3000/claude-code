@@ -14,6 +14,25 @@ export type FileState = {
   isPartialView?: boolean
 }
 
+/**
+ * Whether a cached file state represents the complete file contents.
+ *
+ * FileReadTool uses one-based line offsets, so an omitted offset is stored as
+ * `1`. Edit and Write store `undefined` after they have written the complete
+ * file. Both forms are complete reads; offsets above one and all limited reads
+ * are partial views and must not authorize a write.
+ */
+export function isFullFileRead<
+  T extends Pick<FileState, 'offset' | 'limit' | 'isPartialView'>,
+>(state: T | undefined): state is T {
+  return (
+    state !== undefined &&
+    state.isPartialView !== true &&
+    state.limit === undefined &&
+    (state.offset === undefined || state.offset === 1)
+  )
+}
+
 // Default max entries for read file state caches
 export const READ_FILE_STATE_CACHE_SIZE = 100
 
