@@ -1,71 +1,29 @@
-# Claude Code
+# Claude Code Best
 
-> 一个基于 TypeScript、React/Ink 与 Bun 构建的 Claude Code CLI 逆向重构及增强项目。
+这是一个面向 OpenAI-compatible API 与本地模型的 Claude Code 衍生发行版。
 
-本项目是一套面向 AI 编程助手的终端平台，覆盖交互式 CLI、OpenAI-compatible 模型请求、工具调用、Agent 编排、MCP、本地插件与 Skill、会话管理以及自托管远程协作能力。
+本 README 只记录本项目的自定义行为和与 Claude Code 官方不一致的边界。未特别说明的交互、命令和工作流，请直接参考 [Claude Code 官方文档](https://code.claude.com/docs/en/overview)。
 
-## 项目概况
+## 版本与文档边界
 
-- 根包版本：`2.1.116`
-- 运行环境：Bun `>=1.3.0`，当前开发配置为 Bun `1.3.13`、Node.js `22.22.2`
-- 语言与框架：TypeScript、React 19、Ink
-- 仓库结构：Bun workspaces monorepo
-- Workspace 子包：17 个
-- 代码规模：约 2,777 个代码文件、56.7 万行代码
-- CLI 命令：`ccb`、`ccb-bun`、`claude-code-best`
+- 项目发行版本：`2.1.116`
+- 官方对照基线：Claude Code `2.1.141`，以[官方 Changelog](https://code.claude.com/docs/en/changelog)为准。
+- 本项目不追踪或复述官方已有且行为一致的功能；升级官方版本时，只补充新增差异或重新评估现有差异。
 
-## 核心能力
+## 运行时与网络边界
 
-### 交互与会话
+本项目只支持由 `models.json` 配置的 OpenAI-compatible Chat Completions 服务，包括本地 llama.cpp 和兼容该协议的远端服务。
 
-- 基于 React/Ink 的终端 REPL
-- 流式模型响应与终端渲染
-- 会话保存、恢复、压缩和历史记录
-- `/cd <directory>` 可在当前 Session 内临时切换工具工作目录；启动目录仍是唯一 Project，目标目录配置和 Session 不会被加载或迁移，`/clear` 后回到启动目录
-- 上下文预算、长期记忆与提示词管理
-- 后台会话、任务和持久化 Goal
-- `/theme` 提供 6 个内置主题，并在启动时只读加载 `~/.claude/themes/*.json` 本地自定义主题；外部文件变更重启后生效
+- 不提供 Anthropic 官方网络 Provider、账号登录、OAuth、自动更新或原生安装流程。
+- `@anthropic-ai/sdk` 仅保留为本地消息、工具调用、流事件和 Usage 的类型兼容层；它不是 Anthropic 网络连接的入口。
+- 不提供 ChatGPT/Codex OAuth、Anthropic MCP Registry 预取、远端插件市场、远端插件下载或插件自动更新。
+- 对不兼容 Chat Completions 的端点，直接给出兼容性错误；不会静默删除字段、切换 Provider 或进入供应商专用适配分支。
 
-#### `/cd` 的 Project 边界
+用户自行配置的模型端点、MCP、Hook 以及本地插件仍可访问其对应的外部服务。
 
-Session 始终属于 CLI 启动目录。`/cd` 只改变当前工具解析相对路径时使用的
-CWD，适合临时查看其他目录；它不会把目标目录切换为活动 Project，也不会加载
-目标目录的 `CLAUDE.md`、Settings、Skill、Hook、Plugin 或 MCP。Session ID 和
-Transcript 继续存放在启动 Project，`--resume` 也必须从该 Project 查找。
-`/cd` 不附带目录信任或写入授权，项目外写入仍由权限系统单独处理；`/clear`
-会把 CWD 恢复为启动目录。Session Memory、相对 Plan 目录、项目历史、动态
-Skill 和 MCP 发现也始终锚定启动 Project，不随临时 CWD 漂移。
+## 模型配置
 
-### 工具系统
-
-- 文件读取、写入、编辑和搜索
-- Bash、PowerShell 与终端捕获
-- Glob、Grep、LSP 和 Notebook 编辑
-- Tool Search 与动态工具发现
-- 工具权限检查、Hook 和执行结果回填
-
-### Agent 与工作流
-
-- Agent、子 Agent、Team 和 Coordinator 模式
-- 多任务编排与后台 Worker
-- 可重放的确定性工作流引擎
-- `phase()`、`parallel()`、`pipeline()` 等工作流原语
-- Agent 消息、任务状态和进度管理
-
-### 扩展与集成
-
-- MCP 客户端、资源读取、工具调用与 OAuth
-- 本地目录 Plugin、内置 Plugin、Skill、Hook 和动态加载；不提供远程 Marketplace、下载或自动更新
-- 自托管 RCS/ACP、WebSocket、SSE 与 SSH
-- Chrome/Computer Use 和微信扩展
-
-### 模型供应商
-
-项目保留 Anthropic SDK 的消息、工具和流事件类型作为本地内部协议，但不提供 Anthropic 账号登录，也不默认连接 Anthropic API。模型运行时固定使用 OpenAI-compatible 协议：
-
-- OpenAI 及 OpenAI 兼容接口（默认）
-
-首次运行时，配置界面会依次询问地址、API Key 和模型 ID，并生成单模型 `~/.claude/models.json`。需要多个模型时再手动编辑该文件；每个模型绑定一个 OpenAI-compatible 地址，地址可以重复，模型 ID 必须全局唯一：
+模型配置文件为 `~/.claude/models.json`。模型名必须唯一；多个模型可以共用同一个 `baseUrl`。`/model` 只在此列表中切换模型。
 
 ```json
 {
@@ -73,301 +31,85 @@ Skill 和 MCP 发现也始终锚定启动 Project，不随临时 CWD 漂移。
   "models": [
     {
       "model": "Qwen3.5-9B-Q6_K",
-      "baseUrl": "http://127.0.0.1:8080/v1",
-      "displayName": "Qwen 3.5 9B"
+      "displayName": "Local Qwen",
+      "baseUrl": "http://127.0.0.1:8080/v1"
     },
     {
       "model": "deepseek-v4-flash",
+      "displayName": "DeepSeek Flash",
       "baseUrl": "https://api.deepseek.com/v1",
-      "apiKeyEnv": "DEEPSEEK_API_KEY"
+      "apiKeyEnv": "DEEPSEEK_API_KEY",
+      "profile": {
+        "reasoning": {
+          "enabledByDefault": false
+        }
+      }
     }
   ]
 }
 ```
 
-`apiKeyEnv` 可选，默认读取 `OPENAI_API_KEY`。配置修改后重启 CLI 生效；`/model` 使用原有选择界面切换模型，并自动路由到该模型配置的地址。仓库根目录的 `models.example.json` 可作为多模型模板。
+密钥优先从模型的 `apiKeyEnv` 指定环境变量读取；未设置时可使用本地初始化保存的配置密钥。密钥不会写入诊断日志。
 
-单个模型可用可选的 `profile` 对象覆盖源码默认能力。覆盖按字段深合并，只允许声明已知能力；非法值会在启动时指出模型 ID 和字段路径。它不会探测 endpoint 或在请求失败时自动改参数。例如 DeepSeek endpoint 在思考模式拒绝 `tool_choice` 时，可仅对该模型关闭默认思考：
+### 静态模型 Profile
 
-```json
-"profile": {
-  "reasoning": { "enabledByDefault": false }
-}
-```
+模型能力由模型 ID 的静态 Profile 决定，包括上下文窗口、最大输出 Token、推理参数、Prompt Cache、价格以及工具调用字段。项目不会通过模型名称猜测能力，也不会在运行时进行能力探测。
 
-可覆盖的字段为 `contextWindowTokens`、`defaultOutputTokens`、`maxOutputTokens`、`reasoning`、`chatCompletions`、`promptCache` 和 `pricing`。模型级覆盖优先于全局默认思考开关；用户显式开启或关闭思考仍以当前会话选择为准。
+- 已知模型使用代码中的显式 Profile。
+- 未知模型使用 Qwen 派生的默认 Profile，并提示建议补充专用配置。
+- `models.json` 中的 `profile` 可覆盖默认 Profile，例如关闭 DeepSeek 的默认推理模式。
+- llama.cpp 等端点若不接受对象形式的 `tool_choice`，会按其显式兼容配置发送字符串形式；不增加供应商专用协议分支。
 
-模型能力不从 endpoint 探测，也不按名称猜测。`src/utils/model/modelProfiles.ts` 中的精确模型 ID 优先，Profile 统一声明上下文、输出上限、推理请求格式、Prompt Cache 行为和价格。未登记模型可以直接写入 `models.json`，运行时会使用复制自 Qwen 的默认 Profile（65,536 上下文、4,096 最大输出、无推理和 Prompt Cache、本地零价格），并提示正在使用默认配置、建议补充专用 Profile。需要准确能力时再增加源码 Profile 和 `scripts/validation/model-profiles.ts` 验收样例并重新构建。
+模型请求失败时，诊断日志仅记录脱敏后的端点、模型、请求字段摘要、状态码和重试信息，不记录 API Key、OAuth Token 或完整 Prompt。
 
-Profile 同时固定 Chat Completions 的输出 Token 字段、`tool_choice` 形态、reasoning effort、temperature 兼容性、并行工具调用和严格 Schema 策略。`chatCompletions.toolChoice` 可为 `strings_only`（仅 `auto`、`none`、`required`）或 `openai_standard`（也允许指定函数的对象）；默认与本地 llama.cpp/Qwen 使用前者，DeepSeek 使用后者。主流式请求与内部 `sideQuery` 共用请求构造规则：对仅支持字符串的模型，指定某个工具会在本地给出兼容性错误，绝不静默改成 `auto` 或把对象发给 endpoint。Qwen 是否思考与此独立；DeepSeek 使用可关闭的 `thinking`。未来只有登记为 OpenAI reasoning 类型的精确模型 ID 才发送 `max_completion_tokens` 和 `reasoning_effort`。项目不根据模型名称或 endpoint 响应自动切换参数。
+## 本地模型与 Windows Shell
 
-流适配覆盖文本、refusal、`reasoning_content`、交错并行 `tool_calls`、主要 `finish_reason` 和尾部 Usage；缺少结束原因、遗留 `function_call`、无函数名或无效工具 JSON 会作为协议错误退出。Usage 保留原始输入、缓存命中/写入、reasoning、总 Token 和最终块完整性；`completion_tokens` 已包含 reasoning token，成本不会重复计算。Chat Completions 工具 Schema 维持非严格模式，只有模型 Profile 和全部工具 Schema 同时完成严格模式验收后才能启用。
+本地 llama.cpp 的地址和模型名完全由 `models.json` 决定。上下文窗口必须同时满足模型 Profile 与 llama.cpp 实际启动时的 KV Cache 容量；服务端出现 “failed to find free space in the KV cache” 时，应降低请求上下文、输出上限或增大服务端上下文配置。
 
-endpoint 必须实现 OpenAI Chat Completions 的请求与流式 JSON/SSE 结构。协议错误会区分路由缺失、必要请求字段不受支持和响应结构不兼容，并提示检查 `baseUrl` 的 `/v1` 前缀；程序不会删除字段重试、切换备用路由或加载厂商专用适配器。鉴权、限流、上下文超限、模型不存在、网络、超时和服务端错误会单独提示，API Key、URL 凭据和完整 Prompt 不会写入诊断信息。
+Windows 下 Bash 与 PowerShell 会按优先级探测可用实现。Bash 工具运行的是 Bash 语法，不应把 Windows `type`、`dir` 等 PowerShell/cmd 命令当作 Bash 命令使用；路径含空格、Unicode 或盘符时应使用与当前 Shell 匹配的引用和路径格式。
 
-Provider 固定使用 OpenAI-compatible 路径，不再通过 `CLAUDE_CODE_USE_*` 环境变量选择厂商。Gemini 与 Grok 的专用 Provider、环境变量和模型映射已经移除；通用 OpenAI-compatible 自定义接口仍然保留。`/login`、`/logout`、`claude auth` 和 `setup-token` 已移除；MCP Server 自己的 OAuth 不受影响。
+命令权限决策顺序固定为：硬安全拒绝、显式 deny、不可绕过安全审批、显式 ask、精确 allow、受约束模式/只读自动允许、默认 ask。工具级通配规则不能覆盖硬安全结果。
 
-### 网络能力边界
+## 会话与文件工具差异
 
-CLI 不提供 Anthropic 账号登录、官方模型直连、会话分享、Feedback、Trusted Device 或 Anthropic 托管远程控制，也不包含 ChatGPT 账号 OAuth、官方 MCP Registry 预取、远程 Plugin Marketplace、自动更新或远程遥测/Feature Flag 拉取。启动和退出阶段不会因为这些已删除能力主动访问第三方服务。
+`/cd` 只临时改变当前工作目录：不会迁移项目身份、会话存储、设置、Hook、插件或 MCP 加载范围。重启后回到原项目边界。
 
-允许的网络访问都来自明确配置或用户操作：OpenAI-compatible 模型请求、微信、GitHub、搜索、用户配置的 MCP/WebFetch/HTTP Hook，以及部署方配置的自托管 RCS/ACP。MCP Server 自己的 OAuth 只服务于该 MCP Server，不等同于 CLI 账号登录。本地 Plugin 仅从显式目录或内置包加载。
+文件工具针对本地模型的重复失败增加确定性保护：同一轮中同一文件工具、操作和规范化路径连续失败两次后，后续相同调用会被阻止并要求模型先读取错误、调整参数或改用其他操作，避免无限重试。创建后立即修改的流程会保留文件版本校验；遇到外部修改错误时应先重新读取文件。
 
-支持的用户环境变量按用途记录在 [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md)。模型地址和模型 ID 只写入 `~/.claude/models.json`，凭据通过其中的 `apiKeyEnv` 引用环境变量，不写入配置文件、帮助输出或诊断日志。
+大文件写入支持自动分块与截断恢复。恢复块有确定的大小上限；模型没有按协议分块时，工具会使用确定性方案继续，而不是无限要求模型重发完整内容。
 
-OpenAI-compatible 请求会对连接失败、临时限流、5xx 和首个可见输出前的断流进行有界重试。已输出文本或工具调用后发生断线时，CLI 保留已显示内容并提示响应可能不完整，不会自动重放请求或重复工具调用；发送 `continue` 可开始新的续写请求。重试次数、退避和流空闲超时见 [环境变量说明](ENVIRONMENT_VARIABLES.md#api-retry-and-stream-recovery)。
+## 主题、插件与安全边界
 
-在 Windows 上，文件工具接受 Git Bash 盘符格式（如 `/d/work/a.txt`）和原生 `D:/work/a.txt`。同一文件工具调用若连续两次出现文件不存在、路径拒绝等确定性错误，第三次会被拦截并结束本轮，避免本地模型无限重复读取同一路径；请改用其他路径、先检查目录，或重新描述目标。
+主题只有两类来源：内置主题，以及 `~/.claude/themes/*.json`。主题文件在启动时读取；外部修改后重启生效。不提供交互编辑、热更新或插件主题安装。
 
-`settings.json` 的权威结构由 `src/utils/settings/types.ts` 定义；`bun run schema:settings` 从同一 Zod 定义输出项目 Schema。项目不再引用上游 Claude Code SchemaStore，以免编辑器提示已经删除的登录、云服务或远程分发字段。
+插件仅支持已安装的本地插件。没有远端市场、下载、原生安装、CLI 自更新或插件自动更新。
 
-Sandbox 可显式启用凭据隔离：
+`sandbox.credentials` 可阻止读取常见凭据文件和秘密环境变量。它是本项目额外的本地安全层，不替代操作系统权限或用户定义的工具权限规则。
 
-```json
-{
-  "sandbox": {
-    "enabled": true,
-    "credentials": {
-      "enabled": true,
-      "additionalFilePatterns": ["~/.custom/credentials/**"],
-      "additionalEnvPatterns": ["COMPANY_*_TOKEN"]
-    }
-  }
-}
-```
+## 构建与验证
 
-启用后，Read/Glob/Grep 和 Sandbox 子进程不能读取常见 `.env`、SSH、云平台、包管理器及私钥文件；Bash/PowerShell 子进程会移除常见 `*_API_KEY`、`*_TOKEN`、`*_SECRET`、`*_PASSWORD` 等秘密变量，但主进程中的模型 Provider 仍可读取 `models.json` 指定的 API Key。普通 `Read(*)`、`sandbox.filesystem.allowRead`、bypass 和非 Sandbox Shell 不能覆盖该限制；平台不支持 Sandbox 或依赖缺失时启动失败。该能力默认关闭，必须同时设置 `sandbox.enabled` 和 `sandbox.credentials.enabled`。
-
-### 本地自定义主题
-
-`/theme` 除 6 个内置主题外，还会在启动时读取 `~/.claude/themes/*.json`。文件名是不含扩展名的 slug，选择后保存为 `custom:<slug>`；程序只读这些文件，不创建、编辑、删除或监听主题，外部变更需要重启后生效。例如 `~/.claude/themes/dracula.json`：
-
-```json
-{
-  "name": "Dracula",
-  "base": "dark",
-  "overrides": {
-    "claude": "#bd93f9",
-    "promptBorder": "#6272a4",
-    "planMode": "#8be9fd",
-    "error": "#ff5555",
-    "warning": "#f1fa8c",
-    "success": "#50fa7b",
-    "diffAdded": "#193c2b",
-    "diffRemoved": "#4c2026",
-    "userMessageBackground": "#1e1b4b",
-    "selectionBg": "#44475a"
-  }
-}
-```
-
-`base` 可使用现有 6 个内置主题；颜色支持 `#rgb`、`#rrggbb`、`rgb(r,g,b)`、`ansi256(n)` 和 `ansi:<name>`。未知 Token 和非法颜色会被忽略并警告，损坏的单个 JSON 不影响其他主题。当前选择的自定义主题不存在时回退到 `dark`。
-
-## 运行架构
-
-主要执行链路如下：
-
-```text
-CLI 入口
-  -> 参数解析与环境初始化
-  -> 加载本地模型注册表、插件、Skill 和 MCP
-  -> 启动 Ink/React REPL
-  -> 构造模型请求与会话上下文
-  -> 流式接收模型响应
-  -> 识别和调度工具调用
-  -> 权限检查、Hook 与工具执行
-  -> 将结果写回会话并更新终端界面
-```
-
-关键文件：
-
-- `src/entrypoints/cli.tsx`：最早的 CLI 入口
-- `src/main.tsx`：精简的 CLI 启动编排入口
-- `src/cli/startup/`：早期参数改写、设置预加载与入口识别
-- `src/cli/arguments/`：Commander 根参数、功能参数和子命令注册
-- `src/cli/modes/`：交互、print、resume、SSH、remote 等运行模式编排
-- `src/cli/initialization/`：命令级、迁移和首屏后延迟服务初始化
-- `src/screens/REPL.tsx`：交互式终端的稳定导出入口
-- `src/screens/repl/ReplController.tsx`：REPL 稳定控制器入口
-- `src/screens/repl/ReplRuntimeController.tsx`：查询、提交、会话和运行时跨域编排
-- `src/screens/repl/view/ReplView.tsx`：主 Prompt 与 Transcript 视图投影
-- `src/screens/repl/interaction/`：Dialog、消息选择、取消与退出交互
-- `src/screens/repl/session/`：会话消息与时间线状态
-- `src/screens/repl/input/`：输入框、快捷键和 transcript 控制
-- `src/screens/repl/agents/`：任务、Agent 状态与消息投影
-- `src/screens/repl/view/`：transcript 纯渲染组件
-- `src/query.ts`：模型查询、流式响应和工具调用循环
-- `src/tools.ts`：工具集合与默认工具预设
-- `src/services/tools/`：工具编排和流式工具执行
-- `src/services/api/`：模型 API 和请求处理
-- `src/services/mcp/`：MCP 客户端、认证和资源管理
-- `scripts/feature-policy.ts`：Feature Flag 分类、默认集合、依赖和冲突的唯一机器可读策略
-- `scripts/defines.ts`：把 Feature Policy 转换为构建器使用的宏定义
-
-## 目录结构
-
-```text
-.
-|-- src/
-|   |-- entrypoints/       # CLI、MCP 和 SDK 入口
-|   |-- screens/           # Ink 终端界面
-|   |-- components/        # UI 组件
-|   |-- services/          # API、MCP、插件、记忆、分析等服务
-|   |-- commands/          # CLI 与斜杠命令
-|   |-- coordinator/       # 多 Worker 编排
-|   |-- workflow/          # 工作流集成
-|   |-- bridge/            # 远程控制桥接
-|   |-- utils/             # 权限、会话、Shell、模型等基础模块
-|-- packages/
-|   |-- builtin-tools/     # 内置工具实现
-|   |-- agent-tools/       # Agent 工具
-|   |-- mcp-client/        # MCP 客户端包
-|   |-- workflow-engine/   # 确定性工作流引擎
-|   |-- remote-control-server/
-|   |-- weixin/            # 微信集成
-|   `-- @ant/              # Ink、模型供应商和 Computer Use 等包
-|-- scripts/               # 构建、开发、检查与发布脚本
-|-- spec/                  # 功能设计和实施规格
-|-- build.ts               # Bun 构建入口
-|-- vite.config.ts         # Node/Vite 生产构建配置
-`-- package.json
-```
-
-## 安装与开发
-
-项目使用 Bun，并通过 `bun.lock` 锁定依赖。
-
-```bash
-bun install
-```
-
-常用命令：
-
-```bash
-# 开发模式
-bun run dev
-
-# Bun 构建
-bun run build
-
-# Windows standalone EXE（目标机器不需要 Node.js 或 Bun）
-bun run build:exe
-
-# Vite/Node 生产构建
-bun run build:vite
-
-# TypeScript 检查
-bun run typecheck
-
-# Biome 检查
-bun run check
-
-# 完整最小验证（需要已启动的本地 llama.cpp Server）
-bun run verify
-```
-
-`bun run verify` 默认使用 `~/.claude/models.json` 中的默认模型；默认模型是外部服务时，可用 `CLAUDE_CODE_VERIFY_MODEL=<本地模型ID>` 显式选择同一注册表中的本地 llama.cpp 模型。验证模型地址必须是回环或私有网络地址，以避免验证过程误用外部付费接口。
-
-### 输入框 Shell 模式
-
-输入框以 `!` 开头的命令直接由选定 Shell 执行，输出会写入当前会话。默认情况下，命令结束后会自动触发模型响应；设置 `respondToBashCommands: false` 可恢复仅写入上下文、不自动回复的模式：
-
-```json
-{
-  "respondToBashCommands": false
-}
-```
-
-该开关不改变 Shell、Sandbox、凭据隔离、权限审批或后台化行为；用户中断的命令不会触发模型响应。
-
-### 清空、恢复与回滚
-
-`/clear` 会创建新的空 Session；清空前的 Transcript 与文件 checkpoint 保留在本地。要回到清空前的工作，先使用 `/resume` 选择旧 Session，再在该已恢复 Session 中运行 `/rewind`（或连续按两次 `Esc`）恢复对话、代码或两者。`/rewind` 不跨 Session 读取历史，也不把旧 Session 的权限、MCP 连接、环境变量或后台任务带入当前 Session。
-
-构建完成后，CLI 入口位于：
-
-```text
-dist/cli-bun.js
-dist/cli-node.js
-```
-
-## 构建说明
-
-项目保留三条构建路径：
-
-1. `build.ts` 使用 `Bun.build`，面向 Bun 运行时。
-2. `vite.config.ts` 使用 Vite/Rollup 生成 Node.js 兼容产物。
-3. `scripts/build-exe.ts` 使用 Bun compile 生成 `dist/claude.exe`，其中包含 Bun Runtime，运行时不依赖本机 Node.js 或 Bun。
-
-Bun 构建会对生成代码进行兼容性处理，包括替换 `import.meta.require`，以及保护对 `globalThis.Bun` 的直接访问。`bun run verify` 会分别检查 Bun Bundle、Vite/Node Bundle 和 Windows standalone EXE：前两者检查 chunk/依赖完整性与禁止的云接口标记，EXE 额外执行二进制字符串扫描；三类产物都执行版本和启动冒烟。
-
-项目还通过编译期 Feature Flag 控制可选能力。唯一策略位于 `scripts/feature-policy.ts`：稳定能力可以进入默认构建，实验和内部/部署专用能力必须分别通过 `ALLOW_EXPERIMENTAL_FEATURES=1` 或 `ALLOW_INTERNAL_FEATURES=1` 授权后再用 `FEATURE_<NAME>=1` 启用。运行时覆盖只读取本地配置或 `CLAUDE_LOCAL_FEATURE_OVERRIDES`，不会连接远程 Feature Flag 服务。
-
-## 当前验证状态
-
-当前基线通过同一个 `bun run verify` 入口验证依赖锁定、TypeScript、Biome、17 个 workspace、轻量协议/权限检查和三类生产构建。CI 使用 `--ci` 跳过本地模型；本地验收额外对三个 CLI 产物执行单轮模型请求和 `Read` 工具调用：
-
-```bash
+```powershell
 bun install
 bun run typecheck
 bun run lint
-bun run verify -- --ci
+bun run build
+bun run build:node
+bun run build:exe
+bun run verify
 ```
 
-## 工程现状
+支持三条构建链：
 
-### 优点
+- Bun bundle：开发和 Bun 运行时产物。
+- Vite/Rollup Node bundle：Node 兼容分发产物。
+- Bun standalone EXE：Windows 单文件 `claude.exe`。
 
-- TypeScript 开启严格模式。
-- 工具、MCP、Agent 和工作流已经拆分为独立 workspace 包。
-- 工作流引擎强调确定性、端口隔离和可回放。
-- 提供 Biome、Knip、TypeScript 和产物完整性检查工具。
-- 同时支持 Bun 与 Node.js CLI 入口。
+`bun run verify` 是唯一的项目验证入口，覆盖依赖锁定、类型、Biome、适用构建、CLI `--version`/启动冒烟、源码级轻量验证，以及可用本地模型的单轮模型和工具调用。它不依赖付费云模型，也不引入第二套测试框架。
 
-### 主要风险
+## 项目文档
 
-#### 核心文件过大
-
-部分模块已经承担过多职责：
-
-- `src/screens/repl/ReplController.tsx`：稳定导出入口；主视图、Dialog、取消和退出已分层，运行时编排位于 `ReplRuntimeController.tsx`
-- `src/cli/print.ts`：约 223 KB
-- `src/utils/messages.ts`：约 214 KB
-- `src/utils/sessionStorage.ts`：约 187 KB
-- `src/utils/hooks.ts`：约 168 KB
-
-这些文件的修改影响面较大，建议逐步按启动阶段、运行模式、协议和领域职责拆分。
-
-#### 双构建链可能发生行为漂移
-
-Bun 与 Vite/Rollup 的依赖处理和代码转换逻辑不同，需要避免两种构建产物发生行为漂移。
-
-#### Feature Flag 组合复杂
-
-默认启用的功能数量较多，部分实验能力与稳定能力混在同一个编译列表中。建议将 Feature Flag 分为稳定、实验和部署专用三层，并增加组合合法性检查。
-
-#### 安全审计范围较大
-
-项目同时拥有 Shell、文件写入、远程控制、SSH、插件动态加载、MCP/OAuth 和公开制品上传能力。正式部署前应重点审计：
-
-- Shell 和文件权限边界
-- 插件与 Skill 的信任链
-- 远程控制认证和令牌生命周期
-- 日志、会话与遥测中的敏感信息
-- MCP 服务权限
-- HTML 制品的访问与过期策略
-
-## 建议的改进顺序
-
-1. 完善根级许可证和 CI。
-2. 在干净环境中恢复可复现安装，并跑通静态检查。
-3. 继续收缩 `ReplRuntimeController.tsx` 的运行时编排，并拆分 `messages.ts` 和 `sessionStorage.ts`；`main.tsx`、REPL 入口和主视图已完成分层。
-4. 统一 Bun/Node 两种构建产物的兼容策略。
-5. 对 Feature Flag 进行分层和组合约束。
-6. 对远程控制、插件加载、Shell 权限和制品服务进行专项安全审计。
-
-## 总结
-
-该项目功能完整度很高，已经具备 AI 编程助手平台的雏形。它拥有较扎实的类型和模块化基础，但核心代码复杂度、构建分叉、Feature Flag 数量以及安全攻击面都已经超过普通 CLI 项目的范围。
-
-当前阶段最重要的工作不是继续堆叠功能，而是恢复可复现构建、降低核心模块耦合、完善项目文档与 CI，并明确发布和安全边界。
+- [开发计划与差异基线](DEVELOPMENT_PLAN.md)
+- [环境变量](ENVIRONMENT_VARIABLES.md)
+- [Feature Flag 策略](FEATURE_FLAGS.md)
+- [依赖审计](DEPENDENCY_AUDIT.md)
+- [Anthropic SDK 类型兼容边界](ANTHROPIC_SDK_COMPATIBILITY.md)
