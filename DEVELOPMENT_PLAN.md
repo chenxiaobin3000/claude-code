@@ -87,7 +87,7 @@
 | --- | --- | --- | --- |
 | 运行时 | 平台原生可执行文件 | 部分 | 本地仍以 TypeScript、Bun/Node 为主 |
 | 会话目录 | `/cd` 保留会话迁移到新目录 | 已有（定制） | 本项目主动不迁移 Project/Session；`/cd` 仅临时改变 CWD，启动目录保持唯一 Project |
-| Shell 模式 | `! command` 后模型主动分析输出 | 缺失 | 未发现 `respondToBashCommands` |
+| Shell 模式 | `! command` 后模型主动分析输出 | 已有 | `respondToBashCommands` 默认开启；显式 `false` 保留仅写入上下文的行为 |
 | Sandbox | 凭据文件和秘密环境变量隔离 | 已有 | `sandbox.credentials` 同时覆盖文件工具、Sandbox Runtime 和 Shell 子进程环境 |
 | 权限规则 | 支持工具输入参数匹配及更严格危险命令分类 | 部分 | 本地有权限系统，但未完整对齐最新规则 |
 | Hook | MCP Tool Hook、参数数组、`continueOnBlock`、`MessageDisplay` 等 | 部分 | 基础 Hook 和 MCP 存在，新字段不完整 |
@@ -195,32 +195,13 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - CLI 帮助中不存在根级 `install`、`update` 或 `rollback`，源码边界检查禁止恢复任何自安装、自更新或自降级实现。
 - 至少两个 OpenAI/OpenAI-compatible 模型完成流式对话与工具调用。
 - 失败时能定位 Provider、模型注册与解析、鉴权或流解析阶段。
+- `/cd` 仅临时切换命令 CWD：Session ID、`originalCwd`、Transcript、Session Memory 与 `/resume` 仍固定在启动 Project；不加载目标目录的配置、Hook、Plugin、Skill 或 MCP，不迁移信任边界；`/clear` 恢复启动目录。`scripts/validation/temporary-cd.ts` 覆盖空格路径、相对路径、失败回滚、Session/Transcript 固定与禁止重新引入 Project 迁移依赖。
+- 输入框 `! command` 默认在 Shell 完成后请求模型响应；`settings.json` 的 `respondToBashCommands: false` 可关闭该响应而保留命令和输出上下文。用户中断不触发模型响应，且开关不影响 Shell、Sandbox、凭据隔离、权限审批或后台化。`scripts/validation/bash-response.ts` 覆盖默认、显式值、中断和 Schema。
+- `/clear` 创建空白新 Session 而保留旧 Transcript 与文件 checkpoint；通过 `/resume` 回到旧 Session 后，`/rewind` 只恢复该当前 Session 的对话或文件快照，绝不跨 Session 注入旧消息、权限、MCP、环境或后台任务。`scripts/validation/clear-resume-rewind.ts` 覆盖这一边界。
+- OpenAI-compatible 请求对首个可见输出前的连接失败、超时、临时 429、408/409/425 和 5xx 有界指数退避；已输出文本、推理或工具调用 delta 后断线、停滞或缺失 `[DONE]` 时保留部分响应并提示不完整，禁止自动重放。鉴权、上下文、模型、协议和用户中断不重试；重试、退避与流空闲阈值通过 `API_MAX_RETRIES`、`API_RETRY_MAX_DELAY_MS`、`API_STREAM_IDLE_TIMEOUT_MS` 控制。`openai-client.ts` 与 `openai-errors.ts` 验证重试和不重放边界。
+- 上述排障与会话基线于 2026-07-27 通过 `bun run verify -- --ci` 全矩阵复验（170.1 秒）。
 
 ## 6. 后续开发路线图
-
-### P1：排障和会话体验
-
-目标：降低复杂配置导致的启动和会话故障。
-
-- [x] 实现受限 `/cd`（2026-07-23 完成）：启动目录保持当前 Session 唯一 Project；命令只临时修改 CWD，不加载目标目录的 `CLAUDE.md`、Settings、Skill、Hook、Plugin 或 MCP，不授予目标目录信任，不迁移 Session ID、Transcript 或 `--resume` 归属；`/clear` 继续恢复启动目录。
-- [ ] 实现 `respondToBashCommands`，让 `! command` 可配置是否触发模型响应。
-- [ ] 支持 `/rewind` 跨 `/clear` 恢复。
-- [ ] 完善 API 中断重试和流断线恢复。
-
-验收标准：
-
-- `/cd` 后当前会话继续使用启动 Project 的 Session ID 和 Transcript；`/clear` 恢复启动目录，`--resume` 仍从启动 Project 正确找到。
-- Shell 命令响应行为可由设置显式控制。
-
-`/cd` 验证记录（2026-07-23）：新增
-`scripts/validation/temporary-cd.ts` 并接入 `bun run verify`，覆盖带空格目录、
-相对路径、文件目标拒绝、失败不改变 CWD、Session ID/`originalCwd`/Transcript
-路径和 Session Memory 路径保持不变、`/clear` 复位接线，以及禁止重新引入
-Project 信任、配置加载、Hook 触发和 Session 迁移依赖。项目级 Plan、MCP
-发现、Session Memory、历史目录和动态 Skill 发现均固定使用 `originalCwd`，
-不会随临时 CWD 漂移。最终 `bun run verify --ci` 全矩阵通过（161.7 秒），
-包括 17 个 workspace、全部源验证、Bun/Vite 构建、Bundle 完整性、Windows
-standalone EXE 构建与完整性检查。
 
 ### P1：Agent 和后台任务
 

@@ -115,6 +115,8 @@ CLI 不提供 Anthropic 账号登录、官方模型直连、会话分享、Feedb
 
 支持的用户环境变量按用途记录在 [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md)。模型地址和模型 ID 只写入 `~/.claude/models.json`，凭据通过其中的 `apiKeyEnv` 引用环境变量，不写入配置文件、帮助输出或诊断日志。
 
+OpenAI-compatible 请求会对连接失败、临时限流、5xx 和首个可见输出前的断流进行有界重试。已输出文本或工具调用后发生断线时，CLI 保留已显示内容并提示响应可能不完整，不会自动重放请求或重复工具调用；发送 `continue` 可开始新的续写请求。重试次数、退避和流空闲超时见 [环境变量说明](ENVIRONMENT_VARIABLES.md#api-retry-and-stream-recovery)。
+
 `settings.json` 的权威结构由 `src/utils/settings/types.ts` 定义；`bun run schema:settings` 从同一 Zod 定义输出项目 Schema。项目不再引用上游 Claude Code SchemaStore，以免编辑器提示已经删除的登录、云服务或远程分发字段。
 
 Sandbox 可显式启用凭据隔离：
@@ -263,6 +265,22 @@ bun run verify
 ```
 
 `bun run verify` 默认使用 `~/.claude/models.json` 中的默认模型；默认模型是外部服务时，可用 `CLAUDE_CODE_VERIFY_MODEL=<本地模型ID>` 显式选择同一注册表中的本地 llama.cpp 模型。验证模型地址必须是回环或私有网络地址，以避免验证过程误用外部付费接口。
+
+### 输入框 Shell 模式
+
+输入框以 `!` 开头的命令直接由选定 Shell 执行，输出会写入当前会话。默认情况下，命令结束后会自动触发模型响应；设置 `respondToBashCommands: false` 可恢复仅写入上下文、不自动回复的模式：
+
+```json
+{
+  "respondToBashCommands": false
+}
+```
+
+该开关不改变 Shell、Sandbox、凭据隔离、权限审批或后台化行为；用户中断的命令不会触发模型响应。
+
+### 清空、恢复与回滚
+
+`/clear` 会创建新的空 Session；清空前的 Transcript 与文件 checkpoint 保留在本地。要回到清空前的工作，先使用 `/resume` 选择旧 Session，再在该已恢复 Session 中运行 `/rewind`（或连续按两次 `Esc`）恢复对话、代码或两者。`/rewind` 不跨 Session 读取历史，也不把旧 Session 的权限、MCP 连接、环境变量或后台任务带入当前 Session。
 
 构建完成后，CLI 入口位于：
 

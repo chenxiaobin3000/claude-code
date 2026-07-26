@@ -102,7 +102,6 @@ export const openAIProvider: ModelProvider = {
     )
     const client = getOpenAIClient({
       target,
-      maxRetries: 0,
       fetchOverride: request.options.fetchOverride as unknown as typeof fetch,
       source: request.options.querySource,
     })

@@ -16,8 +16,10 @@ import {
 } from '../messages.js';
 import { resolveDefaultShell } from '../shell/resolveDefaultShell.js';
 import { isPowerShellToolEnabled } from '../shell/shellToolUtils.js';
+import { getInitialSettings } from '../settings/settings.js';
 import { processToolResultBlock } from '../toolResultStorage.js';
 import { escapeXml } from '../xml.js';
+import { shouldRespondToBashCommand } from './bashResponse.js';
 import type { ProcessUserInputContext } from './processUserInput.js';
 
 export async function processBashCommand(
@@ -138,7 +140,7 @@ export async function processBashCommand(
           content: `<bash-stdout>${stdout}</bash-stdout><bash-stderr>${escapeXml(stderr)}</bash-stderr>`,
         }),
       ],
-      shouldQuery: false,
+      shouldQuery: shouldRespondToBashCommand(getInitialSettings()),
     };
   } catch (e) {
     if (e instanceof ShellError) {
@@ -150,7 +152,7 @@ export async function processBashCommand(
             createUserInterruptionMessage({ toolUse: false }),
             ...attachmentMessages,
           ],
-          shouldQuery: false,
+          shouldQuery: shouldRespondToBashCommand(getInitialSettings(), true),
         };
       }
       return {
@@ -162,7 +164,7 @@ export async function processBashCommand(
             content: `<bash-stdout>${escapeXml(e.stdout)}</bash-stdout><bash-stderr>${escapeXml(e.stderr)}</bash-stderr>`,
           }),
         ],
-        shouldQuery: false,
+        shouldQuery: shouldRespondToBashCommand(getInitialSettings()),
       };
     }
     return {
@@ -174,7 +176,7 @@ export async function processBashCommand(
           content: `<bash-stderr>Command failed: ${escapeXml(errorMessage(e))}</bash-stderr>`,
         }),
       ],
-      shouldQuery: false,
+      shouldQuery: shouldRespondToBashCommand(getInitialSettings()),
     };
   } finally {
     setToolJSX(null);

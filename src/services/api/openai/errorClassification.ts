@@ -16,6 +16,7 @@ export type OpenAIErrorKind =
   | 'protocol_route'
   | 'rate_limit'
   | 'server_error'
+  | 'stream_incomplete'
   | 'timeout'
   | 'unknown'
 
@@ -40,6 +41,25 @@ export class OpenAIRequestError extends Error {
     super(classification.userMessage, { cause })
     this.name = 'OpenAIRequestError'
     this.classification = classification
+  }
+}
+
+/** A stream ended after content was exposed, so replaying it is unsafe. */
+export class OpenAIStreamInterruptedError extends Error {
+  readonly visibleOutput: boolean
+  readonly reason: 'connection_closed' | 'stream_stalled' | 'server_error'
+
+  constructor(
+    reason: OpenAIStreamInterruptedError['reason'],
+    cause?: unknown,
+  ) {
+    super(
+      `openai_stream_incomplete: ${reason.replaceAll('_', ' ')}`,
+      { cause },
+    )
+    this.name = 'OpenAIStreamInterruptedError'
+    this.visibleOutput = true
+    this.reason = reason
   }
 }
 
@@ -78,6 +98,8 @@ function formatUserMessage(
       return `OpenAI compatibility error: endpoint${target} returned a response that does not follow the OpenAI Chat Completions JSON/SSE contract. No provider-specific response adapter was attempted. Provider detail: ${details.message}`
     case 'server_error':
       return `The configured OpenAI-compatible endpoint${target} returned a server error${details.status ? ` (HTTP ${details.status})` : ''}.`
+    case 'stream_incomplete':
+      return `API Error: ${details.message}. The response above may be incomplete; it was not retried because replaying a partial response could repeat tool calls. Send "continue" to continue in a new request.`
     case 'unknown':
       return `API Error: ${details.message}`
   }
@@ -180,6 +202,18 @@ export function classifyOpenAIError(
   context: OpenAIErrorContext = {},
 ): ClassifiedOpenAIError {
   if (error instanceof OpenAIRequestError) return error.classification
+  if (error instanceof OpenAIStreamInterruptedError) {
+    const details = sanitizeErrorDetails(error, { secrets: context.secrets })
+    const endpoint = context.endpoint
+      ? sanitizeEndpoint(context.endpoint)
+      : undefined
+    return {
+      details,
+      endpoint,
+      kind: 'stream_incomplete',
+      userMessage: formatUserMessage('stream_incomplete', details, endpoint),
+    }
+  }
   const details = sanitizeErrorDetails(error, { secrets: context.secrets })
   const endpoint = context.endpoint
     ? sanitizeEndpoint(context.endpoint)

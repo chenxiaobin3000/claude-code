@@ -5,6 +5,13 @@ import type {
   ChatCompletionCreateParamsStreaming,
 } from 'openai/resources/chat/completions/completions.mjs'
 import { getOpenAIClient } from '../../src/services/api/openai/client.js'
+import { OpenAIStreamInterruptedError } from '../../src/services/api/openai/errorClassification.js'
+import {
+  getOpenAIRetryDelayMs,
+  getOpenAIRetryOptions,
+  hasVisibleOpenAIChunk,
+  isRetryableOpenAITransportError,
+} from '../../src/services/api/openai/retryPolicy.js'
 import type { ResolvedModelTarget } from '../../src/utils/model/modelRegistry.js'
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -106,5 +113,86 @@ assert(
   (requestError as Error & { code?: string }).code === 'invalid_api_key',
   'provider error code was not attached to the error',
 )
+
+assert(
+  hasVisibleOpenAIChunk({ choices: [{ delta: { content: 'visible' } }] }),
+  'text chunk was not recognized as visible output',
+)
+assert(
+  !hasVisibleOpenAIChunk({ choices: [{ delta: { role: 'assistant' } }] }),
+  'metadata-only chunk was treated as visible output',
+)
+assert(
+  isRetryableOpenAITransportError(Object.assign(new Error('busy'), { status: 503 })),
+  'server error was not retryable',
+)
+assert(
+  !isRetryableOpenAITransportError(Object.assign(new Error('bad key'), { status: 401 })),
+  'authentication error was retryable',
+)
+const retryOptions = getOpenAIRetryOptions({ API_MAX_RETRIES: '2' })
+assert(retryOptions.maxRetries === 2, 'retry option was not parsed')
+assert(
+  getOpenAIRetryDelayMs(new Error('network error'), 1, retryOptions, () => 0) === 250,
+  'retry delay was not deterministic at the lower jitter bound',
+)
+
+const previousRetries = process.env.API_MAX_RETRIES
+process.env.API_MAX_RETRIES = '1'
+let retryFetchCalls = 0
+const retryFetch = (async (): Promise<Response> => {
+  retryFetchCalls++
+  if (retryFetchCalls === 1) return new Response('temporary outage', { status: 503 })
+  return new Response(
+    'data: {"id":"chunk-2","object":"chat.completion.chunk","created":1,"model":"validation-model","choices":[{"index":0,"delta":{"content":"retried"},"finish_reason":null}]}\n\ndata: [DONE]\n\n',
+    { headers: { 'content-type': 'text/event-stream' } },
+  )
+}) as typeof fetch
+try {
+  const retryClient = getOpenAIClient({ target, fetchOverride: retryFetch })
+  const retryStream = await retryClient.chat.completions.create(
+    {
+      model: target.model,
+      messages: [{ role: 'user', content: 'hello' }],
+      stream: true,
+    } satisfies ChatCompletionCreateParamsStreaming,
+    {},
+  )
+  for await (const _chunk of retryStream) {
+    // Consumption triggers the retrying stream.
+  }
+  assert(retryFetchCalls === 2, 'pre-output server failure was not retried')
+} finally {
+  if (previousRetries === undefined) delete process.env.API_MAX_RETRIES
+  else process.env.API_MAX_RETRIES = previousRetries
+}
+
+let partialFetchCalls = 0
+const partialFetch = (async (): Promise<Response> => {
+  partialFetchCalls++
+  return new Response(
+    'data: {"id":"chunk-3","object":"chat.completion.chunk","created":1,"model":"validation-model","choices":[{"index":0,"delta":{"content":"partial"},"finish_reason":null}]}\n\n',
+    { headers: { 'content-type': 'text/event-stream' } },
+  )
+}) as typeof fetch
+const partialClient = getOpenAIClient({ target, fetchOverride: partialFetch })
+let partialError: unknown
+try {
+  const partialStream = await partialClient.chat.completions.create(
+    {
+      model: target.model,
+      messages: [{ role: 'user', content: 'hello' }],
+      stream: true,
+    } satisfies ChatCompletionCreateParamsStreaming,
+    {},
+  )
+  for await (const _chunk of partialStream) {
+    // The visible chunk must remain available before the interrupted error.
+  }
+} catch (error) {
+  partialError = error
+}
+assert(partialError instanceof OpenAIStreamInterruptedError, 'visible partial stream was replayed or lost')
+assert(partialFetchCalls === 1, 'visible partial stream was retried')
 
 console.log('[openai-client] PASS')

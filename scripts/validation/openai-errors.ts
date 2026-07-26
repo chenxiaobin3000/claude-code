@@ -4,6 +4,7 @@ import type { ChatCompletionChunk } from 'openai/resources/chat/completions/comp
 import {
   assertOpenAIChatCompletionResponse,
   classifyOpenAIError,
+  OpenAIStreamInterruptedError,
   validateOpenAIChatCompletionStream,
   type OpenAIErrorKind,
 } from '../../src/services/api/openai/errorClassification.js'
@@ -67,6 +68,11 @@ assertKind(
 assertKind('network', Object.assign(new Error('fetch failed'), { code: 'ECONNREFUSED' }))
 assertKind('timeout', Object.assign(new Error('request timed out'), { code: 'ETIMEDOUT' }))
 assertKind('server_error', providerError('upstream unavailable', 503))
+assertKind(
+  'stream_incomplete',
+  new OpenAIStreamInterruptedError('connection_closed'),
+  'stream',
+)
 assertKind('unknown', providerError('bad request', 400))
 
 const secret = 'sk-validation-secret-123456'

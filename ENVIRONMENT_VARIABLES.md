@@ -8,6 +8,15 @@ Model IDs and endpoints are configured in `~/.claude/models.json`, not with prov
 
 `CLAUDE_CODE_VERIFY_MODEL` selects a local model ID from the same registry for `bun run verify`. The selected endpoint must use loopback or a private-network address; verification refuses external paid endpoints.
 
+## API retry and stream recovery
+
+- `API_TIMEOUT_MS` controls the complete request deadline; the default is 600000 ms (10 minutes).
+- `API_MAX_RETRIES` controls retries after the original request; the default is 3 and values are capped at 10. Retries apply only to transient connection errors, timeouts, temporary 429 responses and 5xx responses before any visible stream output.
+- `API_RETRY_MAX_DELAY_MS` caps exponential-backoff delay; the default is 10000 ms and the maximum accepted value is 60000 ms. A server `Retry-After` value is respected within that cap.
+- `API_STREAM_IDLE_TIMEOUT_MS` controls how long an established SSE stream may send no bytes before it is considered stalled; the default is 120000 ms. Set `0` to disable the idle watchdog for unusually slow local models.
+
+Once text, reasoning, or a tool-call delta has been exposed, the CLI never replays that request automatically: replay can duplicate a tool invocation. It retains the partial response and appends an incomplete-response error; send `continue` to start a new, explicit continuation request. Authentication, context-limit, model, request-schema and response-schema errors are never retried.
+
 ## Local Feature Policy
 
 - `FEATURE_<NAME>=0|1` explicitly disables or enables a feature registered in `scripts/feature-policy.ts`.
