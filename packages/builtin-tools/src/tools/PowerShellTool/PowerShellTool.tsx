@@ -852,7 +852,6 @@ async function* runPowerShellCommand({
       // returns false via isSandboxingEnabled() → isSupportedPlatform() → false.
       // The explicit platform check is redundant-but-obvious.
       shouldUseSandbox: getPlatform() === 'windows' ? false : shouldUseSandbox({ command, dangerouslyDisableSandbox }),
-      protectCredentials: true,
       shouldAutoBackground,
     });
   } catch (e) {

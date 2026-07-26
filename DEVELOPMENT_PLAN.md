@@ -27,7 +27,6 @@
 
 - Bash 与 PowerShell 权限统一采用：硬安全拒绝 > 显式 deny > 不可绕过安全审批 > 显式 ask > 精确 allow > 受约束模式/只读自动允许 > 默认 ask。
 - 规则会检查整条命令、管道段、控制流、嵌套命令、包装器、别名、模块限定名、路径型可执行文件与解析失败降级；`Bash(*)` 和 `PowerShell(*)` 不覆盖硬安全结果。
-- `sandbox.credentials` 会保护常见凭据文件与秘密环境变量。
 - Windows Shell 实现按优先级进行可用性探测；Bash 与 PowerShell 不通过写死顺序互相替代。
 - 文件写入支持分块与截断恢复。相同文件工具操作连续失败两次后，当前轮的第三次相同调用被确定性阻止，避免本地模型陷入重试循环。
 
@@ -55,7 +54,16 @@
 
 ## 未开发路线图
 
-### P0：Agent 与后台任务模型
+### P0：Windows 原生 OS Sandbox
+
+- [ ] 为原生 Windows 实现 OS 级 Bash/PowerShell 子进程隔离，覆盖文件系统读写边界、网络域名边界、子进程继承与进程清理。
+- [ ] 保持与 macOS Seatbelt、Linux/WSL2 bubblewrap Sandbox 的设置语义一致：`filesystem`、`network`、`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands`。
+- [ ] 在不支持或初始化失败时遵守 `failIfUnavailable`：默认明确告警并走常规权限流，启用硬失败时拒绝启动，不产生伪沙盒状态。
+- [ ] 为 Windows PowerShell 5.1、PowerShell 7、Git Bash 与路径/UNC/符号链接边界提供真实隔离验证。
+
+完成条件：Windows 上的子进程不能越过已配置的文件与网络边界；退出、取消和异常不会遗留代理、锁或子进程；验证不得只依赖模拟或字符串判断。
+
+### P1：Agent 与后台任务模型
 
 - [ ] 梳理 Agent、Coordinator、Team 与 Background Session 的状态模型，消除重复状态和相互覆盖。
 - [ ] 明确前台/后台默认值、`background` 覆盖规则与等待行为。
@@ -67,7 +75,7 @@
 
 完成条件：状态转换可复现，取消与恢复不会遗留资源，权限与用户可见状态一致，并有独立轻量验证覆盖关键转换。
 
-### P1：Hook、Plugin、Skill 与 MCP
+### P2：Hook、Plugin、Skill 与 MCP
 
 - [ ] 支持 Hook 直接调用 MCP Tool，并定义其权限、超时和错误传播。
 - [ ] 补齐 `continueOnBlock`、`MessageDisplay`、`additionalContext` 的兼容语义。
@@ -80,7 +88,7 @@
 
 完成条件：每项能力有配置 Schema、权限边界、失败提示和至少一个不依赖测试框架的验证脚本。
 
-### P2：性能与稳定性
+### P3：性能与稳定性
 
 - [ ] 优化流式渲染的 CPU 占用、缓存命中和长输出退化。
 - [ ] 控制长会话、工具结果、图片与 MCP 内容导致的内存增长。
@@ -90,7 +98,7 @@
 
 完成条件：有可重复的压力脚本、资源阈值与异常恢复验证，且不会把环境偶发错误误报为产品成功。
 
-### P3：可选产品能力
+### P4：可选产品能力
 
 - [ ] 验收已安装的 `claude-in-chrome`：连接生命周期、权限提示、错误可见性与失败恢复。
 
