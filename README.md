@@ -7,8 +7,19 @@
 ## 版本与文档边界
 
 - 项目发行版本：`2.1.116`
-- 官方对照基线：Claude Code `2.1.141`，以[官方 Changelog](https://code.claude.com/docs/en/changelog)为准。
+- 官方对照基线：Claude Code `2.1.220`，以[官方 Changelog](https://code.claude.com/docs/en/changelog)为准。
 - 本项目不追踪或复述官方已有且行为一致的功能；升级官方版本时，只补充新增差异或重新评估现有差异。
+
+## 与当前官方版本的主要差异
+
+以下是以官方 `2.1.220` 为基线的产品差异，不应把上游功能说明误认为本项目能力。
+
+- **模型与登录**：官方的 Anthropic 登录、官方模型、组织默认/限制模型、Claude API Provider 与相关云端模型能力不适用。本项目只从 `models.json` 加载 OpenAI-compatible 模型；模型 Profile 静态声明，不做服务端模型发现或自动模型替换。
+- **云端与远程产品**：官方的 Web/Desktop/Mobile、Remote Control、GitHub App、Cloud Code Review、Routines、Channels、Artifacts、语音与账户/用量产品均不提供。本项目也不包含官方自动更新、安装器或远端遥测。
+- **插件与浏览器**：官方插件市场、远端安装/更新、插件自动重命名与 Chrome 内置控制不提供。仅加载本地已安装插件；浏览器能力只验收用户另行安装的 `claude-in-chrome`。
+- **Sandbox**：官方 `sandbox.credentials`、`sandbox.network.strictAllowlist` 及 macOS 专用 `sandbox.allowAppleEvents` 没有作为本项目配置面提供。原有 Sandbox 仍使用标准 `filesystem`、`network`、`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands` 语义；原生 Windows OS 级隔离尚未实现。
+- **会话路径**：官方 `/cd` 可将会话迁移到新的工作目录；本项目 `/cd` 仅临时切换 cwd，不迁移项目身份、会话、配置或扩展作用域。
+- **Agent、Hook、MCP 与 Skill**：官方当前的后台 Agent 默认行为、嵌套 Agent 限额与转发、`claude mcp login/logout`、`DirectoryAdded` Hook、嵌套 Skill 加载和部分 Hook 输出语义尚未宣称对齐；以开发计划的未完成项为准。
 
 ## 运行时与网络边界
 
@@ -101,6 +112,8 @@ bun run verify
 - Bun bundle：开发和 Bun 运行时产物。
 - Vite/Rollup Node bundle：Node 兼容分发产物。
 - Bun standalone EXE：Windows 单文件 `claude.exe`。
+
+项目保持 TypeScript + Bun 实现，不以 Rust 或其他平台原生语言重写 CLI。`claude.exe` 是包含 Bun Runtime 的 standalone 产物；它的目标是免安装运行时分发，而不是追随官方的原生二进制实现或安装/自更新机制。
 
 `bun run verify` 是唯一的项目验证入口，覆盖依赖锁定、类型、Biome、适用构建、CLI `--version`/启动冒烟、源码级轻量验证，以及可用本地模型的单轮模型和工具调用。它不依赖付费云模型，也不引入第二套测试框架。
 

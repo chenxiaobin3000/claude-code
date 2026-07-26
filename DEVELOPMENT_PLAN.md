@@ -58,32 +58,52 @@
 
 - [ ] 为原生 Windows 实现 OS 级 Bash/PowerShell 子进程隔离，覆盖文件系统读写边界、网络域名边界、子进程继承与进程清理。
 - [ ] 保持与 macOS Seatbelt、Linux/WSL2 bubblewrap Sandbox 的设置语义一致：`filesystem`、`network`、`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands`。
+- [ ] 对齐官方新增的 `sandbox.credentials`：只隔离 Sandbox 子进程对凭据文件和秘密环境变量的访问；不得恢复项目级 Read/Glob/Grep 硬拒绝，也不得影响模型 Provider 自身读取配置的凭据。
+- [ ] 支持 `sandbox.network.strictAllowlist`：未在允许列表中的 Sandbox 网络主机必须直接拒绝，不进入交互授权回退；普通模式保留会话内“允许一次后记住”的网络授权语义。
+- [ ] 支持 macOS 专用、默认关闭的 `sandbox.allowAppleEvents`，并确保该例外不会放宽文件系统、网络或其他平台的边界。
+- [ ] 保持 `denyRead`/`allowRead`、权限规则和符号链接的合并语义；大目录 Glob 不得把规则展开为过大的 Bash 描述或导致会话不可用。
 - [ ] 在不支持或初始化失败时遵守 `failIfUnavailable`：默认明确告警并走常规权限流，启用硬失败时拒绝启动，不产生伪沙盒状态。
 - [ ] 为 Windows PowerShell 5.1、PowerShell 7、Git Bash 与路径/UNC/符号链接边界提供真实隔离验证。
 
-完成条件：Windows 上的子进程不能越过已配置的文件与网络边界；退出、取消和异常不会遗留代理、锁或子进程；验证不得只依赖模拟或字符串判断。
+完成条件：Windows 上的子进程不能越过已配置的文件与网络边界；新增 Sandbox 设置在受支持平台具有一致、可验证的语义；退出、取消和异常不会遗留代理、锁或子进程；验证不得只依赖模拟或字符串判断。
 
 ### P1：Agent 与后台任务模型
 
+- [ ] 对齐官方 `/cd`：将当前会话原子迁移到目标工作目录，并保留当前对话上下文与 Prompt Cache；不再只临时改变 cwd。
+- [ ] `/cd` 后重新绑定会话的项目身份、Transcript/Resume 归属、Git 状态、权限根、Settings、CLAUDE.md、Hook、Skill、Plugin 与 MCP 发现范围；失败时保持原会话与原目录完整可用。
+- [ ] 对齐 Shell cwd 规则：主会话的 Bash `cd` 仅在项目根或 `--add-dir`、`/add-dir`、`additionalDirectories` 授权目录内跨命令保留；越界时复位并在工具结果中说明；子代理不继承 cwd 变更。
+- [ ] 为 `/cd` 与 Bash `cd` 增加规范化路径、符号链接、Windows 盘符/UNC、工作树、会话恢复和 `CwdChanged` Hook 验证，确保变更不导致跨项目配置泄漏。
 - [ ] 梳理 Agent、Coordinator、Team 与 Background Session 的状态模型，消除重复状态和相互覆盖。
 - [ ] 明确前台/后台默认值、`background` 覆盖规则与等待行为。
 - [ ] 定义嵌套子代理的最大深度、并发、Token 预算和取消传播。
+- [ ] 对齐后台优先的子代理生命周期：前台会话可继续工作并收到完成/需输入通知；停止必须永久生效，恢复、重连或守护进程重启不得复活已停止任务。
+- [ ] 支持会话级 Agent 总数上限、嵌套深度上限与可配置的安全预算；在 headless/stream-json 中可选择转发嵌套子代理文本和推理事件，并保持稳定的父 `tool_use` 关联。
+- [ ] 对齐 `/fork` 与 `/subtask` 的职责：`/fork` 生成独立、可管理的后台会话，`/subtask` 保留当前会话内的委派语义；分叉、恢复和清理不得混淆 Transcript 或工作树归属。
+- [ ] 对齐后台任务的 Shell 与 MCP 自动背景化阈值、状态展示和权限回传；长运行任务不能冻结主会话，也不能因后台化丢失输出或取消信号。
 - [ ] 统一 attach、detach、resume、kill、status 的状态转换与错误语义。
 - [ ] 让后台 Agent 的权限请求可靠回到主会话，不因无人处理而无限挂起。
 - [ ] 在崩溃、取消和恢复时回收 worktree、锁、临时目录和后台服务。
 - [ ] 为来自间接外部内容的提示注入建立明确的隔离和确认策略。
 
-完成条件：状态转换可复现，取消与恢复不会遗留资源，权限与用户可见状态一致，并有独立轻量验证覆盖关键转换。
+完成条件：状态转换和工作目录迁移可复现，取消与恢复不会遗留资源，权限与用户可见状态一致，跨目录不会泄漏配置或会话归属，并有独立轻量验证覆盖关键转换。
 
 ### P2：Hook、Plugin、Skill 与 MCP
 
 - [ ] 支持 Hook 直接调用 MCP Tool，并定义其权限、超时和错误传播。
 - [ ] 补齐 `continueOnBlock`、`MessageDisplay`、`additionalContext` 的兼容语义。
 - [ ] 让 Hook command 参数使用数组传递，避免字符串拼接和 Windows 引号歧义。
+- [ ] 补齐 `DirectoryAdded`、`CwdChanged`、`FileChanged`、`InstructionsLoaded`、`ConfigChange`、`PostToolBatch` 等生命周期 Hook，并明确 SessionStart/分叉/恢复来源。
+- [ ] 对齐 Hook `if` 匹配：工具与 MCP 标识符精确匹配、逗号列表、嵌套命令、路径 Glob、连字符名称与目录深度规则均须可预测，避免子串误命中或静默不触发。
+- [ ] 保证 Hook 的 `ask`、`deny`、`continue:false` 不能被自动模式、未沙盒命令或工具失败路径绕过；Schema/执行错误必须带可见原因。
 - [ ] 完善本地/内置插件依赖、最低版本、裁剪与动态重新加载；继续禁止远端市场、下载和自动更新。
 - [ ] 支持 `disableBundledSkills` 与嵌套 `.claude/skills` 的明确优先级。
+- [ ] 对齐仅本地 Skill 的发现和调用语义：嵌套目录按 cwd 解析、同名保留可区分名称、支持连续 Slash Skill 组合；不引入 Marketplace、远端下载或自动更新。
+- [ ] 兼容本地 `SKILL.md` 前置元数据的 kebab/snake/camel 命名、默认启用/回退等合法字段，并在格式不完整时给出明确降级或错误，不静默丢失 Skill 内容。
 - [ ] 增加 `claude mcp login`/`logout` 的本地凭据生命周期管理。
 - [ ] 完善 MCP 启动重试、审批、OAuth 凭据清理与断线重连。
+- [ ] 对齐 MCP Server 的不可信配置审批、认证缺失提示、headless OAuth 无浏览器流程、临时认证失败重连，以及 `list`/`get` 的 HTTP 状态和脱敏错误输出。
+- [ ] 支持 MCP `roots/list` 与工作目录变更通知；stdio Server 在恢复后获得稳定会话标识，并保证凭据、URL Secret 和环境变量不泄露到 CLI 输出或日志。
+- [ ] 在 MCP 工具调用超阈值时安全转入后台并保留进度、结果、取消和超时语义；配置校验失败的 Server 必须在交互与 stream-json 启动阶段可见。
 - [ ] 为扩展 API 定义版本协商与向后兼容策略。
 
 完成条件：每项能力有配置 Schema、权限边界、失败提示和至少一个不依赖测试框架的验证脚本。
