@@ -117,6 +117,8 @@ CLI 不提供 Anthropic 账号登录、官方模型直连、会话分享、Feedb
 
 OpenAI-compatible 请求会对连接失败、临时限流、5xx 和首个可见输出前的断流进行有界重试。已输出文本或工具调用后发生断线时，CLI 保留已显示内容并提示响应可能不完整，不会自动重放请求或重复工具调用；发送 `continue` 可开始新的续写请求。重试次数、退避和流空闲超时见 [环境变量说明](ENVIRONMENT_VARIABLES.md#api-retry-and-stream-recovery)。
 
+在 Windows 上，文件工具接受 Git Bash 盘符格式（如 `/d/work/a.txt`）和原生 `D:/work/a.txt`。同一文件工具调用若连续两次出现文件不存在、路径拒绝等确定性错误，第三次会被拦截并结束本轮，避免本地模型无限重复读取同一路径；请改用其他路径、先检查目录，或重新描述目标。
+
 `settings.json` 的权威结构由 `src/utils/settings/types.ts` 定义；`bun run schema:settings` 从同一 Zod 定义输出项目 Schema。项目不再引用上游 Claude Code SchemaStore，以免编辑器提示已经删除的登录、云服务或远程分发字段。
 
 Sandbox 可显式启用凭据隔离：

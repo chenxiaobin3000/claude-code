@@ -199,6 +199,7 @@ GitHub Actions 在 `main` 分支 push、pull request 和手动触发时执行，
 - 输入框 `! command` 默认在 Shell 完成后请求模型响应；`settings.json` 的 `respondToBashCommands: false` 可关闭该响应而保留命令和输出上下文。用户中断不触发模型响应，且开关不影响 Shell、Sandbox、凭据隔离、权限审批或后台化。`scripts/validation/bash-response.ts` 覆盖默认、显式值、中断和 Schema。
 - `/clear` 创建空白新 Session 而保留旧 Transcript 与文件 checkpoint；通过 `/resume` 回到旧 Session 后，`/rewind` 只恢复该当前 Session 的对话或文件快照，绝不跨 Session 注入旧消息、权限、MCP、环境或后台任务。`scripts/validation/clear-resume-rewind.ts` 覆盖这一边界。
 - OpenAI-compatible 请求对首个可见输出前的连接失败、超时、临时 429、408/409/425 和 5xx 有界指数退避；已输出文本、推理或工具调用 delta 后断线、停滞或缺失 `[DONE]` 时保留部分响应并提示不完整，禁止自动重放。鉴权、上下文、模型、协议和用户中断不重试；重试、退避与流空闲阈值通过 `API_MAX_RETRIES`、`API_RETRY_MAX_DELAY_MS`、`API_STREAM_IDLE_TIMEOUT_MS` 控制。`openai-client.ts` 与 `openai-errors.ts` 验证重试和不重放边界。
+- Windows 文件工具把 Git Bash 盘符路径（如 `/d/work/file.txt`）与原生路径归一为同一内部路径；文件不存在等确定性失败以“工具名 + 归一化路径”按当前回合计数。相同调用允许实际执行两次，第三次不再执行并停止本轮续推，要求模型改用其他路径、先检查目录或询问用户；网络、超时等瞬时失败不触发熔断。`scripts/validation/deterministic-tool-failures.ts` 覆盖路径等价、POSIX 保留、两次计数、第三次拦截和错误分类；2026-07-27 `bun run verify -- --ci` 全矩阵通过（161.5 秒）。
 - 上述排障与会话基线于 2026-07-27 通过 `bun run verify -- --ci` 全矩阵复验（170.1 秒）。
 
 ## 6. 后续开发路线图

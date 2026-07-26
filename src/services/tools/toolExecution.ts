@@ -126,6 +126,13 @@ import {
   runPreToolUseHooks,
 } from './toolHooks.js'
 import { isSkillLearningEnabled } from '../skillLearning/featureCheck.js'
+import {
+  deterministicFileFailureKey,
+  isDeterministicFileFailure,
+  recordDeterministicFileFailure,
+  REPEATED_DETERMINISTIC_FAILURE_MESSAGE,
+  shouldBlockRepeatedDeterministicFailure,
+} from './deterministicFailureGuard.js'
 
 // Cached import promise for the skill-learning wrapper — paid once, not per call.
 let _skillLearningWrapperCache:
@@ -711,6 +718,43 @@ async function checkPermissionsAndCallTool(
           ],
           toolUseResult: `InputValidationError: ${parsedInput.error.message}`,
           sourceToolAssistantUUID: assistantMessage.uuid,
+        }),
+      },
+    ]
+  }
+
+  const deterministicFailureKey = deterministicFileFailureKey(
+    tool.name,
+    parsedInput.data,
+  )
+  if (
+    shouldBlockRepeatedDeterministicFailure(
+      toolUseContext.abortController.signal,
+      deterministicFailureKey,
+    )
+  ) {
+    return [
+      {
+        message: createUserMessage({
+          content: [
+            {
+              type: 'tool_result',
+              content: `<tool_use_error>${REPEATED_DETERMINISTIC_FAILURE_MESSAGE}</tool_use_error>`,
+              is_error: true,
+              tool_use_id: toolUseID,
+            },
+          ],
+          toolUseResult: `Error: ${REPEATED_DETERMINISTIC_FAILURE_MESSAGE}`,
+          sourceToolAssistantUUID: assistantMessage.uuid,
+        }),
+      },
+      {
+        message: createAttachmentMessage({
+          type: 'hook_stopped_continuation',
+          message: REPEATED_DETERMINISTIC_FAILURE_MESSAGE,
+          hookName: 'DeterministicToolFailureGuard',
+          toolUseID,
+          hookEvent: 'PreToolUse',
         }),
       },
     ]
@@ -1737,7 +1781,17 @@ async function checkPermissionsAndCallTool(
         ...(mcpServerScope && { mcp_server_scope: mcpServerScope }),
       })
     }
-    const content = formatError(error)
+    let content = formatError(error)
+    if (isDeterministicFileFailure(error)) {
+      const failureCount = recordDeterministicFileFailure(
+        toolUseContext.abortController.signal,
+        deterministicFailureKey,
+      )
+      if (failureCount === 2) {
+        content +=
+          '\n\nThis exact file tool call has failed twice. Do not repeat it; use a different path, inspect the directory first, or ask the user for clarification.'
+      }
+    }
 
     // Determine if this was a user interrupt
     const isInterrupt = error instanceof AbortError

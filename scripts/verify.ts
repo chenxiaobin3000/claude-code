@@ -44,6 +44,7 @@ const validationScripts = [
   'scripts/validation/openai-stream.ts',
   'scripts/validation/openai-client.ts',
   'scripts/validation/openai-errors.ts',
+  'scripts/validation/deterministic-tool-failures.ts',
   'scripts/validation/model-stream.ts',
   'scripts/validation/model-usage.ts',
     'scripts/validation/tool-permissions.ts',
