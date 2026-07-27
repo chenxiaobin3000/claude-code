@@ -161,13 +161,13 @@ assertEqual(
   'DeepSeek effective profile disables the interactive default thinking state',
 )
 setEffectiveModelProfiles(new Map())
-assertEqual(
+assertDeepEqual(
   (buildOpenAIRequestBodyForProfile(
     { ...baseRequest, model: 'deepseek-v4-flash' },
     deepseekWithoutThinking,
   ) as Record<string, unknown>).thinking,
-  undefined,
-  'DeepSeek profile override disables thinking request field',
+  { type: 'disabled' },
+  'DeepSeek profile override explicitly disables provider-default thinking',
 )
 const unknownPartialProfile = createEffectiveModelProfile('fixture-model', {
   contextWindowTokens: 131_072,
@@ -265,9 +265,9 @@ const deepseekDisabled = buildOpenAIRequestBody({
   model: 'deepseek-v4-flash',
   thinkingConfig: { type: 'disabled' },
 }) as Record<string, unknown>
-assertEqual(
+assertDeepEqual(
   deepseekDisabled.thinking,
-  undefined,
+  { type: 'disabled' },
   'disabled DeepSeek reasoning',
 )
 

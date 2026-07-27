@@ -14,7 +14,7 @@ import {
 import type { ThinkingConfig } from '../../../utils/thinking.js'
 
 export type OpenAICompatibleRequestExtension = {
-  thinking?: { type: 'enabled' }
+  thinking?: { type: 'enabled' | 'disabled' }
 }
 
 type CommonRequestParams = {
@@ -152,10 +152,9 @@ function buildCommonRequestBody(
       }),
       parallel_tool_calls: profile.chatCompletions.parallelToolCalls,
     }),
-    ...(thinkingEnabled &&
-      profile.reasoning.type === 'deepseek' && {
-        thinking: { type: 'enabled' },
-      }),
+    ...(profile.reasoning.type === 'deepseek' && {
+      thinking: { type: thinkingEnabled ? 'enabled' : 'disabled' },
+    }),
     ...(profile.reasoning.type === 'openai' &&
       reasoningEffort !== undefined && {
         reasoning_effort: reasoningEffort,
