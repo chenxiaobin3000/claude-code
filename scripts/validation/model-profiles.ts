@@ -22,10 +22,12 @@ import {
   createEffectiveModelProfile,
   getDefaultModelProfileWarning,
   getModelProfile,
+  setEffectiveModelProfiles,
   usesDefaultModelProfile,
   type ModelProfile,
 } from '../../src/utils/model/modelProfiles.js'
 import { calculateUSDCost } from '../../src/utils/modelCost.js'
+import { isThinkingEnabledByModelDefault } from '../../src/utils/thinking.js'
 import { assert, assertDeepEqual, assertEqual } from './assertions.js'
 
 const root = resolve(import.meta.dir, '../..')
@@ -147,6 +149,18 @@ assertDeepEqual(
   { type: 'deepseek', enabledByDefault: false },
   'DeepSeek partial reasoning override',
 )
+assertEqual(
+  isThinkingEnabledByModelDefault('deepseek-v4-flash'),
+  true,
+  'DeepSeek built-in profile enables thinking by default',
+)
+setEffectiveModelProfiles(new Map([['deepseek-v4-flash', deepseekWithoutThinking]]))
+assertEqual(
+  isThinkingEnabledByModelDefault('deepseek-v4-flash'),
+  false,
+  'DeepSeek effective profile disables the interactive default thinking state',
+)
+setEffectiveModelProfiles(new Map())
 assertEqual(
   (buildOpenAIRequestBodyForProfile(
     { ...baseRequest, model: 'deepseek-v4-flash' },

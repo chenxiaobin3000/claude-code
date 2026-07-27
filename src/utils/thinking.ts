@@ -92,7 +92,14 @@ export function modelSupportsAdaptiveThinking(model: string): boolean {
   return false
 }
 
-export function shouldEnableThinkingByDefault(): boolean {
+/** Returns the model-declared default before global or explicit user overrides. */
+export function isThinkingEnabledByModelDefault(model: string): boolean {
+  const reasoning = getModelProfile(model).reasoning
+  if (reasoning.type === 'none') return false
+  return reasoning.type !== 'deepseek' || reasoning.enabledByDefault
+}
+
+export function shouldEnableThinkingByDefault(model?: string): boolean {
   if (process.env.MAX_THINKING_TOKENS) {
     return parseInt(process.env.MAX_THINKING_TOKENS, 10) > 0
   }
@@ -102,10 +109,7 @@ export function shouldEnableThinkingByDefault(): boolean {
     return false
   }
 
-  // IMPORTANT: Do not change default thinking enabled value without notifying
-  // the model launch DRI and research. This can greatly affect model quality and
-  // bashing.
-
-  // Enable thinking by default unless explicitly disabled.
-  return true
+  // Callers without a resolved model retain the legacy default. Model-aware
+  // callers must honor the validated effective Profile from models.json.
+  return model === undefined ? true : isThinkingEnabledByModelDefault(model)
 }

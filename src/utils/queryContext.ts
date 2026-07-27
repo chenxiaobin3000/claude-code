@@ -22,7 +22,6 @@ import type { FileStateCache } from './fileStateCache.js'
 import type { CacheSafeParams } from './forkedAgent.js'
 import { getMainLoopModel } from './model/model.js'
 import { resolveModelTarget } from './model/modelRegistry.js'
-import { getModelProfile } from './model/modelProfiles.js'
 import { asSystemPrompt } from './systemPromptType.js'
 import {
   shouldEnableThinkingByDefault,
@@ -114,7 +113,6 @@ export async function buildSideQuestionFallbackParams({
 }): Promise<CacheSafeParams> {
   const mainLoopModel = getMainLoopModel()
   resolveModelTarget(mainLoopModel)
-  const modelProfile = getModelProfile(mainLoopModel)
   const appState = getAppState()
 
   const { defaultSystemPrompt, userContext, systemContext } =
@@ -152,12 +150,7 @@ export async function buildSideQuestionFallbackParams({
       verbose: false,
       thinkingConfig:
         thinkingConfig ??
-        (shouldEnableThinkingByDefault() !== false &&
-        modelProfile.reasoning.type !== 'none' &&
-        !(
-          modelProfile.reasoning.type === 'deepseek' &&
-          !modelProfile.reasoning.enabledByDefault
-        )
+        (shouldEnableThinkingByDefault(mainLoopModel) !== false
           ? { type: 'adaptive' }
           : { type: 'disabled' }),
       mcpClients,

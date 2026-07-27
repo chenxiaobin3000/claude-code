@@ -1598,7 +1598,9 @@ export async function runDefaultMode(
   const mcpTools: Awaited<typeof mcpPromise>['tools'] = [];
   const mcpCommands: Awaited<typeof mcpPromise>['commands'] = [];
 
-  let thinkingEnabled = shouldEnableThinkingByDefault();
+  let thinkingEnabled = shouldEnableThinkingByDefault(
+    resolvedInitialModel ?? getDefaultMainLoopModel(),
+  );
   let thinkingConfig: ThinkingConfig = thinkingEnabled !== false ? { type: 'adaptive' } : { type: 'disabled' };
 
   if (options.thinking === 'adaptive' || options.thinking === 'enabled') {
