@@ -453,6 +453,11 @@ const requestBody = await source('src/services/api/openai/requestBody.ts')
 for (const forbidden of ["includes('deepseek')", "includes('mimo')"]) {
   assert(!requestBody.includes(forbidden), `request body contains ${forbidden}`)
 }
+const queryEngine = await source('src/QueryEngine.ts')
+assert(
+  queryEngine.includes('shouldEnableThinkingByDefault(initialMainLoopModel)'),
+  'QueryEngine fallback must honor the selected model Profile default',
+)
 const context = await source('src/utils/context.ts')
 for (const forbidden of ['getModelCapability', 'getCanonicalName']) {
   assert(!context.includes(forbidden), `context contains ${forbidden}`)

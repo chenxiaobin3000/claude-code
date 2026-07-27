@@ -293,7 +293,7 @@ export class QueryEngine {
 
     const initialThinkingConfig: ThinkingConfig = thinkingConfig
       ? thinkingConfig
-      : shouldEnableThinkingByDefault() !== false
+      : shouldEnableThinkingByDefault(initialMainLoopModel) !== false
         ? { type: 'adaptive' }
         : { type: 'disabled' }
 
