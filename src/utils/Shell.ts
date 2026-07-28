@@ -3,7 +3,7 @@ import { constants as fsConstants, readFileSync, unlinkSync } from 'fs'
 import { type FileHandle, mkdir, open, realpath } from 'fs/promises'
 import memoize from 'lodash-es/memoize.js'
 import { tmpdir } from 'os'
-import { basename, dirname, isAbsolute, resolve } from 'path'
+import { dirname, isAbsolute, resolve, win32 } from 'path'
 import { join as posixJoin } from 'path/posix'
 import { logEvent } from 'src/services/analytics/index.js'
 import {
@@ -164,6 +164,73 @@ const resolveProvider: Record<ShellType, () => Promise<ShellProvider>> = {
   powershell: getPsProvider,
 }
 
+const WINDOWS_SANDBOX_SHELL_ORDER: readonly ShellType[] = ['bash', 'powershell']
+
+async function getWindowsSandboxRuntimeLayout(
+  currentShellType: ShellType,
+  currentProvider: ShellProvider,
+): Promise<{
+  runtimeRoots: string[]
+  executable: string
+}> {
+  const providers = new Map<ShellType, ShellProvider>([
+    [currentShellType, currentProvider],
+  ])
+  await Promise.all(
+    WINDOWS_SANDBOX_SHELL_ORDER.filter(type => type !== currentShellType).map(
+      async type => {
+        try {
+          providers.set(type, await resolveProvider[type]())
+        } catch {
+          // The other shell is optional. The current shell was already
+          // resolved successfully and must always remain available.
+        }
+      },
+    ),
+  )
+
+  const runtimeRoots: string[] = []
+  const rootIndexes = new Map<string, number>()
+  let currentRuntimeIndex = -1
+  for (const type of WINDOWS_SANDBOX_SHELL_ORDER) {
+    const provider = providers.get(type)
+    if (!provider) continue
+    const root =
+      type === 'bash'
+        ? dirname(dirname(provider.shellPath))
+        : dirname(provider.shellPath)
+    const key = win32.normalize(root).toLowerCase()
+    let index = rootIndexes.get(key)
+    if (index === undefined) {
+      index = runtimeRoots.length
+      runtimeRoots.push(root)
+      rootIndexes.set(key, index)
+    }
+    if (type === currentShellType) currentRuntimeIndex = index
+  }
+
+  if (currentRuntimeIndex < 0) {
+    throw new Error(`Windows Sandbox runtime was not resolved for ${currentShellType}`)
+  }
+  const currentRoot = runtimeRoots[currentRuntimeIndex]!
+  const relativeExecutable = win32.relative(currentRoot, currentProvider.shellPath)
+  if (
+    !relativeExecutable ||
+    relativeExecutable.startsWith('..') ||
+    win32.isAbsolute(relativeExecutable)
+  ) {
+    throw new Error(`Windows Sandbox shell escapes its runtime root: ${currentProvider.shellPath}`)
+  }
+  return {
+    runtimeRoots,
+    executable: win32.join(
+      'C:\\claude\\runtime',
+      String(currentRuntimeIndex),
+      relativeExecutable,
+    ),
+  }
+}
+
 export type ExecOptions = {
   timeout?: number
   onProgress?: (
@@ -199,6 +266,15 @@ export async function exec(
     onStdout,
   } = options ?? {}
   const commandTimeout = timeout || DEFAULT_TIMEOUT
+
+  // An explicitly enabled Windows sandbox that cannot enforce its configured
+  // policy is an execution failure, not a signal to run the command on the
+  // host. This check is independent of shouldUseSandbox because that value is
+  // also false for unavailable sandbox configurations.
+  if (getPlatform() === 'windows') {
+    const unavailableReason = SandboxManager.getSandboxUnavailableReason()
+    if (unavailableReason) return createFailedCommand(unavailableReason)
+  }
 
   const provider = await resolveProvider[shellType]()
 
@@ -332,22 +408,17 @@ export async function exec(
         await closeWindowsSandboxSession()
       },
       run: async signal => {
-        const runtimeRoot =
-          shellType === 'bash'
-            ? dirname(dirname(provider.shellPath))
-            : dirname(provider.shellPath)
-        const session = await getWindowsSandboxSession(workspace, [runtimeRoot])
-        const executable =
-          shellType === 'bash'
-            ? `C:\\claude\\runtime\\0\\bin\\${basename(provider.shellPath)}`
-            : `C:\\claude\\runtime\\0\\${basename(provider.shellPath)}`
+        // Resolve both installed shells before the first VM starts. A stable
+        // runtime list lets Bash and PowerShell share the same guest session.
+        const runtime = await getWindowsSandboxRuntimeLayout(shellType, provider)
+        const session = await getWindowsSandboxSession(workspace, runtime.runtimeRoots)
         const guestArgs =
           shellType === 'bash'
             ? ['-lc', command]
             : ['-NoProfile', '-NonInteractive', '-Command', command]
         const result = await session.execute(
           {
-            executable,
+            executable: runtime.executable,
             arguments: guestArgs,
             cwd,
             environment: {},

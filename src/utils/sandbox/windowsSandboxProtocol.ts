@@ -78,10 +78,11 @@ export function buildWindowsSandboxConfiguration(
     )
     .join('')
   return `<Configuration><VGpu>Disable</VGpu><Networking>Disable</Networking>` +
-    // These three settings are supported by the Windows 10 Sandbox build used
-    // by this project. Device-redirection tags are intentionally omitted here:
-    // unsupported .wsb elements make older Windows Sandbox builds reject the
-    // entire configuration before the guest runner can report readiness.
+    // Audio input defaults to enabled in Windows Sandbox, so it must be
+    // explicitly disabled. Video input and printer redirection default to
+    // disabled and their newer .wsb elements are omitted for compatibility
+    // with the Windows 10 Sandbox build supported by this project.
+    `<AudioInput>Disable</AudioInput>` +
     `<ClipboardRedirection>Disable</ClipboardRedirection>` +
     `<MappedFolders>${mappedFolders}</MappedFolders><LogonCommand><Command>` +
     `${xmlEscape(logonCommand)}</Command></LogonCommand></Configuration>`

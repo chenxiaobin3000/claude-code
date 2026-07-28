@@ -57,6 +57,7 @@ import { errorMessage } from '../errors.js'
 import { getClaudeTempDir } from '../permissions/filesystem.js'
 import type { PermissionRuleValue } from '../permissions/PermissionRule.js'
 import { ripgrepCommand } from '../ripgrep.js'
+import { closeWindowsSandboxSession } from './windowsSandboxSession.js'
 
 // Local copies to avoid circular dependency
 // (permissions.ts imports SandboxManager, bashPermissions.ts imports permissions.ts)
@@ -905,6 +906,8 @@ async function reset(): Promise<void> {
   checkDependencies.cache.clear?.()
   isSupportedPlatform.cache.clear?.()
   initializationPromise = undefined
+
+  await closeWindowsSandboxSession()
 
   // Reset the base sandbox manager
   return BaseSandboxManager.reset()

@@ -400,7 +400,9 @@ int Launch(const LaunchRequest& request) {
   PROCESS_INFORMATION process{};
   std::wstring command_line = BuildCommandLine(request);
   if (!CreateProcessW(request.executable.c_str(), command_line.data(), nullptr, nullptr, TRUE,
-                      EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT, nullptr,
+                      EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT |
+                          CREATE_SUSPENDED,
+                      nullptr,
                       request.cwd.c_str(), &startup.StartupInfo, &process)) {
     PrintError(L"could not start AppContainer process: " + LastErrorMessage());
     return kLaunchError;
@@ -409,6 +411,11 @@ int Launch(const LaunchRequest& request) {
   ScopedHandle thread_handle(process.hThread);
   if (!AssignProcessToJobObject(job.value, process_handle.value)) {
     PrintError(L"could not attach process to Job Object: " + LastErrorMessage());
+    TerminateProcess(process_handle.value, ERROR_ACCESS_DENIED);
+    return kLaunchError;
+  }
+  if (ResumeThread(thread_handle.value) == static_cast<DWORD>(-1)) {
+    PrintError(L"could not resume AppContainer process: " + LastErrorMessage());
     TerminateProcess(process_handle.value, ERROR_ACCESS_DENIED);
     return kLaunchError;
   }

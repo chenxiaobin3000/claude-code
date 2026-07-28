@@ -13,6 +13,7 @@ import {
   writeFile,
 } from 'fs/promises'
 import { basename, isAbsolute, join, relative } from 'path'
+import { registerCleanup } from '../cleanupRegistry.js'
 import { getClaudeTempDir } from '../permissions/filesystem.js'
 import {
   buildWindowsSandboxConfiguration,
@@ -190,3 +191,9 @@ export async function closeWindowsSandboxSession(): Promise<void> {
   activeKey = undefined
   await session?.close()
 }
+
+// Graceful CLI shutdown must always remove the `alive` marker. The shutdown
+// registry has a short global budget, but close() signals the guest before its
+// bounded wait, so the VM still receives the shutdown request if cleanup later
+// times out.
+registerCleanup(closeWindowsSandboxSession)

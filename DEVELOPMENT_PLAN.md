@@ -32,8 +32,8 @@
 
 ### Windows 原生 OS Sandbox
 
-- Windows 上 `sandbox.enabled: true` 时，受保护的 Bash 与 PowerShell 固定在 Windows Sandbox VM 中执行；首次受保护命令才启动可见 VM，取消会关闭整个来宾会话，绝不回退宿主执行。
-- VM 只映射启动工作区（可写）、私有协议控制目录（可写）和 Shell 运行时（只读）；禁用网络、剪贴板和 vGPU，不映射用户主目录、`.claude` 凭据或系统根目录，来宾请求环境为空。
+- Windows 上 `sandbox.enabled: true` 时，受保护的 Bash 与 PowerShell 固定在同一个 Windows Sandbox VM 中执行；首次受保护命令才启动可见 VM，取消或正常退出 CLI 会关闭整个来宾会话，绝不回退宿主执行。
+- VM 只映射启动工作区（可写）、私有协议控制目录（可写）和已安装的 Bash/PowerShell 运行时（只读）；禁用网络、麦克风输入、剪贴板和 vGPU，不映射用户主目录、`.claude` 凭据或系统根目录，来宾请求环境为空。
 - 请求使用结构化 argv 和协议文件传递并回传 stdout、stderr、退出码；卷根、UNC、符号链接/Junction 工作区或运行时映射均被拒绝。
 - Windows Sandbox 无法精确实施域名/代理或映射目录内的文件 allow/deny 规则；遇到这些配置即 fail-closed。`failIfUnavailable`、`excludedCommands` 和 `allowUnsandboxedCommands` 保持上层语义。
 
