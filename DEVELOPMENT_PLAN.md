@@ -56,6 +56,7 @@
 
 ### P0：Windows 原生 OS Sandbox
 
+- [x] 初始化 `native/windows-sandbox-host` C++ 基座（2026-07-28）：建立独立 CMake/MSVC 工程和只读 `--probe` 协议，检测 AppContainer、Job Object 与可选 Experimental Sandbox Engine API；当前不启动命令、不修改 ACL、不代理网络，也未接入 `SandboxManager`，因此不会产生伪沙盒状态。
 - [ ] 为原生 Windows 实现 OS 级 Bash/PowerShell 子进程隔离，覆盖文件系统读写边界、网络域名边界、子进程继承与进程清理。
 - [ ] 保持与 macOS Seatbelt、Linux/WSL2 bubblewrap Sandbox 的设置语义一致：`filesystem`、`network`、`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands`。
 - [ ] 对齐官方新增的 `sandbox.credentials`：只隔离 Sandbox 子进程对凭据文件和秘密环境变量的访问；不得恢复项目级 Read/Glob/Grep 硬拒绝，也不得影响模型 Provider 自身读取配置的凭据。
