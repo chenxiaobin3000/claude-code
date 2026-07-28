@@ -178,6 +178,27 @@ function parseSkillPaths(frontmatter: FrontmatterData): string[] | undefined {
 }
 
 /**
+ * Skill authors use all three common YAML naming styles in local SKILL.md
+ * files. Prefer the documented spelling when both are present, but otherwise
+ * accept the equivalent kebab-, snake- and camel-case key.
+ */
+function getSkillFrontmatterValue(
+  frontmatter: FrontmatterData,
+  canonical: string,
+  aliases: readonly string[],
+): unknown {
+  for (const key of [canonical, ...aliases]) {
+    if (
+      Object.hasOwn(frontmatter, key) &&
+      frontmatter[key] !== undefined
+    ) {
+      return frontmatter[key]
+    }
+  }
+  return undefined
+}
+
+/**
  * Parses all skill frontmatter fields that are shared between file-based and
  * MCP skill loading. Caller supplies the resolved skill name and the
  * source/loadedFrom/baseDir/paths fields separately.
@@ -213,10 +234,20 @@ export function parseSkillFrontmatterFields(
     validatedDescription ??
     extractDescriptionFromMarkdown(markdownContent, descriptionFallbackLabel)
 
+  const userInvocableValue = getSkillFrontmatterValue(
+    frontmatter,
+    'user-invocable',
+    ['user_invocable', 'userInvocable'],
+  )
   const userInvocable =
-    frontmatter['user-invocable'] === undefined
+    userInvocableValue === undefined
       ? true
-      : parseBooleanFrontmatter(frontmatter['user-invocable'])
+      : parseBooleanFrontmatter(userInvocableValue)
+  const argumentHintValue = getSkillFrontmatterValue(
+    frontmatter,
+    'argument-hint',
+    ['argument_hint', 'argumentHint'],
+  )
 
   const model =
     frontmatter.model === 'inherit'
@@ -240,20 +271,27 @@ export function parseSkillFrontmatterFields(
     description,
     hasUserSpecifiedDescription: validatedDescription !== null,
     allowedTools: parseSlashCommandToolsFromFrontmatter(
-      frontmatter['allowed-tools'],
+      getSkillFrontmatterValue(frontmatter, 'allowed-tools', [
+        'allowed_tools',
+        'allowedTools',
+      ]),
     ),
     argumentHint:
-      frontmatter['argument-hint'] != null
-        ? String(frontmatter['argument-hint'])
-        : undefined,
+      argumentHintValue != null ? String(argumentHintValue) : undefined,
     argumentNames: parseArgumentNames(
       frontmatter.arguments as string | string[] | undefined,
     ),
-    whenToUse: frontmatter.when_to_use as string | undefined,
+    whenToUse: getSkillFrontmatterValue(frontmatter, 'when_to_use', [
+      'when-to-use',
+      'whenToUse',
+    ]) as string | undefined,
     version: frontmatter.version as string | undefined,
     model,
     disableModelInvocation: parseBooleanFrontmatter(
-      frontmatter['disable-model-invocation'],
+      getSkillFrontmatterValue(frontmatter, 'disable-model-invocation', [
+        'disable_model_invocation',
+        'disableModelInvocation',
+      ]),
     ),
     userInvocable,
     hooks: parseHooksFromFrontmatter(frontmatter, resolvedName),

@@ -12,6 +12,7 @@ interface MCPConnectionContextValue {
     resources?: ServerResource[];
   }>;
   toggleMcpServer: (serverName: string) => Promise<void>;
+  disconnectMcpServerForLogout: (serverName: string) => Promise<void>;
 }
 
 const MCPConnectionContext = createContext<MCPConnectionContextValue | null>(null);
@@ -32,6 +33,14 @@ export function useMcpToggleEnabled() {
   return context.toggleMcpServer;
 }
 
+export function useMcpLogoutDisconnect() {
+  const context = useContext(MCPConnectionContext);
+  if (!context) {
+    throw new Error('useMcpLogoutDisconnect must be used within MCPConnectionManager');
+  }
+  return context.disconnectMcpServerForLogout;
+}
+
 interface MCPConnectionManagerProps {
   children: ReactNode;
   dynamicMcpConfig: Record<string, ScopedMcpServerConfig> | undefined;
@@ -44,8 +53,19 @@ export function MCPConnectionManager({
   dynamicMcpConfig,
   isStrictMcpConfig,
 }: MCPConnectionManagerProps): React.ReactNode {
-  const { reconnectMcpServer, toggleMcpServer } = useManageMCPConnections(dynamicMcpConfig, isStrictMcpConfig);
-  const value = useMemo(() => ({ reconnectMcpServer, toggleMcpServer }), [reconnectMcpServer, toggleMcpServer]);
+  const {
+    reconnectMcpServer,
+    toggleMcpServer,
+    disconnectMcpServerForLogout,
+  } = useManageMCPConnections(dynamicMcpConfig, isStrictMcpConfig);
+  const value = useMemo(
+    () => ({
+      reconnectMcpServer,
+      toggleMcpServer,
+      disconnectMcpServerForLogout,
+    }),
+    [disconnectMcpServerForLogout, reconnectMcpServer, toggleMcpServer],
+  );
 
   return <MCPConnectionContext.Provider value={value}>{children}</MCPConnectionContext.Provider>;
 }

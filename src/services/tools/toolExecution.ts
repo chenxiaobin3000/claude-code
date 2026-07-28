@@ -133,6 +133,7 @@ import {
   REPEATED_DETERMINISTIC_FAILURE_MESSAGE,
   shouldBlockRepeatedDeterministicFailure,
 } from './deterministicFailureGuard.js'
+import { createMcpHookInvoker } from './mcpHookInvoker.js'
 
 // Cached import promise for the skill-learning wrapper — paid once, not per call.
 let _skillLearningWrapperCache:
@@ -878,6 +879,11 @@ async function checkPermissionsAndCallTool(
   let hookPermissionResult: PermissionResult | undefined
   const preToolHookInfos: StopHookInfo[] = []
   const preToolHookStart = Date.now()
+  const invokeMcpHookTool = createMcpHookInvoker(
+    toolUseContext,
+    canUseTool,
+    assistantMessage,
+  )
   for await (const result of runPreToolUseHooks(
     toolUseContext,
     tool,
@@ -887,6 +893,7 @@ async function checkPermissionsAndCallTool(
     requestId,
     mcpServerType,
     mcpServerBaseUrl,
+    invokeMcpHookTool,
   )) {
     switch (result.type) {
       case 'message':

@@ -17,6 +17,7 @@ export {
   HooksSchema,
   type HooksSettings,
   type HttpHook,
+  type McpHook,
   type PromptHook,
 } from '../../schemas/hooks.js'
 
@@ -406,6 +407,12 @@ export const SettingsSchema = lazySchema(() =>
         .boolean()
         .optional()
         .describe('Disable all hooks and statusLine execution'),
+      disableBundledSkills: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Names of bundled skills to disable. Only affects skills compiled into this CLI; local project, user, and plugin skills remain available.',
+        ),
       // Which shell backs input-box `!` (see docs/design/ps-shell-selection.md §4.2)
       defaultShell: z
         .enum(['bash', 'powershell'])

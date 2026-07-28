@@ -3,6 +3,7 @@ import { ALLOWED_OFFICIAL_MARKETPLACE_NAMES } from '../plugins/schemas.js'
 import type { HookCommand } from '../settings/types.js'
 import { buildHookDedupKey } from './matcher.js'
 import type { FunctionHook } from './sessionHooks.js'
+import { DEFAULT_HOOK_SHELL } from '../shell/shellProvider.js'
 
 /**
  * A hook paired with optional plugin context.
@@ -31,6 +32,47 @@ export function isInternalHook(matched: MatchedHook): boolean {
  */
 export function hookDedupKey(m: MatchedHook, payload: string): string {
   return buildHookDedupKey(m.pluginRoot ?? m.skillRoot, payload)
+}
+
+export function deduplicateMatchedHooks(hooks: MatchedHook[]): MatchedHook[] {
+  if (
+    hooks.every(h => h.hook.type === 'callback' || h.hook.type === 'function')
+  ) {
+    return hooks
+  }
+  const groups = ['command', 'prompt', 'agent', 'http', 'mcp'] as const
+  const result: MatchedHook[] = []
+  for (const type of groups) {
+    const unique = new Map<string, MatchedHook>()
+    for (const matched of hooks) {
+      const hook = matched.hook
+      if (hook.type !== type) continue
+      const condition = 'if' in hook ? (hook.if ?? '') : ''
+      let identity: string
+      switch (hook.type) {
+        case 'command':
+          identity = `${hook.shell ?? DEFAULT_HOOK_SHELL}\0${hook.command}\0${JSON.stringify(hook.args ?? [])}\0${condition}`
+          break
+        case 'prompt':
+        case 'agent':
+          identity = `${hook.prompt}\0${condition}`
+          break
+        case 'http':
+          identity = `${hook.url}\0${condition}`
+          break
+        case 'mcp':
+          identity = `${hook.tool}\0${JSON.stringify(hook.input ?? {})}\0${condition}`
+          break
+      }
+      unique.set(hookDedupKey(matched, identity), matched)
+    }
+    result.push(...unique.values())
+  }
+  result.push(
+    ...hooks.filter(h => h.hook.type === 'callback'),
+    ...hooks.filter(h => h.hook.type === 'function'),
+  )
+  return result
 }
 
 /**

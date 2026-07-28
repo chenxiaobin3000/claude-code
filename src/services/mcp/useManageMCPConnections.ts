@@ -10,6 +10,7 @@ import {
   fetchResourcesForClient,
   fetchToolsForClient,
   getMcpToolsCommandsAndResources,
+  invalidateServerCaches,
   reconnectMcpServerImpl,
 } from './client.js'
 import type {
@@ -968,6 +969,38 @@ export function useManageMCPConnections(
     [store, onConnectionAttempt],
   )
 
+  const disconnectMcpServerForLogout = useCallback(
+    async (serverName: string): Promise<void> => {
+      const client = store
+        .getState()
+        .mcp.clients.find(candidate => candidate.name === serverName)
+      if (!client) {
+        throw new Error(`MCP server ${serverName} not found`)
+      }
+
+      const reconnectTimer = reconnectTimersRef.current.get(serverName)
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer)
+        reconnectTimersRef.current.delete(serverName)
+      }
+      if (client.type === 'connected') {
+        client.client.onclose = undefined
+        await clearServerCache(serverName, client.config)
+      } else {
+        invalidateServerCaches(serverName, client.config)
+      }
+      updateServer({
+        name: serverName,
+        type: 'needs-auth',
+        config: client.config,
+        tools: [],
+        commands: [],
+        resources: [],
+      })
+    },
+    [store, updateServer],
+  )
+
   // Expose function to toggle server enabled/disabled state
   const toggleMcpServer = useCallback(
     async (serverName: string): Promise<void> => {
@@ -1023,7 +1056,11 @@ export function useManageMCPConnections(
     [store, updateServer, onConnectionAttempt],
   )
 
-  return { reconnectMcpServer, toggleMcpServer }
+  return {
+    reconnectMcpServer,
+    toggleMcpServer,
+    disconnectMcpServerForLogout,
+  }
 }
 
 function getTransportDisplayName(type: string): string {

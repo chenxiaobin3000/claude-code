@@ -58,6 +58,13 @@ export function isHookEqual(
       return b.type === 'agent' && a.prompt === b.prompt && sameIf(a, b)
     case 'http':
       return b.type === 'http' && a.url === b.url && sameIf(a, b)
+    case 'mcp':
+      return (
+        b.type === 'mcp' &&
+        a.tool === b.tool &&
+        JSON.stringify(a.input ?? {}) === JSON.stringify(b.input ?? {}) &&
+        sameIf(a, b)
+      )
     case 'function':
       // Function hooks can't be compared (no stable identifier)
       return false
@@ -82,6 +89,8 @@ export function getHookDisplayText(
       return hook.prompt
     case 'http':
       return hook.url
+    case 'mcp':
+      return hook.tool
     case 'callback':
       return 'callback'
     case 'function':

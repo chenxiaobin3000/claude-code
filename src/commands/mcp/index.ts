@@ -5,7 +5,7 @@ const mcp = {
   name: 'mcp',
   description: 'Manage MCP servers',
   immediate: true,
-  argumentHint: '[enable|disable [server-name]]',
+  argumentHint: '[login|logout|reconnect|enable|disable [server-name]]',
   load: () => import('./mcp.js'),
 } satisfies Command
 

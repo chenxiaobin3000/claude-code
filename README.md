@@ -19,7 +19,7 @@
 - **插件与浏览器**：官方插件市场、远端安装/更新、插件自动重命名与 Chrome 内置控制不提供。仅加载本地已安装插件；浏览器能力只验收用户另行安装的 `claude-in-chrome`。
 - **Sandbox**：Windows 上启用 Sandbox 时，Shell 会在 Windows Sandbox VM 内执行，默认只映射启动工作区和只读 Shell 运行时，且固定断网、不传递用户主目录或凭据。`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands` 保持上层语义；Windows 不能精确落实域名白名单、代理和目录内文件 allow/deny 规则，配置这些规则时会 fail-closed，而不会回退宿主执行。
 - **会话路径**：官方 `/cd` 可将会话迁移到新的工作目录；本项目 `/cd` 仅临时切换 cwd，不迁移项目身份、会话、配置或扩展作用域。
-- **Agent、Hook、MCP 与 Skill**：官方当前的后台 Agent 默认行为、嵌套 Agent 限额与转发、`claude mcp login/logout`、`DirectoryAdded` Hook、嵌套 Skill 加载和部分 Hook 输出语义尚未宣称对齐；以开发计划的未完成项为准。
+- **Agent、Hook、MCP 与 Skill**：官方当前的后台 Agent 默认行为、嵌套 Agent 限额与转发、部分生命周期 Hook、嵌套 Skill 加载和部分 Hook 输出语义尚未宣称对齐；本地 `/mcp login`/`logout` 仅管理用户配置的 MCP OAuth 凭据，以开发计划的未完成项为准。
 
 ## 运行时边界
 
@@ -33,6 +33,10 @@
 - 对不兼容 Chat Completions 的端点，直接给出兼容性错误；不会静默删除字段、切换 Provider 或进入供应商专用适配分支。
 
 用户自行配置的模型端点、MCP、Hook 以及本地插件仍可访问其对应的外部服务。
+
+Hook 可在 `PreToolUse` 中配置 `{"type":"mcp","tool":"mcp__server__tool","input":{...}}`，但只会调用当前会话已加载的 MCP Tool。该调用仍执行目标输入 Schema、现有工具权限和超时检查；拒绝、认证失败或执行失败会阻止原工具继续运行，不会借 Hook 绕过审批。
+
+Hook command 的 `args` 会保持 argv 参数边界。启用 Sandbox 时不会回退到宿主直接执行：POSIX 进入 Sandbox 包装，Windows 上无法安全映射任意宿主可执行文件时会明确失败。
 
 远程功能开关不参与运行行为；本地固定策略见 [`scripts/feature-policy.ts`](scripts/feature-policy.ts)，可用环境变量的完整清单见 [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md)。
 

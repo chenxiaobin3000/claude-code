@@ -7,6 +7,7 @@ import type z from 'zod/v4'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
 import type { AnyObject, Tool, ToolUseContext } from '../../Tool.js'
 import type { HookProgress } from '../../types/hooks.js'
+import type { InvokeMcpHookTool } from '../../utils/hooks/mcpHook.js'
 import type {
   AssistantMessage,
   AttachmentMessage,
@@ -449,6 +450,7 @@ export async function* runPreToolUseHooks(
   requestId: string | undefined,
   mcpServerType: McpServerType,
   _mcpServerBaseUrl: string | undefined,
+  invokeMcpHookTool?: InvokeMcpHookTool,
 ): AsyncGenerator<
   | {
       type: 'message'
@@ -481,6 +483,7 @@ export async function* runPreToolUseHooks(
       undefined, // timeoutMs - use default
       toolUseContext.requestPrompt,
       tool.getToolUseSummary?.(processedInput),
+      invokeMcpHookTool,
     )) {
       try {
         if (result.message) {

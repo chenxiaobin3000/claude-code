@@ -154,6 +154,45 @@ export function matchWildcardPattern(
 }
 
 /**
+ * Match filesystem permission patterns consistently across platforms.
+ * Permission files conventionally use forward slashes, while observable tool
+ * inputs contain native absolute paths. Windows paths are also case-insensitive.
+ */
+export function matchPathWildcardPattern(
+  pattern: string,
+  filePath: string,
+): boolean {
+  const normalizeSeparators = (value: string) => value.replace(/\\/g, '/')
+  const normalizedPattern = normalizeSeparators(pattern).trim()
+  const normalizedPath = normalizeSeparators(filePath)
+  let regexPattern = ''
+  for (let i = 0; i < normalizedPattern.length; ) {
+    const char = normalizedPattern[i]!
+    if (char === '*') {
+      if (normalizedPattern[i + 1] === '*') {
+        if (normalizedPattern[i + 2] === '/') {
+          regexPattern += '(?:.*/)?'
+          i += 3
+        } else {
+          regexPattern += '.*'
+          i += 2
+        }
+      } else {
+        regexPattern += '[^/]*'
+        i++
+      }
+      continue
+    }
+    regexPattern += char.replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+    i++
+  }
+  return new RegExp(
+    `^${regexPattern}$`,
+    process.platform === 'win32' ? 'i' : '',
+  ).test(normalizedPath)
+}
+
+/**
  * Parse a permission rule string into a structured rule object.
  */
 export function parsePermissionRule(

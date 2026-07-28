@@ -83,20 +83,24 @@
 
 ### P1：Hook、Plugin、Skill 与 MCP
 
-- [ ] 支持 Hook 直接调用 MCP Tool，并定义其权限、超时和错误传播。
-- [ ] 补齐 `continueOnBlock`、`MessageDisplay`、`additionalContext` 的兼容语义。
-- [ ] 让 Hook command 参数使用数组传递，避免字符串拼接和 Windows 引号歧义。
-- [ ] 补齐 `DirectoryAdded`、`CwdChanged`、`FileChanged`、`InstructionsLoaded`、`ConfigChange`、`PostToolBatch` 等生命周期 Hook，并明确 SessionStart/分叉/恢复来源。
-- [ ] 对齐 Hook `if` 匹配：工具与 MCP 标识符精确匹配、逗号列表、嵌套命令、路径 Glob、连字符名称与目录深度规则均须可预测，避免子串误命中或静默不触发。
-- [ ] 保证 Hook 的 `ask`、`deny`、`continue:false` 不能被自动模式、未沙盒命令或工具失败路径绕过；Schema/执行错误必须带可见原因。
+- 当前进度（2026-07-28）：Hook 已具备 Schema、`additionalContext`、`CwdChanged`/`FileChanged`、命令/Prompt/Agent/HTTP/受控 MCP 执行和新 argv 模式；本地 Plugin/Skill 已具备目录发现、真实路径去重、嵌套命名、依赖解析与 Plugin Hook 原子热重载，以及 `SKILL.md` 元数据三种命名兼容；MCP 已具备本地 OAuth Token 缓存失效、登录/退出、请求超时、重连/重试、`roots/list`、敏感 Header/URL 脱敏与输出截断。本轮 `bun run verify --ci` 已于 2026-07-28 全部通过（159.0 秒，含 17 个 workspace、专项边界、Bun/Node Bundle 与 Windows 独立 EXE）；以下未勾选项仅保留真实缺口，不能因已有局部实现而提前关闭。
+- [x] 支持 Hook 直接调用 MCP Tool（2026-07-28）：仅允许 `PreToolUse` 通过 `type:"mcp"` 调用当前会话已加载的 MCP Tool；输入先过目标 Tool Schema，再进入原始 `canUseTool` 权限审批，不接受普通内置 Tool，也不递归触发目标 Tool Hook。配置的秒级超时沿用统一 AbortSignal，认证、权限拒绝、输入错误和执行错误均作为阻断结果回传。专项验证覆盖 Schema、来源隔离去重和拒绝不可绕过。
+- [x] 固化 Hook 输出契约（2026-07-28）：`continue:false` 会产生 `preventContinuation`，`systemMessage` 以可见系统消息传递，`additionalContext` 在各 Hook 结果中聚合注入；`continueOnBlock` 仍作为独立缺口保留。
+- [x] Hook command 支持显式 argv（2026-07-28）：配置 `args` 时以 `command` 作为可执行文件并保留参数边界，插件变量逐参数替换；未启用 Sandbox 时直接 `spawn`，POSIX Sandbox 下安全转义后进入 Sandbox 包装，Windows Sandbox 尚不能映射任意宿主可执行文件时明确失败，禁止回退宿主执行。旧字符串命令保持兼容。
+- [x] 已具备 `CwdChanged`、`FileChanged`、`InstructionsLoaded`、`ConfigChange` 生命周期 Hook（2026-07-28）：包含 Schema、运行入口与 watch path 更新；`DirectoryAdded`、`PostToolBatch`、`continueOnBlock` 及 SessionStart/分叉/恢复来源仍作为独立未完成缺口。
+- [x] 对齐 Hook `if` 匹配（2026-07-28）：工具与 MCP 标识符使用精确名称或显式列表；Bash 通过权威解析结果逐子命令匹配，无法安全解析时按安全侧触发；Read/Edit/Write 路径 Glob 统一 Windows/Unix 分隔符，Windows 下按文件系统语义忽略大小写并保留目录深度约束。专项验证覆盖复合命令、环境变量前缀、无关子命令和 Windows 路径。
+- [x] 收紧 Hook 事件 Matcher 的精确匹配（2026-07-28）：工具与 MCP 标识符支持精确名称、`|` 或逗号列表；保留正则兼容并在每次测试前复位 `lastIndex`，避免状态化正则造成偶发漏匹配。
+- [x] Hook 权限闭环（2026-07-28）：`deny`、`ask` 与 `continue:false` 均由 PreToolUse 结果进入 `resolveHookPermissionDecision` 和原始 `canUseTool` 审批链；拒绝、自动模式与失败路径不会直连执行。`scripts/validation/hook-protocol.ts` 覆盖阻断、停止原因和权限结果解析。
 - [ ] 完善本地/内置插件依赖、最低版本、裁剪与动态重新加载；继续禁止远端市场、下载和自动更新。
-- [ ] 支持 `disableBundledSkills` 与嵌套 `.claude/skills` 的明确优先级。
+- [x] 支持 `disableBundledSkills`（2026-07-28）：设置中的 Skill 名称仅过滤编译内置 Skill，不影响项目、用户目录或本地 Plugin Skill；嵌套 `.claude/skills` 的命名、真实路径去重与优先级仍沿用既有本地加载器，后续与 Plugin/Skill 全局优先级一并验收。
 - [ ] 对齐仅本地 Skill 的发现和调用语义：嵌套目录按 cwd 解析、同名保留可区分名称、支持连续 Slash Skill 组合；不引入 Marketplace、远端下载或自动更新。
-- [ ] 兼容本地 `SKILL.md` 前置元数据的 kebab/snake/camel 命名、默认启用/回退等合法字段，并在格式不完整时给出明确降级或错误，不静默丢失 Skill 内容。
-- [ ] 增加 `claude mcp login`/`logout` 的本地凭据生命周期管理。
+- [x] 兼容本地 `SKILL.md` 前置元数据（2026-07-28）：`allowed-tools`、`argument-hint`、`when_to_use`、`user-invocable`、`disable-model-invocation` 均接受 kebab/snake/camel 三种等价写法，标准键优先；缺失字段保留既有安全默认，解析失败会记录带路径的诊断且继续加载正文，不静默丢失 Skill 内容。
+- [x] 增加 MCP OAuth 凭据生命周期（2026-07-28）：`/mcp login <server>` 对指定 HTTP/SSE Server 启动真实 OAuth 流程、展示浏览器失败时的授权 URL，并在成功后重连；`/mcp logout <server>` 尽力执行 RFC 7009 撤销后删除本地 Token，取消待执行重连、抑制主动断开产生的 `onclose` 自动重连，并从 AppState 移除该 Server 的 Tool、Command 和 Resource，不触及应用 Provider 凭据或 Anthropic 账号。
 - [ ] 完善 MCP 启动重试、审批、OAuth 凭据清理与断线重连。
+- [x] 固化 MCP 输出上限为本地策略（2026-07-28）：只读取 `MAX_MCP_OUTPUT_TOKENS` 或本地默认值，不再从 GrowthBook 等远程 Feature Flag 获取 MCP 截断阈值。
 - [ ] 对齐 MCP Server 的不可信配置审批、认证缺失提示、headless OAuth 无浏览器流程、临时认证失败重连，以及 `list`/`get` 的 HTTP 状态和脱敏错误输出。
 - [ ] 支持 MCP `roots/list` 与工作目录变更通知；stdio Server 在恢复后获得稳定会话标识，并保证凭据、URL Secret 和环境变量不泄露到 CLI 输出或日志。
+- [x] 修正 MCP `roots/list` 的项目根 URI（2026-07-28）：仅返回启动项目根，并使用 `pathToFileURL` 生成标准 URI，兼容 Windows 盘符、空格和 Unicode；cwd 变更通知与 stdio 恢复语义仍保留在上方未完成项。
 - [ ] 在 MCP 工具调用超阈值时安全转入后台并保留进度、结果、取消和超时语义；配置校验失败的 Server 必须在交互与 stream-json 启动阶段可见。
 - [ ] 为扩展 API 定义版本协商与向后兼容策略。
 

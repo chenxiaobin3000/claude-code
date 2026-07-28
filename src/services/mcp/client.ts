@@ -1,4 +1,5 @@
 import { feature } from 'bun:bundle'
+import { pathToFileURL } from 'node:url'
 import type {
   Base64ImageSource,
   ContentBlockParam,
@@ -916,7 +917,9 @@ export const connectToServer = memoize(
         return {
           roots: [
             {
-              uri: `file://${getOriginalCwd()}`,
+              // Preserve drive letters and escape spaces/Unicode. Hand-built
+              // file:// URLs are invalid for valid Windows project roots.
+              uri: pathToFileURL(getOriginalCwd()).href,
             },
           ],
         }
@@ -1551,8 +1554,21 @@ export async function clearServerCache(
     // Ignore errors - server might have failed to connect
   }
 
-  // Clear from cache (both connection and fetch caches so reconnect
-  // fetches fresh tools/resources/commands instead of stale ones)
+  invalidateServerCaches(name, serverRef)
+}
+
+/**
+ * Drop cached MCP state without opening or closing a transport. Logout uses
+ * this for servers that are not currently connected so clearing credentials
+ * cannot accidentally initiate a connection attempt.
+ */
+export function invalidateServerCaches(
+  name: string,
+  serverRef: ScopedMcpServerConfig,
+): void {
+  // Clear both connection and fetch caches so a future explicit reconnect
+  // fetches fresh tools/resources/commands instead of stale ones.
+  const key = getServerCacheKey(name, serverRef)
   connectToServer.cache.delete(key)
   fetchToolsForClient.cache.delete(name)
   fetchResourcesForClient.cache.delete(name)

@@ -32,6 +32,12 @@ function buildHookSchemas() {
   const BashCommandHookSchema = z.object({
     type: z.literal('command').describe('Shell command hook type'),
     command: z.string().describe('Shell command to execute'),
+    args: z
+      .array(z.string())
+      .optional()
+      .describe(
+        'Optional argv passed directly to command. When set, command is executed as an executable path and never parsed by a shell. Do not combine with shell syntax, redirects, pipelines, or CLAUDE_CODE_SHELL_PREFIX.',
+      ),
     if: IfConditionSchema(),
     shell: z
       .enum(SHELL_TYPES)
@@ -123,6 +129,32 @@ function buildHookSchemas() {
       .describe('If true, hook runs once and is removed after execution'),
   })
 
+  const McpHookSchema = z.object({
+    type: z.literal('mcp').describe('Controlled MCP tool hook type'),
+    tool: z
+      .string()
+      .min(1)
+      .describe('Exact name of an already loaded MCP tool (for example mcp__server__check)'),
+    input: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe('Static input passed to the MCP tool'),
+    if: IfConditionSchema(),
+    timeout: z
+      .number()
+      .positive()
+      .optional()
+      .describe('Timeout in seconds for this specific MCP tool call'),
+    statusMessage: z
+      .string()
+      .optional()
+      .describe('Custom status message to display in spinner while hook runs'),
+    once: z
+      .boolean()
+      .optional()
+      .describe('If true, hook runs once and is removed after execution'),
+  })
+
   const AgentHookSchema = z.object({
     type: z.literal('agent').describe('Agentic verifier hook type'),
     // DO NOT add .transform() here. This schema is used by parseSettingsFile,
@@ -164,6 +196,7 @@ function buildHookSchemas() {
     BashCommandHookSchema,
     PromptHookSchema,
     HttpHookSchema,
+    McpHookSchema,
     AgentHookSchema,
   }
 }
@@ -177,12 +210,14 @@ export const HookCommandSchema = lazySchema(() => {
     PromptHookSchema,
     AgentHookSchema,
     HttpHookSchema,
+    McpHookSchema,
   } = buildHookSchemas()
   return z.discriminatedUnion('type', [
     BashCommandHookSchema,
     PromptHookSchema,
     AgentHookSchema,
     HttpHookSchema,
+    McpHookSchema,
   ])
 })
 
@@ -216,5 +251,6 @@ export type BashCommandHook = Extract<HookCommand, { type: 'command' }>
 export type PromptHook = Extract<HookCommand, { type: 'prompt' }>
 export type AgentHook = Extract<HookCommand, { type: 'agent' }>
 export type HttpHook = Extract<HookCommand, { type: 'http' }>
+export type McpHook = Extract<HookCommand, { type: 'mcp' }>
 export type HookMatcher = z.infer<ReturnType<typeof HookMatcherSchema>>
 export type HooksSettings = Partial<Record<HookEvent, HookMatcher[]>>

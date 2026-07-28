@@ -12,6 +12,7 @@ import {
 } from '../../src/utils/permissions/permissionRuleParser.js'
 import {
   hasWildcards,
+  matchPathWildcardPattern,
   matchWildcardPattern,
   parsePermissionRule,
 } from '../../src/utils/permissions/shellRuleMatching.js'
@@ -86,6 +87,34 @@ assert(
 assert(
   matchWildcardPattern('echo *', 'echo first\nsecond'),
   'wildcard did not match multiline command content',
+)
+assert(
+  matchPathWildcardPattern(
+    'C:/work/**/src/*.ts',
+    'C:\\work\\nested\\src\\index.ts',
+  ),
+  'filesystem wildcard did not normalize Windows separators',
+)
+assert(
+  !matchPathWildcardPattern(
+    'C:/work/src/*.ts',
+    'C:\\work\\src\\nested\\index.ts',
+  ),
+  'single-star filesystem wildcard crossed a directory boundary',
+)
+assert(
+  matchPathWildcardPattern(
+    'C:/work/**/src/*.ts',
+    'C:\\work\\nested\\src\\index.ts',
+  ),
+  'double-star filesystem wildcard did not cross directories',
+)
+assert(
+  matchPathWildcardPattern(
+    'C:/work/**/src/*.ts',
+    'C:\\work\\src\\index.ts',
+  ),
+  'double-star directory segment did not match zero directories',
 )
 
 const malformed = permissionRuleValueFromString('Bash(npm install)trailing')

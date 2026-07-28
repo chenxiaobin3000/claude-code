@@ -45,7 +45,7 @@ import {
   matchingRuleForInput,
 } from 'src/utils/permissions/filesystem.js'
 import type { PermissionDecision } from 'src/utils/permissions/PermissionResult.js'
-import { matchWildcardPattern } from 'src/utils/permissions/shellRuleMatching.js'
+import { matchPathWildcardPattern } from 'src/utils/permissions/shellRuleMatching.js'
 import { validateInputForSettingsFileEdit } from 'src/utils/settings/validateEditTool.js'
 import { NOTEBOOK_EDIT_TOOL_NAME } from '../NotebookEditTool/constants.js'
 import {
@@ -117,7 +117,7 @@ export const FileEditTool = buildTool({
     }
   },
   async preparePermissionMatcher({ file_path }) {
-    return pattern => matchWildcardPattern(pattern, file_path)
+    return pattern => matchPathWildcardPattern(pattern, file_path)
   },
   async checkPermissions(input, context): Promise<PermissionDecision> {
     const appState = context.getAppState()

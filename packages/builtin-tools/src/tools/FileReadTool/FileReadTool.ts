@@ -69,7 +69,7 @@ import {
   matchingRuleForInput,
 } from 'src/utils/permissions/filesystem.js'
 import type { PermissionDecision } from 'src/utils/permissions/PermissionResult.js'
-import { matchWildcardPattern } from 'src/utils/permissions/shellRuleMatching.js'
+import { matchPathWildcardPattern } from 'src/utils/permissions/shellRuleMatching.js'
 import { readFileInRange } from 'src/utils/readFileInRange.js'
 import { semanticNumber } from 'src/utils/semanticNumber.js'
 import { jsonStringify } from 'src/utils/slowOperations.js'
@@ -394,7 +394,7 @@ export const FileReadTool = buildTool({
     }
   },
   async preparePermissionMatcher({ file_path }) {
-    return pattern => matchWildcardPattern(pattern, file_path)
+    return pattern => matchPathWildcardPattern(pattern, file_path)
   },
   async checkPermissions(input, context): Promise<PermissionDecision> {
     const appState = context.getAppState()

@@ -6,6 +6,9 @@ import type { ToolUseContext } from '../Tool.js'
 import type { Command } from '../types/command.js'
 import { logForDebugging } from '../utils/debug.js'
 import { getBundledSkillsRoot } from '../utils/permissions/filesystem.js'
+import {
+  getSettings_DEPRECATED,
+} from '../utils/settings/settings.js'
 import type { HooksSettings } from '../utils/settings/types.js'
 
 /**
@@ -104,7 +107,8 @@ export function registerBundledSkill(definition: BundledSkillDefinition): void {
  * Returns a copy to prevent external mutation.
  */
 export function getBundledSkills(): Command[] {
-  return [...bundledSkills]
+  const disabled = new Set(getSettings_DEPRECATED().disableBundledSkills ?? [])
+  return bundledSkills.filter(skill => !disabled.has(skill.name))
 }
 
 /**

@@ -12,6 +12,7 @@ import { TaskOutput } from './task/TaskOutput.js'
 import { getCwd } from './cwd.js'
 import { randomUUID } from 'crypto'
 import { formatShellPrefixCommand } from './bash/shellPrefix.js'
+import { quote } from './bash/shellQuote.js'
 import {
   getHookEnvFilePath,
   invalidateSessionEnvCache,
@@ -123,10 +124,6 @@ import { getHookDisplayText } from './hooks/hooksSettings.js'
 import { logForDebugging } from './debug.js'
 import { logForDiagnosticsNoPII } from './diagLogs.js'
 import { firstLineOf } from './stringUtils.js'
-import {
-  normalizeLegacyToolName,
-  permissionRuleValueFromString,
-} from './permissions/permissionRuleParser.js'
 import { logError } from './log.js'
 import { SandboxManager } from './sandbox/sandbox-adapter.js'
 import { createCombinedAbortSignal } from './combinedAbortSignal.js'
@@ -143,7 +140,7 @@ import {
 } from './hooks/hookEvents.js'
 import { createAttachmentMessage } from './attachments.js'
 import { all } from './generators.js'
-import { findToolByName, type Tools, type ToolUseContext } from '../Tool.js'
+import type { Tools, ToolUseContext } from '../Tool.js'
 import { execPromptHook } from './hooks/execPromptHook.js'
 import type { Message, AssistantMessage } from '../types/message.js'
 import { execAgentHook } from './hooks/execAgentHook.js'
@@ -170,7 +167,9 @@ import {
   getUserPromptSubmitHookBlockingMessage,
   hasBlockingResult,
 } from './hooks/blockingMessages.js'
-import { buildHookDedupKey, matchesHookPattern } from './hooks/matcher.js'
+import { matchesHookPattern } from './hooks/matcher.js'
+import { prepareIfConditionMatcher } from './hooks/ifConditionMatcher.js'
+import type { InvokeMcpHookTool } from './hooks/mcpHook.js'
 import { parseHookOutput, parseHttpHookOutput } from './hooks/outputParser.js'
 
 const TOOL_HOOK_EXECUTION_TIMEOUT_MS = 10 * 60 * 1000
@@ -446,9 +445,7 @@ async function execCommandHook(
   // accommodations (cygpath conversion, .sh auto-prepend, POSIX-quoted
   // SHELL_PREFIX).
   const shellType = hook.shell ?? DEFAULT_HOOK_SHELL
-
   const isPowerShell = shellType === 'powershell'
-
   // --
   // Windows bash path: hooks run via Git Bash (Cygwin), NOT cmd.exe.
   //
@@ -472,12 +469,11 @@ async function execCommandHook(
   // getProjectRoot() is never updated when entering a worktree, so hooks that
   // reference $CLAUDE_PROJECT_DIR always resolve relative to the real repo root.
   const projectDir = getProjectRoot()
-
-  // Substitute ${CLAUDE_PLUGIN_ROOT} and ${user_config.X} in the command string.
-  // Order matches MCP/LSP (plugin vars FIRST, then user config) so a user-
-  // entered value containing the literal text ${CLAUDE_PLUGIN_ROOT} is treated
-  // as opaque — not re-interpreted as a template.
+  // Substitute plugin paths, then user config, in the executable and argv.
+  // Keeping argv as an array avoids Windows quoting ambiguity; this order also
+  // keeps user values containing plugin placeholders opaque.
   let command = hook.command
+  let commandArgs = hook.args ? [...hook.args] : undefined
   let pluginOpts: ReturnType<typeof loadPluginOptions> | undefined
   if (pluginRoot) {
     // Plugin directory gone (orphan GC race, concurrent session deleted it):
@@ -500,38 +496,43 @@ async function execCommandHook(
     // form .replace() so paths containing $ aren't mangled by $-pattern
     // interpretation (rare but possible: \\server\c$\plugin).
     const rootPath = toHookPath(pluginRoot)
-    command = command.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, () => rootPath)
-    if (pluginId) {
-      const dataPath = toHookPath(getPluginDataDir(pluginId))
-      command = command.replace(/\$\{CLAUDE_PLUGIN_DATA\}/g, () => dataPath)
-    }
+    const substitutePluginPaths = (value: string) =>
+      value
+        .replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, () => rootPath)
+        .replace(/\$\{CLAUDE_PLUGIN_DATA\}/g, () =>
+          pluginId
+            ? toHookPath(getPluginDataDir(pluginId))
+            : '$' + '{CLAUDE_PLUGIN_DATA}',
+        )
+    command = substitutePluginPaths(command)
+    commandArgs = commandArgs?.map(substitutePluginPaths)
     if (pluginId) {
       pluginOpts = loadPluginOptions(pluginId)
-      // Throws if a referenced key is missing — that means the hook uses a key
-      // that's either not declared in manifest.userConfig or not yet configured.
-      // Caught upstream like any other hook exec failure.
+      // Missing/undeclared config keys throw and are handled as hook failures.
       command = substituteUserConfigVariables(command, pluginOpts)
+      commandArgs = commandArgs?.map(argument =>
+        substituteUserConfigVariables(argument, pluginOpts!),
+      )
     }
   }
-
   // On Windows (bash only), auto-prepend `bash` for .sh scripts so they
   // execute instead of opening in the default file handler. PowerShell
   // runs .ps1 files natively — no prepend needed.
-  if (isWindows && !isPowerShell && command.trim().match(/\.sh(\s|$|")/)) {
+  if (
+    !commandArgs &&
+    isWindows &&
+    !isPowerShell &&
+    command.trim().match(/\.sh(\s|$|")/)
+  ) {
     if (!command.trim().startsWith('bash ')) {
       command = `bash ${command}`
     }
   }
-
-  // CLAUDE_CODE_SHELL_PREFIX wraps the command via POSIX quoting
-  // (formatShellPrefixCommand uses shell-quote). This makes no sense for
-  // PowerShell — see design §8.1. For now PS hooks ignore the prefix;
-  // a CLAUDE_CODE_PS_SHELL_PREFIX (or shell-aware prefix) is a follow-up.
+  // The POSIX-quoted shell prefix does not apply to PowerShell or direct argv.
   const finalCommand =
-    !isPowerShell && process.env.CLAUDE_CODE_SHELL_PREFIX
+    !commandArgs && !isPowerShell && process.env.CLAUDE_CODE_SHELL_PREFIX
       ? formatShellPrefixCommand(process.env.CLAUDE_CODE_SHELL_PREFIX, command)
       : command
-
   const hookTimeoutMs = hook.timeout
     ? hook.timeout * 1000
     : TOOL_HOOK_EXECUTION_TIMEOUT_MS
@@ -541,7 +542,6 @@ async function execCommandHook(
     ...subprocessEnv(),
     CLAUDE_PROJECT_DIR: toHookPath(projectDir),
   }
-
   // Plugin and skill hooks both set CLAUDE_PLUGIN_ROOT (skills use the same
   // name for consistency — skills can migrate to plugins without code changes)
   if (pluginRoot) {
@@ -625,10 +625,22 @@ async function execCommandHook(
   //   - Hooks that genuinely need network (notifications) should use the
   //     `http` hook type, which is not affected by this sandbox
   let sandboxedCommand = finalCommand
-  if (!isPowerShell && SandboxManager.isSandboxingEnabled()) {
+  let argvWrappedBySandbox = false
+  if (
+    (!isPowerShell || commandArgs) &&
+    SandboxManager.isSandboxingEnabled()
+  ) {
     try {
+      if (commandArgs && isWindows) {
+        throw new Error(
+          'Direct argv hooks are not supported while Windows Sandbox is enabled',
+        )
+      }
+      const commandForSandbox = commandArgs
+        ? quote([command, ...commandArgs])
+        : finalCommand
       sandboxedCommand = await SandboxManager.wrapWithSandbox(
-        finalCommand,
+        commandForSandbox,
         undefined, // use default shell
         {
           // Network: deny all outbound by default. Hooks that need network
@@ -652,7 +664,13 @@ async function execCommandHook(
         `Hook command sandboxed (network-only): ${hook.command}`,
         { level: 'verbose' },
       )
+      argvWrappedBySandbox = commandArgs !== undefined
     } catch (sandboxError) {
+      if (commandArgs) {
+        throw new Error(
+          `Failed to sandbox direct argv hook "${hook.command}": ${errorMessage(sandboxError)}`,
+        )
+      }
       // If sandbox wrapping fails, log and continue without sandbox.
       // This preserves backwards compatibility — hooks that ran before
       // sandbox support was added will still work.
@@ -664,7 +682,14 @@ async function execCommandHook(
   }
 
   let child: ChildProcessWithoutNullStreams
-  if (shellType === 'powershell') {
+  if (commandArgs && !argvWrappedBySandbox) {
+    child = spawn(command, commandArgs, {
+      env: envVars,
+      cwd: safeCwd,
+      windowsHide: true,
+      shell: false,
+    }) as ChildProcessWithoutNullStreams
+  } else if (shellType === 'powershell' && !argvWrappedBySandbox) {
     const pwshPath = await getCachedPowerShellPath()
     if (!pwshPath) {
       throw new Error(
@@ -1055,55 +1080,15 @@ async function execCommandHook(
  *   - Regex pattern (e.g., '^Write.*', '.*', '^(Write|Edit)$')
  * @returns true if the query matches the pattern
  */
-type IfConditionMatcher = (ifCondition: string) => boolean
-
-/**
- * Prepare a matcher for hook `if` conditions. Expensive work (tool lookup,
- * Zod validation, tree-sitter parsing for Bash) happens once here; the
- * returned closure is called per hook. Returns undefined for non-tool events.
- */
-async function prepareIfConditionMatcher(
-  hookInput: HookInput,
-  tools: Tools | undefined,
-): Promise<IfConditionMatcher | undefined> {
-  if (
-    hookInput.hook_event_name !== 'PreToolUse' &&
-    hookInput.hook_event_name !== 'PostToolUse' &&
-    hookInput.hook_event_name !== 'PostToolUseFailure' &&
-    hookInput.hook_event_name !== 'PermissionRequest'
-  ) {
-    return undefined
-  }
-
-  const toolName = normalizeLegacyToolName(hookInput.tool_name as string)
-  const tool = tools && findToolByName(tools, hookInput.tool_name as string)
-  const input = tool?.inputSchema.safeParse(hookInput.tool_input)
-  const patternMatcher =
-    input?.success && tool?.preparePermissionMatcher
-      ? await tool.preparePermissionMatcher(input.data)
-      : undefined
-
-  return ifCondition => {
-    const parsed = permissionRuleValueFromString(ifCondition)
-    if (normalizeLegacyToolName(parsed.toolName) !== toolName) {
-      return false
-    }
-    if (!parsed.ruleContent) {
-      return true
-    }
-    return patternMatcher ? patternMatcher(parsed.ruleContent) : false
-  }
-}
-
 type FunctionHookMatcher = {
   matcher: string
   hooks: FunctionHook[]
 }
 
 import {
+  deduplicateMatchedHooks,
   getHookTypeCounts,
   getPluginHookCounts,
-  hookDedupKey,
   isInternalHook,
   type MatchedHook,
 } from './hooks/selection.js'
@@ -1329,100 +1314,13 @@ export async function getMatchingHooks(
     })
 
     // Deduplicate hooks by command/prompt/url within the same source context.
-    // Key is namespaced by pluginRoot/skillRoot (see hookDedupKey above) so
+    // Keys are namespaced by pluginRoot/skillRoot so
     // cross-plugin template collisions don't drop hooks (gh-29724).
     //
     // Note: new Map(entries) keeps the LAST entry on key collision, not first.
     // For settings hooks this means the last-merged scope wins; for
     // same-plugin duplicates the pluginRoot is identical so it doesn't matter.
-    // Fast-path: callback/function hooks don't need dedup (each is unique).
-    // Skip the 6-pass filter + 4×Map + 4×Array.from below when all hooks are
-    // callback/function — the common case for internal hooks like
-    // sessionFileAccessHooks/attributionHooks (44x faster in microbench).
-    if (
-      matchedHooks.every(
-        m => m.hook.type === 'callback' || m.hook.type === 'function',
-      )
-    ) {
-      return matchedHooks
-    }
-
-    // Helper to extract the `if` condition from a hook for dedup keys.
-    // Hooks with different `if` conditions are distinct even if otherwise identical.
-    const getIfCondition = (hook: { if?: string }): string => hook.if ?? ''
-
-    const uniqueCommandHooks = Array.from(
-      new Map(
-        matchedHooks
-          .filter(
-            (
-              m,
-            ): m is MatchedHook & { hook: HookCommand & { type: 'command' } } =>
-              m.hook.type === 'command',
-          )
-          // shell is part of identity: {command:'echo x', shell:'bash'}
-          // and {command:'echo x', shell:'powershell'} are distinct hooks,
-          // not duplicates. Default to 'bash' so legacy configs (no shell
-          // field) still dedup against explicit shell:'bash'.
-          .map(m => [
-            hookDedupKey(
-              m,
-              `${m.hook.shell ?? DEFAULT_HOOK_SHELL}\0${m.hook.command}\0${getIfCondition(m.hook)}`,
-            ),
-            m,
-          ]),
-      ).values(),
-    )
-    const uniquePromptHooks = Array.from(
-      new Map(
-        matchedHooks
-          .filter(m => m.hook.type === 'prompt')
-          .map(m => [
-            hookDedupKey(
-              m,
-              `${(m.hook as { prompt: string }).prompt}\0${getIfCondition(m.hook as { if?: string })}`,
-            ),
-            m,
-          ]),
-      ).values(),
-    )
-    const uniqueAgentHooks = Array.from(
-      new Map(
-        matchedHooks
-          .filter(m => m.hook.type === 'agent')
-          .map(m => [
-            hookDedupKey(
-              m,
-              `${(m.hook as { prompt: string }).prompt}\0${getIfCondition(m.hook as { if?: string })}`,
-            ),
-            m,
-          ]),
-      ).values(),
-    )
-    const uniqueHttpHooks = Array.from(
-      new Map(
-        matchedHooks
-          .filter(m => m.hook.type === 'http')
-          .map(m => [
-            hookDedupKey(
-              m,
-              `${(m.hook as { url: string }).url}\0${getIfCondition(m.hook as { if?: string })}`,
-            ),
-            m,
-          ]),
-      ).values(),
-    )
-    const callbackHooks = matchedHooks.filter(m => m.hook.type === 'callback')
-    // Function hooks don't need deduplication - each callback is unique
-    const functionHooks = matchedHooks.filter(m => m.hook.type === 'function')
-    const uniqueHooks = [
-      ...uniqueCommandHooks,
-      ...uniquePromptHooks,
-      ...uniqueAgentHooks,
-      ...uniqueHttpHooks,
-      ...callbackHooks,
-      ...functionHooks,
-    ]
+    const uniqueHooks = deduplicateMatchedHooks(matchedHooks)
 
     // Filter hooks based on their `if` condition. This allows hooks to specify
     // conditions like "Bash(git *)" to only run for git commands, avoiding
@@ -1432,7 +1330,8 @@ export async function getMatchingHooks(
         (h.hook.type === 'command' ||
           h.hook.type === 'prompt' ||
           h.hook.type === 'agent' ||
-          h.hook.type === 'http') &&
+          h.hook.type === 'http' ||
+          h.hook.type === 'mcp') &&
         (h.hook as { if?: string }).if,
     )
     const ifMatcher = hasIfCondition
@@ -1443,7 +1342,8 @@ export async function getMatchingHooks(
         h.hook.type !== 'command' &&
         h.hook.type !== 'prompt' &&
         h.hook.type !== 'agent' &&
-        h.hook.type !== 'http'
+        h.hook.type !== 'http' &&
+        h.hook.type !== 'mcp'
       ) {
         return true
       }
@@ -1545,6 +1445,7 @@ async function* executeHooks({
   forceSyncExecution,
   requestPrompt,
   toolInputSummary,
+  invokeMcpHookTool,
 }: {
   hookInput: HookInput
   toolUseID: string
@@ -1559,6 +1460,7 @@ async function* executeHooks({
     toolInputSummary?: string | null,
   ) => (request: PromptRequest) => Promise<PromptResponse>
   toolInputSummary?: string | null
+  invokeMcpHookTool?: InvokeMcpHookTool
 }): AsyncGenerator<AggregatedHookResult> {
   if (shouldDisableAllHooksIncludingManaged()) {
     return
@@ -1786,6 +1688,47 @@ async function* executeHooks({
     const hookCommand = getHookDisplayText(hook)
 
     try {
+      if (hook.type === 'mcp') {
+        if (!invokeMcpHookTool) {
+          throw new Error(
+            'MCP hooks are only supported for PreToolUse in the controlled tool execution path',
+          )
+        }
+        try {
+          const data = await invokeMcpHookTool({
+            toolName: hook.tool,
+            input: hook.input ?? {},
+            toolUseId: `${toolUseID}:hook:${hookIndex}`,
+            signal: abortSignal,
+          })
+          yield {
+            message: createAttachmentMessage({
+              type: 'hook_success',
+              hookName,
+              toolUseID,
+              hookEvent,
+              content: jsonStringify(data),
+              command: hookCommand,
+              durationMs: Date.now() - hookStartMs,
+            }),
+            outcome: 'success',
+            hook,
+          }
+        } catch (error) {
+          const message = errorMessage(error)
+          yield {
+            blockingError: {
+              blockingError: `[${hook.tool}]: ${message}`,
+              command: hook.tool,
+            },
+            outcome: 'blocking',
+            hook,
+          }
+        } finally {
+          cleanup()
+        }
+        return
+      }
       const jsonInputRes = getJsonInput()
       if (!jsonInputRes.ok) {
         yield {
@@ -2861,6 +2804,16 @@ async function executeHooksOutsideREPL({
         }
       }
 
+      if (hook.type === 'mcp') {
+        return {
+          command: hook.tool,
+          succeeded: false,
+          output:
+            'MCP hooks are only supported for PreToolUse in the controlled tool execution path',
+          blocked: true,
+        }
+      }
+
       // Handle command hooks
       const commandTimeoutMs = hook.timeout ? hook.timeout * 1000 : timeoutMs
       const { signal: abortSignal, cleanup } = createCombinedAbortSignal(
@@ -2993,6 +2946,7 @@ export async function* executePreToolHooks<ToolInput>(
     toolInputSummary?: string | null,
   ) => (request: PromptRequest) => Promise<PromptResponse>,
   toolInputSummary?: string | null,
+  invokeMcpHookTool?: InvokeMcpHookTool,
 ): AsyncGenerator<AggregatedHookResult> {
   const appState = toolUseContext.getAppState()
   const sessionId = toolUseContext.agentId ?? getSessionId()
@@ -3021,6 +2975,7 @@ export async function* executePreToolHooks<ToolInput>(
     toolUseContext,
     requestPrompt,
     toolInputSummary,
+    invokeMcpHookTool,
   })
 }
 

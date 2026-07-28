@@ -36,7 +36,7 @@ import {
   matchingRuleForInput,
 } from 'src/utils/permissions/filesystem.js'
 import type { PermissionDecision } from 'src/utils/permissions/PermissionResult.js'
-import { matchWildcardPattern } from 'src/utils/permissions/shellRuleMatching.js'
+import { matchPathWildcardPattern } from 'src/utils/permissions/shellRuleMatching.js'
 import { FILE_UNEXPECTEDLY_MODIFIED_ERROR } from '../FileEditTool/constants.js'
 import { gitDiffSchema, hunkSchema } from '../FileEditTool/types.js'
 import { FILE_WRITE_TOOL_NAME, getWriteToolDescription } from './prompt.js'
@@ -188,7 +188,7 @@ export const FileWriteTool = buildTool({
     }
   },
   async preparePermissionMatcher({ file_path }) {
-    return pattern => matchWildcardPattern(pattern, file_path)
+    return pattern => matchPathWildcardPattern(pattern, file_path)
   },
   async checkPermissions(input, context): Promise<PermissionDecision> {
     const appState = context.getAppState()
