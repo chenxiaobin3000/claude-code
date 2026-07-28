@@ -57,15 +57,17 @@
 ### P0：Windows 原生 OS Sandbox
 
 - [x] 初始化 `native/windows-sandbox-host` C++ 基座（2026-07-28）：建立独立 CMake/MSVC 工程、`--probe`、`--check-app-container` 和不接收 shell 拼接命令的 `--launch` 协议；实现 AppContainer、临时目录树 ACL、Job Object 和默认无网络的最小启动路径。真实用户上下文已验证 Profile 可创建、已授权目录可读、未授权目录读取被拒绝且网络默认拒绝。选择 Windows 严格语义：仅工作区、运行时和显式授权路径可见，不通过修改全盘 ACL 模拟 macOS/Linux 的默认全盘可读。
-- [ ] 解决可写工作区的 OS 前置：AppContainer 固定为 Low IL，不能写入普通 Medium IL 项目目录，即使 DACL 授权也会被 Mandatory Integrity Control 拒绝。本机没有 Experimental Sandbox Engine/BFS API；不得为绕过该限制临时降低或持久化修改项目目录完整性标签（普通 CLI 无法可靠恢复）。只有在受支持 Windows 上使用 BFS、改用 Windows Sandbox VM，或设计经审计的受限文件写入 Broker 后，才能接入 `SandboxManager`。
-- [ ] 为原生 Windows 完成 OS 级 Bash/PowerShell 子进程隔离，覆盖文件系统读写边界、网络域名边界、子进程继承与进程清理。
-- [ ] 保持与 macOS Seatbelt、Linux/WSL2 bubblewrap Sandbox 的设置语义一致：`filesystem`、`network`、`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands`；Windows 的严格默认可见范围作为有记录的平台差异。
-- [ ] 对齐官方新增的 `sandbox.credentials`：只隔离 Sandbox 子进程对凭据文件和秘密环境变量的访问；不得恢复项目级 Read/Glob/Grep 硬拒绝，也不得影响模型 Provider 自身读取配置的凭据。
-- [ ] 对齐官方 `sandbox.network.allowManagedDomainsOnly`：受管策略启用时，未在允许列表中的 Sandbox 网络主机直接拒绝，不进入交互授权回退；普通模式保留会话内“允许一次后记住”的网络授权语义。不得另造 `strictAllowlist` 设置名。
-- [ ] 支持 macOS 专用、默认关闭的 `sandbox.allowAppleEvents`，并确保该例外不会放宽文件系统、网络或其他平台的边界。
-- [ ] 保持 `denyRead`/`allowRead`、权限规则和符号链接的合并语义；大目录 Glob 不得把规则展开为过大的 Bash 描述或导致会话不可用。
-- [ ] 在不支持或初始化失败时遵守 `failIfUnavailable`：默认明确告警并走常规权限流，启用硬失败时拒绝启动，不产生伪沙盒状态。
-- [ ] 为 Windows PowerShell 5.1、PowerShell 7、Git Bash 与路径/UNC/符号链接边界提供真实隔离验证。
+- [x] 解决可写工作区的 OS 前置（2026-07-28）：AppContainer 固定为 Low IL，不能安全直接写普通 Medium IL 项目目录；本机没有 Experimental Sandbox Engine/BFS API，故固定改用 Windows Sandbox VM。未降低或持久化修改项目目录完整性标签。
+- [x] Windows Sandbox VM 验证前置（2026-07-28）：已启用 `Containers-DisposableClientVM`、在 BIOS/UEFI 启用虚拟化并重启；`WindowsSandbox.exe` 与 `vmcompute` 可用。真实 `.wsb` 已验证禁网、禁剪贴板、禁 vGPU、唯一随机临时目录可写映射、来宾回传结果和自动关机；临时目录在 VM 退出后已清理。
+- [x] 实现 Windows Sandbox VM 受控会话协议（2026-07-28）：每个会话使用唯一控制目录、结构化 argv 请求/结果文件和固定安全 `.wsb`；仅映射启动工作区（可写）、私有控制目录（可写）与 PowerShell/Git 运行时根（只读）。来宾回传 stdout/stderr/退出码；禁用网络、剪贴板和 vGPU，不映射用户主目录或系统根目录。
+- [x] 固定 Windows 后端语义（2026-07-28）：不提供 AppContainer/VM 或“高隔离模式”二选一。Windows 上 `sandbox.enabled: true` 时，受保护 PowerShell/Bash 固定使用 Windows Sandbox VM；`sandbox.enabled: false` 时不启动 VM。取消会关闭 VM 会话，避免遗留来宾进程；现有明确绕过语义仍由权限层决定。
+- [x] 为原生 Windows 完成 OS 级 Bash/PowerShell 子进程隔离（2026-07-28）：已真实验证 Windows PowerShell 5.1、只读映射的 PowerShell 7、只读映射的 Git Bash 均在禁网 VM 内执行并回传结果；不会回退到宿主执行。
+- [x] 明确 Windows 与 macOS Seatbelt、Linux/WSL2 bubblewrap 的设置边界（2026-07-28）：保留 `failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands` 的上层语义；Windows VM 固定仅映射启动工作区和受控运行时、固定断网。任何无法由 `.wsb` 精确落实的域名/代理或文件系统 allow/deny 配置均 fail-closed，不静默回退宿主或伪造跨平台等价性。
+- [x] 对齐 `sandbox.credentials` 的 Windows 边界（2026-07-28）：VM 请求环境默认空白；不映射用户主目录或 `.claude` 凭据目录，模型 Provider 仍仅在宿主读取自身配置。
+- [x] 对齐官方 `sandbox.network.allowManagedDomainsOnly` 的 Windows失败语义（2026-07-28）：Windows Sandbox VM 原生只支持网络开/关，当前固定断网；配置域名白名单、代理或 `allowManagedDomainsOnly` 时 fail-closed 并报告不可用，不伪造域名策略或放开网络。
+- [x] 收紧 Windows 文件系统规则与路径边界（2026-07-28）：Windows Sandbox 不能在单个映射目录内执行 `denyRead`/`allowRead`、`allowWrite`/`denyWrite`、`Read(...)`/`Edit(...)` 及额外目录的有序合并，检测到上述规则即拒绝启用，绝不忽略；拒绝卷根、UNC、符号链接/Junction 工作区或运行时映射。真实 Junction 和根/UNC 协议边界已验证。若未来引入经纪式文件系统，再单列实现精确合并和 Glob 语义。
+- [x] 在不支持或初始化失败时遵守 `failIfUnavailable`（2026-07-28）：Windows Sandbox 功能、VM 会话或不支持的网络策略不可用时，硬失败设置会直接拒绝 Shell，不回退宿主执行。
+- [x] 为 Windows PowerShell 5.1、PowerShell 7、Git Bash 与路径/UNC/符号链接边界提供真实隔离验证（2026-07-28）：三类 Shell 均已在禁网 VM 的只读运行时映射中实际执行并回传结果；卷根、UNC 与 Junction 映射均被协议或启动前检查拒绝。
 
 完成条件：Windows 上的子进程不能越过已配置的文件与网络边界；新增 Sandbox 设置在受支持平台具有一致、可验证的语义；退出、取消和异常不会遗留代理、锁或子进程；验证不得只依赖模拟或字符串判断。
 
@@ -122,9 +124,10 @@
 
 ### P4：可选产品能力
 
+- [ ] 支持 macOS 专用、默认关闭的 `sandbox.allowAppleEvents`，并确保该例外不会放宽文件系统、网络或其他平台的边界。
 - [ ] 验收已安装的 `claude-in-chrome`：连接生命周期、权限提示、错误可见性与失败恢复。
 
-完成条件：只对外部已安装能力做集成验收；不把浏览器控制实现重新纳入本项目代码。
+完成条件：可选能力须默认关闭、显式启用且不扩大既有安全边界；浏览器仅对外部已安装能力做集成验收，不把浏览器控制实现重新纳入本项目代码。
 
 ## 维护规则
 

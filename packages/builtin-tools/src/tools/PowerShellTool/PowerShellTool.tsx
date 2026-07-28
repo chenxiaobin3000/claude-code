@@ -242,6 +242,7 @@ function isWindowsSandboxPolicyViolation(): boolean {
   return (
     getPlatform() === 'windows' &&
     SandboxManager.isSandboxEnabledInSettings() &&
+    !SandboxManager.isSupportedPlatform() &&
     !SandboxManager.areUnsandboxedCommandsAllowed()
   );
 }
@@ -848,10 +849,9 @@ async function* runPowerShellCommand({
       // Sandbox works on Linux/macOS/WSL2 — pwsh there is a native binary and
       // SandboxManager.wrapWithSandbox wraps it same as bash (Shell.ts uses
       // /bin/sh for the outer spawn to parse the POSIX-quoted bwrap/sandbox-exec
-      // string). On Windows native, sandbox is unsupported; shouldUseSandbox()
-      // returns false via isSandboxingEnabled() → isSupportedPlatform() → false.
-      // The explicit platform check is redundant-but-obvious.
-      shouldUseSandbox: getPlatform() === 'windows' ? false : shouldUseSandbox({ command, dangerouslyDisableSandbox }),
+      // string). On Windows the Shell adapter routes protected commands to the
+      // persistent Windows Sandbox VM instead of bwrap/sandbox-exec.
+      shouldUseSandbox: shouldUseSandbox({ command, dangerouslyDisableSandbox }),
       shouldAutoBackground,
     });
   } catch (e) {

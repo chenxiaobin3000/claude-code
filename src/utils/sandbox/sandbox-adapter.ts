@@ -20,7 +20,7 @@ import {
   SandboxRuntimeConfigSchema,
   SandboxViolationStore,
 } from '@anthropic-ai/sandbox-runtime'
-import { rmSync, statSync } from 'fs'
+import { existsSync, rmSync, statSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { memoize } from 'lodash-es'
 import { join, resolve, sep } from 'path'
@@ -449,6 +449,12 @@ async function detectWorktreeMainRepoPath(cwd: string): Promise<string | null> {
  * Returns { errors, warnings } - errors mean sandbox cannot run
  */
 const checkDependencies = memoize((): SandboxDependencyCheck => {
+  if (getPlatform() === 'windows') {
+    const sandboxExe = join(process.env.WINDIR || 'C:\\Windows', 'System32', 'WindowsSandbox.exe')
+    return existsSync(sandboxExe)
+      ? { errors: [], warnings: [] }
+      : { errors: ['Windows Sandbox is not installed or enabled'], warnings: [] }
+  }
   const { rgPath, rgArgs } = ripgrepCommand()
   return BaseSandboxManager.checkDependencies({
     command: rgPath,
@@ -481,11 +487,62 @@ function isSandboxRequired(): boolean {
   return getSandboxEnabledSetting() && (settings?.sandbox?.failIfUnavailable ?? false)
 }
 
+function hasUnsupportedWindowsSandboxNetworkConfig(): boolean {
+  if (getPlatform() !== 'windows') return false
+  const network = getSettings_DEPRECATED()?.sandbox?.network
+  return Boolean(
+    network?.allowedDomains?.length ||
+      network?.allowManagedDomainsOnly ||
+      network?.httpProxyPort ||
+      network?.socksProxyPort,
+  )
+}
+
+/**
+ * Windows Sandbox maps whole host directories and cannot enforce an ordered
+ * allow/deny rule inside a writable mapping.  A partial implementation here
+ * would turn a configured denyRead/denyWrite into an unenforced promise, so
+ * Windows deliberately rejects those configurations until a brokered
+ * filesystem layer exists.
+ */
+function hasUnsupportedWindowsSandboxFilesystemConfig(): boolean {
+  if (getPlatform() !== 'windows') return false
+  const settings = getSettings_DEPRECATED()
+  const filesystem = settings?.sandbox?.filesystem
+  if (
+    filesystem?.allowWrite?.length ||
+    filesystem?.denyWrite?.length ||
+    filesystem?.denyRead?.length ||
+    filesystem?.allowRead?.length ||
+    filesystem?.allowManagedReadPathsOnly
+  ) {
+    return true
+  }
+
+  if (
+    settings?.permissions?.additionalDirectories?.length ||
+    getAdditionalDirectoriesForClaudeMd().length
+  ) {
+    return true
+  }
+
+  return [...(settings?.permissions?.allow || []), ...(settings?.permissions?.deny || [])]
+    .map(permissionRuleValueFromString)
+    .some(
+      rule =>
+        (rule.toolName === FILE_EDIT_TOOL_NAME || rule.toolName === FILE_READ_TOOL_NAME) &&
+        Boolean(rule.ruleContent),
+    )
+}
+
 /**
  * Check if the current platform is supported for sandboxing (memoized)
  * Supports: macOS, Linux, and WSL2+ (WSL1 is not supported)
  */
 const isSupportedPlatform = memoize((): boolean => {
+  if (getPlatform() === 'windows') {
+    return checkDependencies().errors.length === 0
+  }
   return BaseSandboxManager.isSupportedPlatform()
 })
 
@@ -531,6 +588,16 @@ function isSandboxingEnabled(): boolean {
     return false
   }
 
+  // Windows Sandbox only provides an on/off network switch. Until the host
+  // proxy/WFP layer exists, do not pretend that domain policy is enforced.
+  if (hasUnsupportedWindowsSandboxNetworkConfig()) {
+    return false
+  }
+
+  if (hasUnsupportedWindowsSandboxFilesystemConfig()) {
+    return false
+  }
+
   if (checkDependencies().errors.length > 0) {
     return false
   }
@@ -565,6 +632,9 @@ function getSandboxUnavailableReason(): string | undefined {
 
   if (!isSupportedPlatform()) {
     const platform = getPlatform()
+    if (platform === 'windows') {
+      return 'sandbox.enabled is set but Windows Sandbox is not installed or unavailable'
+    }
     if (platform === 'wsl') {
       return 'sandbox.enabled is set but WSL1 is not supported (requires WSL2)'
     }
@@ -573,6 +643,14 @@ function getSandboxUnavailableReason(): string | undefined {
 
   if (!isPlatformInEnabledList()) {
     return `sandbox.enabled is set but ${getPlatform()} is not in sandbox.enabledPlatforms`
+  }
+
+  if (hasUnsupportedWindowsSandboxNetworkConfig()) {
+    return 'sandbox.enabled is set but Windows Sandbox currently supports only a fully disabled network; configured domain or proxy policy is not enforced'
+  }
+
+  if (hasUnsupportedWindowsSandboxFilesystemConfig()) {
+    return 'sandbox.enabled is set but Windows Sandbox cannot enforce configured filesystem allow/deny rules inside a mapped directory; remove those rules or disable the sandbox'
   }
 
   const deps = checkDependencies()
@@ -704,6 +782,13 @@ async function wrapWithSandbox(
   customConfig?: Partial<SandboxRuntimeConfig>,
   abortSignal?: AbortSignal,
 ): Promise<string> {
+  if (getPlatform() === 'windows') {
+    throw new Error('Windows Sandbox commands must be launched through the VM session adapter')
+  }
+
+  if (hasUnsupportedWindowsSandboxNetworkConfig()) {
+    return 'sandbox.enabled is set but Windows Sandbox currently supports only a fully disabled network; configured domain or proxy policy is not enforced'
+  }
   // If sandboxing is enabled, ensure initialization is complete
   if (isSandboxingEnabled()) {
     if (initializationPromise) {
@@ -735,6 +820,13 @@ async function initialize(
   // Check if sandboxing is enabled in settings
   if (!isSandboxingEnabled()) {
     return
+  }
+
+  // Windows uses the Windows Sandbox VM session instead of the POSIX runtime.
+  // Shell.ts owns lazy VM startup so merely initializing the CLI never opens a GUI.
+  if (getPlatform() === 'windows') {
+    initializationPromise = Promise.resolve()
+    return initializationPromise
   }
 
   // Wrap the callback to enforce allowManagedDomainsOnly policy.

@@ -3,7 +3,7 @@ import { constants as fsConstants, readFileSync, unlinkSync } from 'fs'
 import { type FileHandle, mkdir, open, realpath } from 'fs/promises'
 import memoize from 'lodash-es/memoize.js'
 import { tmpdir } from 'os'
-import { isAbsolute, resolve } from 'path'
+import { basename, dirname, isAbsolute, resolve } from 'path'
 import { join as posixJoin } from 'path/posix'
 import { logEvent } from 'src/services/analytics/index.js'
 import {
@@ -19,6 +19,7 @@ import { getFsImplementation } from './fsOperations.js'
 import { logError } from './log.js'
 import {
   createAbortedCommand,
+  createAsyncShellCommand,
   createFailedCommand,
   type ShellCommand,
   wrapSpawn,
@@ -34,6 +35,10 @@ import { onCwdChangedForHooks } from './hooks/fileChangedWatcher.js'
 import { getClaudeTempDirName } from './permissions/filesystem.js'
 import { getPlatform } from './platform.js'
 import { SandboxManager } from './sandbox/sandbox-adapter.js'
+import {
+  closeWindowsSandboxSession,
+  getWindowsSandboxSession,
+} from './sandbox/windowsSandboxSession.js'
 import { invalidateSessionEnvCache } from './sessionEnvironment.js'
 import { createBashShellProvider } from './shell/bashProvider.js'
 import { getCachedPowerShellPath } from './shell/powershellDetection.js'
@@ -244,6 +249,20 @@ export async function exec(
     return createAbortedCommand()
   }
 
+  // A requested Windows sandbox must never quietly degrade to a host command.
+  // This covers a disabled VM feature and Windows network/filesystem settings
+  // that cannot be enforced by a native .wsb session yet.
+  if (
+    getPlatform() === 'windows' &&
+    shouldUseSandbox &&
+    !SandboxManager.isSandboxingEnabled()
+  ) {
+    return createFailedCommand(
+      SandboxManager.getSandboxUnavailableReason() ??
+        'Windows Sandbox is required by policy but is unavailable.',
+    )
+  }
+
   const binShell = provider.shellPath
 
   // Sandboxed PowerShell: wrapWithSandbox hardcodes `<binShell> -c '<cmd>'` —
@@ -258,7 +277,9 @@ export async function exec(
   const isSandboxedPowerShell = shouldUseSandbox && shellType === 'powershell'
   const sandboxBinShell = isSandboxedPowerShell ? '/bin/sh' : binShell
 
-  if (shouldUseSandbox) {
+  const useWindowsSandboxVm = shouldUseSandbox && getPlatform() === 'windows'
+
+  if (shouldUseSandbox && !useWindowsSandboxVm) {
     commandString = await SandboxManager.wrapWithSandbox(
       commandString,
       sandboxBinShell,
@@ -297,6 +318,47 @@ export async function exec(
   const taskId = generateTaskId('local_bash')
   const taskOutput = new TaskOutput(taskId, onProgress ?? null, !usePipeMode)
   await mkdir(getTaskOutputDir(), { recursive: true })
+
+  if (useWindowsSandboxVm) {
+    const workspace = getOriginalCwd()
+    const shellCommand = createAsyncShellCommand({
+      abortSignal,
+      timeout: commandTimeout,
+      taskOutput,
+      cancel: async () => {
+        // Windows Sandbox has one guest session. Until a per-request process
+        // handle protocol exists, cancelling safely tears down the whole VM;
+        // never let a cancelled command continue in an unobserved guest.
+        await closeWindowsSandboxSession()
+      },
+      run: async signal => {
+        const runtimeRoot =
+          shellType === 'bash'
+            ? dirname(dirname(provider.shellPath))
+            : dirname(provider.shellPath)
+        const session = await getWindowsSandboxSession(workspace, [runtimeRoot])
+        const executable =
+          shellType === 'bash'
+            ? `C:\\claude\\runtime\\0\\bin\\${basename(provider.shellPath)}`
+            : `C:\\claude\\runtime\\0\\${basename(provider.shellPath)}`
+        const guestArgs =
+          shellType === 'bash'
+            ? ['-lc', command]
+            : ['-NoProfile', '-NonInteractive', '-Command', command]
+        const result = await session.execute(
+          {
+            executable,
+            arguments: guestArgs,
+            cwd,
+            environment: {},
+          },
+          { timeout: commandTimeout, abortSignal: signal },
+        )
+        return result
+      },
+    })
+    return shellCommand
+  }
 
   // In file mode, both stdout and stderr go to the same file fd.
   // On POSIX, O_APPEND makes each write atomic (seek-to-end + write), so

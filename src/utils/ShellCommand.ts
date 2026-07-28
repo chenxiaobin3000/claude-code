@@ -463,3 +463,82 @@ export function createFailedCommand(preSpawnError: string): ShellCommand {
     cleanup(): void {},
   }
 }
+
+/**
+ * ShellCommand adapter for an execution backend that is not a local child
+ * process (for example, a Windows Sandbox VM).  Keeping this here prevents a
+ * VM backend from pretending to be a ChildProcess or bypassing normal timeout
+ * and cancellation handling.
+ */
+export function createAsyncShellCommand(options: {
+  abortSignal: AbortSignal
+  timeout: number
+  taskOutput: TaskOutput
+  run: (signal: AbortSignal) => Promise<Pick<ExecResult, 'code' | 'stdout' | 'stderr'>>
+  cancel: () => Promise<void> | void
+}): ShellCommand {
+  let status: ShellCommand['status'] = 'running'
+  let backgroundTaskId: string | undefined
+  const controller = new AbortController()
+  let timer: NodeJS.Timeout | undefined
+  let cleaned = false
+
+  const cancel = (): void => {
+    if (status === 'completed' || status === 'killed') return
+    status = 'killed'
+    controller.abort()
+    void options.cancel()
+  }
+  const abortHandler = (): void => {
+    if (options.abortSignal.reason !== 'interrupt') cancel()
+  }
+  options.abortSignal.addEventListener('abort', abortHandler, { once: true })
+
+  const result = new Promise<ExecResult>(resolve => {
+    timer = setTimeout(cancel, options.timeout) as NodeJS.Timeout
+    void options.run(controller.signal).then(
+      execution => {
+        if (timer) clearTimeout(timer)
+        options.abortSignal.removeEventListener('abort', abortHandler)
+        if (status !== 'killed') status = 'completed'
+        options.taskOutput.writeStdout(execution.stdout)
+        options.taskOutput.writeStderr(execution.stderr)
+        resolve({
+          ...execution,
+          interrupted: controller.signal.aborted,
+          backgroundTaskId,
+        })
+      },
+      error => {
+        if (timer) clearTimeout(timer)
+        options.abortSignal.removeEventListener('abort', abortHandler)
+        if (status !== 'killed') status = 'completed'
+        const stderr = error instanceof Error ? error.message : String(error)
+        options.taskOutput.writeStderr(stderr)
+        resolve({ code: 1, stdout: '', stderr, interrupted: controller.signal.aborted, backgroundTaskId })
+      },
+    )
+  })
+
+  return {
+    get status(): ShellCommand['status'] {
+      return status
+    },
+    taskOutput: options.taskOutput,
+    result,
+    background(taskId: string): boolean {
+      if (status !== 'running') return false
+      backgroundTaskId = taskId
+      status = 'backgrounded'
+      return true
+    },
+    kill: cancel,
+    cleanup(): void {
+      if (cleaned) return
+      cleaned = true
+      if (timer) clearTimeout(timer)
+      options.abortSignal.removeEventListener('abort', abortHandler)
+      options.taskOutput.clear()
+    },
+  }
+}

@@ -17,11 +17,13 @@
 - **模型与登录**：官方的 Anthropic 登录、官方模型、组织默认/限制模型、Claude API Provider 与相关云端模型能力不适用。本项目只从 `models.json` 加载 OpenAI-compatible 模型；模型 Profile 静态声明，不做服务端模型发现或自动模型替换。
 - **云端与远程产品**：官方的 Web/Desktop/Mobile、Remote Control、GitHub App、Cloud Code Review、Routines、Channels、Artifacts、语音与账户/用量产品均不提供。本项目也不包含官方自动更新、安装器或远端遥测。
 - **插件与浏览器**：官方插件市场、远端安装/更新、插件自动重命名与 Chrome 内置控制不提供。仅加载本地已安装插件；浏览器能力只验收用户另行安装的 `claude-in-chrome`。
-- **Sandbox**：官方 `sandbox.credentials`、`sandbox.network.strictAllowlist` 及 macOS 专用 `sandbox.allowAppleEvents` 没有作为本项目配置面提供。原有 Sandbox 仍使用标准 `filesystem`、`network`、`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands` 语义；原生 Windows OS 级隔离尚未实现。
+- **Sandbox**：Windows 上启用 Sandbox 时，Shell 会在 Windows Sandbox VM 内执行，默认只映射启动工作区和只读 Shell 运行时，且固定断网、不传递用户主目录或凭据。`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands` 保持上层语义；Windows 不能精确落实域名白名单、代理和目录内文件 allow/deny 规则，配置这些规则时会 fail-closed，而不会回退宿主执行。
 - **会话路径**：官方 `/cd` 可将会话迁移到新的工作目录；本项目 `/cd` 仅临时切换 cwd，不迁移项目身份、会话、配置或扩展作用域。
 - **Agent、Hook、MCP 与 Skill**：官方当前的后台 Agent 默认行为、嵌套 Agent 限额与转发、`claude mcp login/logout`、`DirectoryAdded` Hook、嵌套 Skill 加载和部分 Hook 输出语义尚未宣称对齐；以开发计划的未完成项为准。
 
-## 运行时与网络边界
+## 运行时边界
+
+### 网络能力边界
 
 本项目只支持由 `models.json` 配置的 OpenAI-compatible Chat Completions 服务，包括本地 llama.cpp 和兼容该协议的远端服务。
 
@@ -31,6 +33,8 @@
 - 对不兼容 Chat Completions 的端点，直接给出兼容性错误；不会静默删除字段、切换 Provider 或进入供应商专用适配分支。
 
 用户自行配置的模型端点、MCP、Hook 以及本地插件仍可访问其对应的外部服务。
+
+远程功能开关不参与运行行为；本地固定策略见 [`scripts/feature-policy.ts`](scripts/feature-policy.ts)，可用环境变量的完整清单见 [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md)。
 
 ## 模型配置
 
@@ -111,7 +115,7 @@ bun run verify
 
 - Bun bundle：开发和 Bun 运行时产物。
 - Vite/Rollup Node bundle：Node 兼容分发产物。
-- Bun standalone EXE：Windows 单文件 `claude.exe`。
+- Bun standalone EXE：Windows standalone EXE 单文件 `claude.exe`。
 
 项目保持 TypeScript + Bun 实现，不以 Rust 或其他平台原生语言重写 CLI。`claude.exe` 是包含 Bun Runtime 的 standalone 产物；它的目标是免安装运行时分发，而不是追随官方的原生二进制实现或安装/自更新机制。
 
