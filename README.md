@@ -83,6 +83,12 @@
 
 Windows 下 Bash 与 PowerShell 会按优先级探测可用实现。Bash 工具运行的是 Bash 语法，不应把 Windows `type`、`dir` 等 PowerShell/cmd 命令当作 Bash 命令使用；路径含空格、Unicode 或盘符时应使用与当前 Shell 匹配的引用和路径格式。
 
+### Windows Sandbox
+
+`sandbox.enabled: true` 时，受保护的 Bash 与 PowerShell 在 Windows Sandbox VM 中执行；VM 在首条受保护命令时启动，取消命令会关闭该会话。来宾只获得启动工作区的可写映射、私有控制目录和只读 Shell 运行时；网络、剪贴板和 vGPU 均禁用，用户主目录、`.claude` 凭据和系统根目录不会映射或通过请求环境传入。
+
+Windows Sandbox 不能精确执行域名白名单、代理或映射目录内的 `allowRead`/`denyRead`、`allowWrite`/`denyWrite` 规则。配置这些规则时 Sandbox 会拒绝启用，绝不会无提示回退到宿主命令。卷根、UNC、符号链接或 Junction 映射同样会被拒绝。
+
 命令权限决策顺序固定为：硬安全拒绝、显式 deny、不可绕过安全审批、显式 ask、精确 allow、受约束模式/只读自动允许、默认 ask。工具级通配规则不能覆盖硬安全结果。
 
 ## 会话与文件工具差异

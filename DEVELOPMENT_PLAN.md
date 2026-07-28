@@ -30,6 +30,13 @@
 - Windows Shell 实现按优先级进行可用性探测；Bash 与 PowerShell 不通过写死顺序互相替代。
 - 文件写入支持分块与截断恢复。相同文件工具操作连续失败两次后，当前轮的第三次相同调用被确定性阻止，避免本地模型陷入重试循环。
 
+### Windows 原生 OS Sandbox
+
+- Windows 上 `sandbox.enabled: true` 时，受保护的 Bash 与 PowerShell 固定在 Windows Sandbox VM 中执行；首次受保护命令才启动可见 VM，取消会关闭整个来宾会话，绝不回退宿主执行。
+- VM 只映射启动工作区（可写）、私有协议控制目录（可写）和 Shell 运行时（只读）；禁用网络、剪贴板和 vGPU，不映射用户主目录、`.claude` 凭据或系统根目录，来宾请求环境为空。
+- 请求使用结构化 argv 和协议文件传递并回传 stdout、stderr、退出码；卷根、UNC、符号链接/Junction 工作区或运行时映射均被拒绝。
+- Windows Sandbox 无法精确实施域名/代理或映射目录内的文件 allow/deny 规则；遇到这些配置即 fail-closed。`failIfUnavailable`、`excludedCommands` 和 `allowUnsandboxedCommands` 保持上层语义。
+
 ### 本地产品边界
 
 - 主题仅来自内置主题和 `~/.claude/themes/*.json`；重启读取，不提供编辑器、热更新或插件主题安装。
@@ -54,24 +61,7 @@
 
 ## 未开发路线图
 
-### P0：Windows 原生 OS Sandbox
-
-- [x] 初始化 `native/windows-sandbox-host` C++ 基座（2026-07-28）：建立独立 CMake/MSVC 工程、`--probe`、`--check-app-container` 和不接收 shell 拼接命令的 `--launch` 协议；实现 AppContainer、临时目录树 ACL、Job Object 和默认无网络的最小启动路径。真实用户上下文已验证 Profile 可创建、已授权目录可读、未授权目录读取被拒绝且网络默认拒绝。选择 Windows 严格语义：仅工作区、运行时和显式授权路径可见，不通过修改全盘 ACL 模拟 macOS/Linux 的默认全盘可读。
-- [x] 解决可写工作区的 OS 前置（2026-07-28）：AppContainer 固定为 Low IL，不能安全直接写普通 Medium IL 项目目录；本机没有 Experimental Sandbox Engine/BFS API，故固定改用 Windows Sandbox VM。未降低或持久化修改项目目录完整性标签。
-- [x] Windows Sandbox VM 验证前置（2026-07-28）：已启用 `Containers-DisposableClientVM`、在 BIOS/UEFI 启用虚拟化并重启；`WindowsSandbox.exe` 与 `vmcompute` 可用。真实 `.wsb` 已验证禁网、禁剪贴板、禁 vGPU、唯一随机临时目录可写映射、来宾回传结果和自动关机；临时目录在 VM 退出后已清理。
-- [x] 实现 Windows Sandbox VM 受控会话协议（2026-07-28）：每个会话使用唯一控制目录、结构化 argv 请求/结果文件和固定安全 `.wsb`；仅映射启动工作区（可写）、私有控制目录（可写）与 PowerShell/Git 运行时根（只读）。来宾回传 stdout/stderr/退出码；禁用网络、剪贴板和 vGPU，不映射用户主目录或系统根目录。
-- [x] 固定 Windows 后端语义（2026-07-28）：不提供 AppContainer/VM 或“高隔离模式”二选一。Windows 上 `sandbox.enabled: true` 时，受保护 PowerShell/Bash 固定使用 Windows Sandbox VM；`sandbox.enabled: false` 时不启动 VM。取消会关闭 VM 会话，避免遗留来宾进程；现有明确绕过语义仍由权限层决定。
-- [x] 为原生 Windows 完成 OS 级 Bash/PowerShell 子进程隔离（2026-07-28）：已真实验证 Windows PowerShell 5.1、只读映射的 PowerShell 7、只读映射的 Git Bash 均在禁网 VM 内执行并回传结果；不会回退到宿主执行。
-- [x] 明确 Windows 与 macOS Seatbelt、Linux/WSL2 bubblewrap 的设置边界（2026-07-28）：保留 `failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands` 的上层语义；Windows VM 固定仅映射启动工作区和受控运行时、固定断网。任何无法由 `.wsb` 精确落实的域名/代理或文件系统 allow/deny 配置均 fail-closed，不静默回退宿主或伪造跨平台等价性。
-- [x] 对齐 `sandbox.credentials` 的 Windows 边界（2026-07-28）：VM 请求环境默认空白；不映射用户主目录或 `.claude` 凭据目录，模型 Provider 仍仅在宿主读取自身配置。
-- [x] 对齐官方 `sandbox.network.allowManagedDomainsOnly` 的 Windows失败语义（2026-07-28）：Windows Sandbox VM 原生只支持网络开/关，当前固定断网；配置域名白名单、代理或 `allowManagedDomainsOnly` 时 fail-closed 并报告不可用，不伪造域名策略或放开网络。
-- [x] 收紧 Windows 文件系统规则与路径边界（2026-07-28）：Windows Sandbox 不能在单个映射目录内执行 `denyRead`/`allowRead`、`allowWrite`/`denyWrite`、`Read(...)`/`Edit(...)` 及额外目录的有序合并，检测到上述规则即拒绝启用，绝不忽略；拒绝卷根、UNC、符号链接/Junction 工作区或运行时映射。真实 Junction 和根/UNC 协议边界已验证。若未来引入经纪式文件系统，再单列实现精确合并和 Glob 语义。
-- [x] 在不支持或初始化失败时遵守 `failIfUnavailable`（2026-07-28）：Windows Sandbox 功能、VM 会话或不支持的网络策略不可用时，硬失败设置会直接拒绝 Shell，不回退宿主执行。
-- [x] 为 Windows PowerShell 5.1、PowerShell 7、Git Bash 与路径/UNC/符号链接边界提供真实隔离验证（2026-07-28）：三类 Shell 均已在禁网 VM 的只读运行时映射中实际执行并回传结果；卷根、UNC 与 Junction 映射均被协议或启动前检查拒绝。
-
-完成条件：Windows 上的子进程不能越过已配置的文件与网络边界；新增 Sandbox 设置在受支持平台具有一致、可验证的语义；退出、取消和异常不会遗留代理、锁或子进程；验证不得只依赖模拟或字符串判断。
-
-### P1：Agent 与后台任务模型
+### P0：Agent 与后台任务模型
 
 - [ ] 对齐官方 `/cd`：将当前会话原子迁移到目标工作目录，并保留当前对话上下文与 Prompt Cache；不再只临时改变 cwd。
 - [ ] `/cd` 后重新绑定会话的项目身份、Transcript/Resume 归属、Git 状态、权限根、Settings、CLAUDE.md、Hook、Skill、Plugin 与 MCP 发现范围；失败时保持原会话与原目录完整可用。
@@ -91,7 +81,7 @@
 
 完成条件：状态转换和工作目录迁移可复现，取消与恢复不会遗留资源，权限与用户可见状态一致，跨目录不会泄漏配置或会话归属，并有独立轻量验证覆盖关键转换。
 
-### P2：Hook、Plugin、Skill 与 MCP
+### P1：Hook、Plugin、Skill 与 MCP
 
 - [ ] 支持 Hook 直接调用 MCP Tool，并定义其权限、超时和错误传播。
 - [ ] 补齐 `continueOnBlock`、`MessageDisplay`、`additionalContext` 的兼容语义。
@@ -112,7 +102,7 @@
 
 完成条件：每项能力有配置 Schema、权限边界、失败提示和至少一个不依赖测试框架的验证脚本。
 
-### P3：性能与稳定性
+### P2：性能与稳定性
 
 - [ ] 优化流式渲染的 CPU 占用、缓存命中和长输出退化。
 - [ ] 控制长会话、工具结果、图片与 MCP 内容导致的内存增长。
@@ -122,7 +112,7 @@
 
 完成条件：有可重复的压力脚本、资源阈值与异常恢复验证，且不会把环境偶发错误误报为产品成功。
 
-### P4：可选产品能力
+### P3：可选产品能力
 
 - [ ] 支持 macOS 专用、默认关闭的 `sandbox.allowAppleEvents`，并确保该例外不会放宽文件系统、网络或其他平台的边界。
 - [ ] 验收已安装的 `claude-in-chrome`：连接生命周期、权限提示、错误可见性与失败恢复。
