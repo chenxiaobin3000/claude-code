@@ -42,6 +42,10 @@ import { semanticBoolean } from 'src/utils/semanticBoolean.js';
 import { semanticNumber } from 'src/utils/semanticNumber.js';
 import { EndTruncatingAccumulator } from 'src/utils/stringUtils.js';
 import { getTaskOutputPath } from 'src/utils/task/diskOutput.js';
+import {
+  ASSISTANT_SHELL_BLOCKING_BUDGET_MS,
+  SHELL_PROGRESS_THRESHOLD_MS,
+} from 'src/utils/task/backgroundPolicy.js';
 import { TaskOutput } from 'src/utils/task/TaskOutput.js';
 import { isOutputLineTruncated } from 'src/utils/terminal.js';
 import {
@@ -87,9 +91,9 @@ import {
 const EOL = '\n';
 
 // Progress display constants
-const PROGRESS_THRESHOLD_MS = 2000; // Show progress after 2 seconds
+const PROGRESS_THRESHOLD_MS = SHELL_PROGRESS_THRESHOLD_MS;
 // In assistant mode, blocking bash auto-backgrounds after this many ms in the main agent
-const ASSISTANT_BLOCKING_BUDGET_MS = 15_000;
+const ASSISTANT_BLOCKING_BUDGET_MS = ASSISTANT_SHELL_BLOCKING_BUDGET_MS;
 
 // Search commands for collapsible display (grep, find, etc.)
 const BASH_SEARCH_COMMANDS = new Set(['find', 'grep', 'rg', 'ag', 'ack', 'locate', 'which', 'whereis']);

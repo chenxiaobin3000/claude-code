@@ -25,6 +25,7 @@ export class TmuxEngine implements BgEngine {
         CLAUDE_CODE_SESSION_NAME: opts.sessionName,
         CLAUDE_CODE_SESSION_LOG: opts.logPath,
         CLAUDE_CODE_TMUX_SESSION: opts.sessionName,
+        CLAUDE_CODE_SESSION_ENGINE: 'tmux',
       } as NodeJS.ProcessEnv,
     })
 

@@ -5,7 +5,7 @@ const daemon = {
   type: 'local-jsx',
   name: 'daemon',
   description: 'Manage background sessions and daemon',
-  argumentHint: '[status|start|stop|bg|attach|logs|kill]',
+  argumentHint: '[status|bg|attach|detach|resume|logs|kill]',
   isEnabled: () => {
     if (feature('DAEMON')) return true
     if (feature('BG_SESSIONS')) return true

@@ -37,6 +37,10 @@ import { semanticNumber } from 'src/utils/semanticNumber.js';
 import { getCachedPowerShellPath } from 'src/utils/shell/powershellDetection.js';
 import { EndTruncatingAccumulator } from 'src/utils/stringUtils.js';
 import { getTaskOutputPath } from 'src/utils/task/diskOutput.js';
+import {
+  ASSISTANT_SHELL_BLOCKING_BUDGET_MS,
+  SHELL_PROGRESS_THRESHOLD_MS,
+} from 'src/utils/task/backgroundPolicy.js';
 import { TaskOutput } from 'src/utils/task/TaskOutput.js';
 import { isOutputLineTruncated } from 'src/utils/terminal.js';
 import {
@@ -170,10 +174,10 @@ function isSearchOrReadPowerShellCommand(command: string): {
 }
 
 // Progress display constants
-const PROGRESS_THRESHOLD_MS = 2000;
+const PROGRESS_THRESHOLD_MS = SHELL_PROGRESS_THRESHOLD_MS;
 const PROGRESS_INTERVAL_MS = 1000;
 // In assistant mode, blocking commands auto-background after this many ms in the main agent
-const ASSISTANT_BLOCKING_BUDGET_MS = 15_000;
+const ASSISTANT_BLOCKING_BUDGET_MS = ASSISTANT_SHELL_BLOCKING_BUDGET_MS;
 
 // Commands that should not be auto-backgrounded (canonical lowercase).
 // 'sleep' is a PS built-in alias for Start-Sleep but not in COMMON_ALIASES,

@@ -2,12 +2,20 @@ import { readdir, readFile, unlink } from 'fs/promises'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 import { getClaudeConfigHomeDir } from '../utils/envUtils.js'
+import { execFileNoThrow } from '../utils/execFileNoThrow.js'
 import { isProcessRunning } from '../utils/genericProcessUtils.js'
+import { resolveSessionFilePath } from '../utils/sessionStoragePortable.js'
 import { jsonParse } from '../utils/slowOperations.js'
+import { validateUuid } from '../utils/uuid.js'
 import { selectEngine } from './bg/engines/index.js'
-import type { SessionEntry } from './bg/engine.js'
+import type { BgStartResult, SessionEntry } from './bg/engine.js'
 
 export type { SessionEntry } from './bg/engine.js'
+
+export type StartBackgroundSessionOptions = {
+  cwd?: string
+  sessionName?: string
+}
 
 function getSessionsDir(): string {
   return join(getClaudeConfigHomeDir(), 'sessions')
@@ -218,6 +226,94 @@ export async function attachHandler(target: string | undefined): Promise<void> {
 }
 
 /**
+ * Detach is state-neutral. A detached/log-tail session has no persistent
+ * client attachment, so repeating detach is a successful no-op.
+ */
+export async function detachHandler(target: string | undefined): Promise<void> {
+  const sessions = await listLiveSessions()
+  if (!target) {
+    console.error('Specify a session to detach.')
+    process.exitCode = 1
+    return
+  }
+  const session = findSession(sessions, target)
+  if (!session) {
+    console.error(`Session not found or no longer running: ${target}`)
+    process.exitCode = 1
+    return
+  }
+  if (resolveSessionEngine(session) === 'detached') {
+    console.log(
+      `Session ${session.sessionId} uses log attachment; leaving the viewer does not stop it.`,
+    )
+    return
+  }
+  if (!session.tmuxSessionName) {
+    console.error(`Session ${session.sessionId} has no tmux session name.`)
+    process.exitCode = 1
+    return
+  }
+  const result = await execFileNoThrow('tmux', [
+    'detach-client',
+    '-s',
+    session.tmuxSessionName,
+  ])
+  if (result.code !== 0) {
+    console.error(`Failed to detach session ${session.sessionId}.`)
+    process.exitCode = 1
+    return
+  }
+  console.log(`Detached from session ${session.sessionId}.`)
+}
+
+/**
+ * Resume a persisted, non-running session as a background process. Live
+ * sessions are rejected to avoid replaying tools and duplicating side effects.
+ */
+export async function resumeHandler(
+  target: string | undefined,
+  prompt: string,
+): Promise<void> {
+  if (!target || !validateUuid(target)) {
+    console.error('Resume requires a valid session UUID.')
+    process.exitCode = 1
+    return
+  }
+  const live = findSession(await listLiveSessions(), target)
+  if (live) {
+    console.error(
+      `Session ${target} is already running (PID: ${live.pid}); attach instead of replaying it.`,
+    )
+    process.exitCode = 1
+    return
+  }
+  if (!(await resolveSessionFilePath(target))) {
+    console.error(`Persisted session not found: ${target}`)
+    process.exitCode = 1
+    return
+  }
+  if (!prompt.trim()) {
+    console.error(
+      'Detached resume requires a prompt: claude daemon resume <session-id> <prompt>',
+    )
+    process.exitCode = 1
+    return
+  }
+
+  try {
+    const result = await startBackgroundSession(
+      [prompt.trim(), '--print', '--resume', target],
+      { sessionName: `claude-resume-${target.slice(0, 8)}` },
+    )
+    console.log(`Session ${target} resumed as ${result.sessionName}.`)
+    console.log(`Log: ${result.logPath}`)
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exitCode = 1
+  }
+}
+
+/**
  * `claude daemon kill <target>` — kill a session.
  */
 export async function killHandler(target: string | undefined): Promise<void> {
@@ -249,6 +345,8 @@ export async function killHandler(target: string | undefined): Promise<void> {
     process.kill(session.pid, 'SIGTERM')
   } catch {
     console.log('Session already exited.')
+    const pidFile = join(getSessionsDir(), `${session.pid}.json`)
+    void unlink(pidFile).catch(() => {})
     return
   }
 
@@ -276,50 +374,8 @@ export async function killHandler(target: string | undefined): Promise<void> {
  * falls back to DetachedEngine on Windows or when tmux is absent.
  */
 export async function handleBgStart(args: string[]): Promise<void> {
-  const engine = await selectEngine()
-
-  // Strip --bg/--background from args (for backward-compat shortcut)
-  const filteredArgs = args.filter(a => a !== '--bg' && a !== '--background')
-
-  // Engines without interactive TTY input (e.g. detached) require -p/--print
-  // or piped input. Tmux provides a virtual terminal so it works without -p.
-  if (
-    !engine.supportsInteractiveInput &&
-    !filteredArgs.some(a => a === '-p' || a === '--print' || a === '--pipe')
-  ) {
-    console.error(
-      'Error: Background sessions with detached engine require -p/--print flag.\n' +
-        'The detached engine has no terminal for interactive input.\n\n' +
-        'Usage:\n' +
-        '  claude daemon bg -p "your prompt here"\n' +
-        '  echo "prompt" | claude daemon bg --pipe',
-    )
-    if (process.platform !== 'win32') {
-      console.error(
-        '\nAlternatively, install tmux for interactive background sessions:\n' +
-          `  ${process.platform === 'darwin' ? 'brew install tmux' : 'sudo apt install tmux'}`,
-      )
-    }
-    process.exitCode = 1
-    return
-  }
-
-  const sessionName = `claude-bg-${randomUUID().slice(0, 8)}`
-  const logPath = join(
-    getClaudeConfigHomeDir(),
-    'sessions',
-    'logs',
-    `${sessionName}.log`,
-  )
-
   try {
-    const result = await engine.start({
-      sessionName,
-      args: filteredArgs,
-      env: { ...process.env },
-      logPath,
-      cwd: process.cwd(),
-    })
+    const result = await startBackgroundSession(args)
 
     console.log(`Background session started: ${result.sessionName}`)
     console.log(`  Engine: ${result.engineUsed}`)
@@ -334,4 +390,56 @@ export async function handleBgStart(args: string[]): Promise<void> {
     console.error(e instanceof Error ? e.message : String(e))
     process.exitCode = 1
   }
+}
+
+/**
+ * Start a local background CLI session without writing to stdout or mutating
+ * process.exitCode. Slash commands use this API so launch failures remain
+ * associated with the initiating command.
+ */
+export async function startBackgroundSession(
+  args: string[],
+  options: StartBackgroundSessionOptions = {},
+): Promise<BgStartResult> {
+  const engine = await selectEngine()
+
+  // Strip --bg/--background from args (for backward-compat shortcut)
+  const filteredArgs = args.filter(a => a !== '--bg' && a !== '--background')
+
+  // Engines without interactive TTY input (e.g. detached) require -p/--print
+  // or piped input. Tmux provides a virtual terminal so it works without -p.
+  if (
+    !engine.supportsInteractiveInput &&
+    !filteredArgs.some(a => a === '-p' || a === '--print' || a === '--pipe')
+  ) {
+    let message =
+      'Error: Background sessions with detached engine require -p/--print flag.\n' +
+        'The detached engine has no terminal for interactive input.\n\n' +
+        'Usage:\n' +
+        '  claude daemon bg -p "your prompt here"\n' +
+        '  echo "prompt" | claude daemon bg --pipe'
+    if (process.platform !== 'win32') {
+      message +=
+        '\n\nAlternatively, install tmux for interactive background sessions:\n' +
+        `  ${process.platform === 'darwin' ? 'brew install tmux' : 'sudo apt install tmux'}`
+    }
+    throw new Error(message)
+  }
+
+  const sessionName =
+    options.sessionName ?? `claude-bg-${randomUUID().slice(0, 8)}`
+  const logPath = join(
+    getClaudeConfigHomeDir(),
+    'sessions',
+    'logs',
+    `${sessionName}.log`,
+  )
+
+  return engine.start({
+    sessionName,
+    args: filteredArgs,
+    env: { ...process.env },
+    logPath,
+    cwd: options.cwd ?? process.cwd(),
+  })
 }

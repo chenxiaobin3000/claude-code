@@ -48,6 +48,8 @@ const validationScripts = [
   'scripts/validation/agent-lifecycle.ts',
   'scripts/validation/agent-permission-relay.ts',
   'scripts/validation/agent-resource-cleanup.ts',
+  'scripts/validation/agent-fork-subtask.ts',
+  'scripts/validation/background-task-lifecycle.ts',
   'scripts/validation/hook-protocol.ts',
   'scripts/validation/openai-stream.ts',
   'scripts/validation/openai-client.ts',

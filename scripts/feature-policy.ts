@@ -52,7 +52,7 @@ export const FEATURE_POLICY: Record<string, FeatureDefinition> = {
   EXPERIMENTAL_SEARCH_EXTRA_TOOLS: experimental(['EXPERIMENTAL_SKILL_SEARCH']),
   EXPERIMENTAL_SKILL_SEARCH: experimental(),
   EXTRACT_MEMORIES: experimental(),
-  FORK_SUBAGENT: experimental(),
+  FORK_SUBAGENT: stable(['session-transcript', 'cli-startup']),
   GOAL: stable(['session-transcript']),
   HARD_FAIL: internal(),
   HISTORY_PICKER: experimental(),

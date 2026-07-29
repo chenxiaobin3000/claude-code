@@ -25,6 +25,16 @@ export async function daemonMain(args: string[]): Promise<void> {
       await bg.attachHandler(args[1])
       break
     }
+    case 'detach': {
+      const bg = await import('../cli/bg.js')
+      await bg.detachHandler(args[1])
+      break
+    }
+    case 'resume': {
+      const bg = await import('../cli/bg.js')
+      await bg.resumeHandler(args[1], args.slice(2).join(' '))
+      break
+    }
     case 'logs': {
       const bg = await import('../cli/bg.js')
       await bg.logsHandler(args[1])
@@ -58,6 +68,8 @@ SUBCOMMANDS
   status      Show local background sessions (default)
   bg          Start a local background session
   attach      Attach to a local background session
+  detach      Detach without changing the session state
+  resume      Resume a stopped/completed session in the background
   logs        Show local session logs
   kill        Kill a local session
   help        Show this help

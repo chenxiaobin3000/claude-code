@@ -75,12 +75,12 @@ P0 以 Claude Code `2.1.220` 为冻结对照版本；详细的官方行为、当
 - [x] 明确前台/后台默认值、`background` 覆盖规则与等待行为：普通 Agent 默认后台运行；全局禁用和不支持后台的上下文保持前台，Coordinator/fork 实验/Assistant 等强制异步上下文其次，调用参数再次，Agent 定义最后覆盖普通默认；显式前台只在调用方必须立即使用结果时等待。
 - [x] 定义嵌套子代理的最大深度、并发、Token 预算和取消传播：默认深度 2、会话 Agent 总数 50、并发 8、累计 Token 1,000,000，可通过已记录的环境变量收紧或放宽；超限明确失败，嵌套前台/后台 Agent 均连接父级取消信号，根后台 Agent 继续独立于主线程 ESC。
 - [x] 对齐后台优先的子代理生命周期：前台会话可继续工作并收到完成/需输入通知；Agent 的 `running/completed/failed/stopped` 写入独立持久状态，`stopped` 不可被 `SendMessage`、任务面板、任务淘汰或进程重启恢复；完成后的分类器、worktree 或通知附加处理失败不会反向改写终态或发送矛盾通知。
-- [ ] 支持会话级 Agent 总数上限、嵌套深度上限与可配置的安全预算；在 headless/stream-json 中可选择转发嵌套子代理文本和推理事件，并保持稳定的父 `tool_use` 关联。
-- [ ] 对齐 `/fork` 与 `/subtask` 的职责：`/fork` 生成独立、可管理的后台会话，`/subtask` 保留当前会话内的委派语义；分叉、恢复和清理不得混淆 Transcript 或工作树归属。
-- [ ] 对齐后台任务的 Shell 与 MCP 自动背景化阈值、状态展示和权限回传；长运行任务不能冻结主会话，也不能因后台化丢失输出或取消信号。
-- [ ] 统一 attach、detach、resume、kill、status 的状态转换与错误语义。
+- [ ] 在 headless/stream-json 中可选择转发嵌套子代理文本和推理事件，并保持稳定的父 `tool_use` 关联；会话级 Agent 总数、嵌套深度、并发和 Token 安全预算已经固化。
+- [x] 对齐 `/fork` 与 `/subtask` 的职责（2026-07-30）：`/fork` 复制主对话 Transcript 到新 Session ID 后，通过本地后台引擎启动可独立 `status`、`attach`、`resume`、`kill` 的 CLI 进程；`/subtask` 单独保留为继承当前上下文的后台 Agent，结果、通知和预算仍归当前会话。两个入口不再共享 Agent Task ID、Transcript 或工作树所有权。
+- [x] 对齐 Shell 与 MCP 后台任务契约（2026-07-30）：Bash 和 PowerShell 共用 2 秒进度阈值及 15 秒 Assistant 阻塞预算，迁入后台时复用原进程、Tool Use ID、磁盘输出、退出码和 Abort 链；MCP Monitor 使用同一任务生命周期并在完成、失败、停止和进程退出时注销 cleanup、传播 Abort。普通 MCP Tool 调用不会在已产生副作用后自动重放或擅自脱离原调用。
+- [x] 统一本地后台 Session 的 `attach`、`detach`、`resume`、`kill`、`status` 语义（2026-07-30）：注册表持久化 detached/tmux 引擎信息；attach/detach 不改变任务终态；运行中 Session 禁止 resume，停止或完成且 Transcript 存在时可带新 Prompt 后台恢复；kill 清理陈旧 PID 文件，不存在或不可恢复目标返回明确错误。
 - [x] 让后台 Agent 的权限请求可靠回到主会话：交互式本地 Agent 共用主会话审批队列，显示来源并进入 `waiting_permission`；默认 300,000 ms 未处理时只拒绝当前工具调用，headless/stream-json 保持安全拒绝。
-- [ ] 在崩溃、取消和恢复时回收 worktree、锁、临时目录和后台服务；Agent 的预算、AbortController、cleanup handler、Transcript 输出句柄和 worktree 终态路径已有专项验证，Shell/MCP 子进程、锁及后台服务的交叉恢复仍待后续阶段验收。
+- [x] 在崩溃、取消和恢复时回收 Agent、Shell、MCP Monitor 与本地后台 Session 的进程内资源（2026-07-30）：Agent 释放预算、AbortController、cleanup handler、Transcript 输出句柄和 worktree；Shell 终止子进程并清理输出句柄；MCP Monitor 在所有终态和进程退出时 Abort 并注销 cleanup；本地后台 Session 通过 PID 注册表清扫崩溃残留，恢复前拒绝仍在运行的同一 Session。
 - [ ] 为来自间接外部内容的提示注入建立明确的隔离和确认策略。
 
 完成条件：Agent 状态转换和 Shell cwd 隔离可复现，取消与恢复不会遗留资源，权限与用户可见状态一致，跨目录不会泄漏配置或会话归属，并有独立轻量验证覆盖关键转换。

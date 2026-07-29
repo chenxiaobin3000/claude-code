@@ -91,6 +91,13 @@ export async function registerSession(): Promise<boolean> {
               name: process.env.CLAUDE_CODE_SESSION_NAME,
               logPath: process.env.CLAUDE_CODE_SESSION_LOG,
               agent: process.env.CLAUDE_CODE_AGENT,
+              engine:
+                process.env.CLAUDE_CODE_SESSION_ENGINE === 'tmux'
+                  ? 'tmux'
+                  : process.env.CLAUDE_CODE_SESSION_ENGINE === 'detached'
+                    ? 'detached'
+                    : undefined,
+              tmuxSessionName: process.env.CLAUDE_CODE_TMUX_SESSION,
             }
           : {}),
       }),

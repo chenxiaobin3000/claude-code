@@ -111,11 +111,6 @@ const historyCmd = feature('UDS_INBOX')
 const claimMainCmd = feature('UDS_INBOX')
   ? require('./commands/claim-main/index.js').default
   : null
-const forkCmd = feature('FORK_SUBAGENT')
-  ? (
-      require('./commands/fork/index.js') as typeof import('./commands/fork/index.js')
-    ).default
-  : null
 const buddy = feature('BUDDY')
   ? (
       require('./commands/buddy/index.js') as typeof import('./commands/buddy/index.js')
@@ -137,6 +132,8 @@ import plan from './commands/plan/index.js'
 import hooks from './commands/hooks/index.js'
 import files from './commands/files/index.js'
 import branch from './commands/branch/index.js'
+import fork from './commands/fork/index.js'
+import subtask from './commands/subtask/index.js'
 import agents from './commands/agents/index.js'
 import plugin from './commands/plugin/index.js'
 import reloadPlugins from './commands/reload-plugins/index.js'
@@ -239,6 +236,8 @@ const COMMANDS = memoize((): Command[] => [
   provider,
   agents,
   branch,
+  fork,
+  subtask,
   btw,
   cd,
   clear,
@@ -285,7 +284,6 @@ const COMMANDS = memoize((): Command[] => [
   usageReport,
   vim,
   webTools,
-  ...(forkCmd ? [forkCmd] : []),
   ...(buddy ? [buddy] : []),
   ...(poor ? [poor] : []),
   ...(goalCmd ? [goalCmd] : []),
