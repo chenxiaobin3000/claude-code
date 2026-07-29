@@ -41,7 +41,8 @@
 
 - 主题仅来自内置主题和 `~/.claude/themes/*.json`；重启读取，不提供编辑器、热更新或插件主题安装。
 - 插件仅支持本地已安装插件；不支持远端市场、自动下载、原生安装、CLI 自更新或插件自动更新。
-- `/cd` 只改变临时 cwd，不迁移项目身份、会话、设置、Hook、插件或 MCP 作用域。
+- `/cd` 有意保持为本项目的临时 cwd 命令，不对齐官方的跨项目会话迁移：它只改变主会话后续工具使用的当前目录，不改变启动项目根、Session ID、Transcript/Resume 归属、权限根、Settings、CLAUDE.md、Hook、Skill、Plugin、MCP、Memory、Plan 或 Checkpoint 作用域。
+- `/cd` 的变化不传播给已存在或新建的子 Agent，子 Agent 的 cwd 变化也不得回写主会话；`/clear` 和进程重启恢复到启动项目目录。无参数只报告当前 cwd，失败不得改变现有 cwd。
 - 主程序不内置、不自动启用 Chrome 控制；`--chrome`/`--no-chrome`、`/chrome`、Chrome Settings/Onboarding/通知、隐藏 MCP/Native Host 进程入口、内置 Chrome Skill、MCP 保留名称和专用客户端渲染均已从主干入口移除。
 - Chrome 能力只能由用户显式加载的本地 `claudeinchrome` 插件提供，目标链路固定为：主程序标准插件加载器 → 插件 MCP/Skill → 插件 Native Host → 插件 Chrome 扩展 → Chrome；主干禁止绕过插件直接连接。
 - `plugins/claudeinchrome` 已建立标准 `.claude-plugin/plugin.json` 骨架，Chrome 扩展已归入 `plugins/claudeinchrome/chrome-extension`，固定扩展 ID 为 `dlpofjonbnceelbmpelkfblmnghclmkm`。
@@ -66,10 +67,8 @@
 
 ### P0：Agent 与后台任务模型
 
-- [ ] 对齐官方 `/cd`：将当前会话原子迁移到目标工作目录，并保留当前对话上下文与 Prompt Cache；不再只临时改变 cwd。
-- [ ] `/cd` 后重新绑定会话的项目身份、Transcript/Resume 归属、Git 状态、权限根、Settings、CLAUDE.md、Hook、Skill、Plugin 与 MCP 发现范围；失败时保持原会话与原目录完整可用。
 - [ ] 对齐 Shell cwd 规则：主会话的 Bash `cd` 仅在项目根或 `--add-dir`、`/add-dir`、`additionalDirectories` 授权目录内跨命令保留；越界时复位并在工具结果中说明；子代理不继承 cwd 变更。
-- [ ] 为 `/cd` 与 Bash `cd` 增加规范化路径、符号链接、Windows 盘符/UNC、工作树、会话恢复和 `CwdChanged` Hook 验证，确保变更不导致跨项目配置泄漏。
+- [ ] 为 Bash `cd` 增加规范化路径、符号链接、Windows 盘符/UNC、工作树、会话恢复和 `CwdChanged` Hook 验证，确保 Shell cwd 变化不导致跨项目配置泄漏。
 - [ ] 梳理 Agent、Coordinator、Team 与 Background Session 的状态模型，消除重复状态和相互覆盖。
 - [ ] 明确前台/后台默认值、`background` 覆盖规则与等待行为。
 - [ ] 定义嵌套子代理的最大深度、并发、Token 预算和取消传播。
@@ -82,7 +81,7 @@
 - [ ] 在崩溃、取消和恢复时回收 worktree、锁、临时目录和后台服务。
 - [ ] 为来自间接外部内容的提示注入建立明确的隔离和确认策略。
 
-完成条件：状态转换和工作目录迁移可复现，取消与恢复不会遗留资源，权限与用户可见状态一致，跨目录不会泄漏配置或会话归属，并有独立轻量验证覆盖关键转换。
+完成条件：Agent 状态转换和 Shell cwd 隔离可复现，取消与恢复不会遗留资源，权限与用户可见状态一致，跨目录不会泄漏配置或会话归属，并有独立轻量验证覆盖关键转换。
 
 ### P1：Hook、Plugin、Skill 与 MCP
 

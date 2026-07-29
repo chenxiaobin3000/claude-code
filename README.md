@@ -18,7 +18,7 @@
 - **云端与远程产品**：官方的 Web/Desktop/Mobile、Remote Control、GitHub App、Cloud Code Review、Routines、Channels、Artifacts、语音与账户/用量产品均不提供。本项目也不包含官方自动更新、安装器或远端遥测。
 - **插件与浏览器**：官方插件市场、远端安装/更新和插件自动重命名不提供。主程序不提供 Chrome 控制；Chrome 能力只能来自显式加载的本地 `claudeinchrome` 插件。该插件的 MCP、Skill 与 Native Host 尚未迁移和验收，当前不可用。
 - **Sandbox**：Windows 上启用 Sandbox 时，Shell 会在 Windows Sandbox VM 内执行，默认只映射启动工作区和只读 Shell 运行时，且固定断网、不传递用户主目录或凭据。`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands` 保持上层语义；Windows 不能精确落实域名白名单、代理和目录内文件 allow/deny 规则，配置这些规则时会 fail-closed，而不会回退宿主执行。
-- **会话路径**：官方 `/cd` 可将会话迁移到新的工作目录；本项目 `/cd` 仅临时切换 cwd，不迁移项目身份、会话、配置或扩展作用域。
+- **会话路径**：官方 `/cd` 可迁移会话；本项目有意保持临时 cwd 语义，只改变主会话后续工具的当前目录，不迁移项目身份、会话存储、权限根、配置或扩展作用域。
 - **Agent、Hook、MCP 与 Skill**：官方当前的后台 Agent 默认行为、嵌套 Agent 限额与转发、部分生命周期 Hook、嵌套 Skill 加载和部分 Hook 输出语义尚未宣称对齐；本地 `/mcp login`/`logout` 仅管理用户配置的 MCP OAuth 凭据，以开发计划的未完成项为准。
 
 ## 运行时边界
@@ -97,7 +97,14 @@ Windows Sandbox 不能精确执行域名白名单、代理或映射目录内的 
 
 ## 会话与文件工具差异
 
-`/cd` 只临时改变当前工作目录：不会迁移项目身份、会话存储、设置、Hook、插件或 MCP 加载范围。重启后回到原项目边界。
+`/cd` 只临时改变主会话后续工具使用的当前工作目录，不提供官方的跨项目会话迁移：
+
+- 启动项目根、Session ID、Transcript/Resume、权限根、Settings、CLAUDE.md、Hook、Skill、Plugin、MCP、Memory、Plan 和 Checkpoint 作用域保持不变。
+- `/cd` 不传播给子 Agent，子 Agent 的 cwd 变化也不会回写主会话。
+- `/clear` 和进程重启恢复到启动项目目录。
+- 无参数只显示当前 cwd；路径无效或切换失败时保留原 cwd。
+
+Bash/PowerShell 命令中的 `cd` 属于 Shell cwd 持久化规则，不会触发项目身份或会话迁移。
 
 文件工具针对本地模型的重复失败增加确定性保护：同一轮中同一文件工具、操作和规范化路径连续失败两次后，后续相同调用会被阻止并要求模型先读取错误、调整参数或改用其他操作，避免无限重试。创建后立即修改的流程会保留文件版本校验；遇到外部修改错误时应先重新读取文件。
 
