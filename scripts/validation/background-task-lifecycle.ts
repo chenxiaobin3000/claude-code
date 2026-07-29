@@ -75,8 +75,9 @@ assert(
   mcp.includes('registerCleanup') &&
     mcp.includes('abortController?.abort()') &&
     mcp.includes('unregisterCleanup') &&
-    mcp.includes('enqueueMonitorNotification'),
-  'MCP monitor tasks must notify, abort, and unregister process-exit cleanup',
+    mcp.includes('enqueueMonitorNotification') &&
+    mcp.includes('if (!transitioned) return'),
+  'MCP monitor terminal handling must be idempotent, notify, abort, and unregister cleanup',
 )
 
 const concurrent = await Bun.file(
