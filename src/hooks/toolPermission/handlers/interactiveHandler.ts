@@ -26,6 +26,10 @@ import {
 } from '../../../utils/classifierApprovals.js'
 import { errorMessage } from '../../../utils/errors.js'
 import {
+  isBackgroundAgentPermission,
+  resolveBackgroundPermissionTimeoutMs,
+} from '../../../utils/backgroundPermission.js'
+import {
   forgetPipePermissionRequest,
   notifyPipePermissionCancel,
   tryRelayPipePermissionRequest,
@@ -155,6 +159,21 @@ function handleInteractivePermission(
   // phone, and a stale "yes abc123" after local-resolve falls through
   // tryConsumeReply (entry gone) and gets enqueued as normal chat.
   let channelUnsubscribe: (() => void) | undefined
+  let permissionTimeoutTimer: ReturnType<typeof setTimeout> | undefined
+  const backgroundPermissionTimeoutMs = isBackgroundAgentPermission(
+    ctx.toolUseContext,
+  )
+    ? resolveBackgroundPermissionTimeoutMs()
+    : undefined
+
+  function claimResolution(): boolean {
+    if (!claim()) return false
+    if (permissionTimeoutTimer) {
+      clearTimeout(permissionTimeoutTimer)
+      permissionTimeoutTimer = undefined
+    }
+    return true
+  }
 
   const permissionPromptStartTimeMs = Date.now()
   const displayInput = result.updatedInput ?? ctx.input
@@ -186,6 +205,14 @@ function handleInteractivePermission(
     toolUseID: ctx.toolUseID,
     permissionResult: result,
     permissionPromptStartTimeMs,
+    ...(ctx.toolUseContext.agentId && {
+      workerBadge: {
+        name:
+          ctx.toolUseContext.agentType ??
+          String(ctx.toolUseContext.agentId),
+        color: 'cyan_FOR_SUBAGENTS_ONLY',
+      },
+    }),
     ...(feature('BASH_CLASSIFIER')
       ? {
           classifierCheckInProgress:
@@ -223,7 +250,7 @@ function handleInteractivePermission(
       }
     },
     onAbort() {
-      if (!claim()) return
+      if (!claimResolution()) return
       forgetPipePermission('Permission request was aborted locally in sub.')
       channelUnsubscribe?.()
       ctx.logCancelled()
@@ -239,7 +266,7 @@ function handleInteractivePermission(
       feedback?: string,
       contentBlocks?: ContentBlockParam[],
     ) {
-      if (!claim()) return // atomic check-and-mark before await
+      if (!claimResolution()) return // atomic check-and-mark before await
       forgetPipePermission('Permission request was approved locally in sub.')
 
       channelUnsubscribe?.()
@@ -256,7 +283,7 @@ function handleInteractivePermission(
       )
     },
     onReject(feedback?: string, contentBlocks?: ContentBlockParam[]) {
-      if (!claim()) return
+      if (!claimResolution()) return
       forgetPipePermission('Permission request was rejected locally in sub.')
 
       channelUnsubscribe?.()
@@ -288,7 +315,7 @@ function handleInteractivePermission(
         // executing (particularly visible when recheck is triggered by
         // a CCR-initiated mode switch, the very case this callback exists
         // for after useReplBridge started calling it).
-        if (!claim()) return
+        if (!claimResolution()) return
         forgetPipePermission('Permission request was resolved locally in sub.')
         channelUnsubscribe?.()
         ctx.removeFromQueue()
@@ -302,7 +329,7 @@ function handleInteractivePermission(
   pipePermissionRequestId = tryRelayPipePermissionRequest(
     toolUseConfirm,
     response => {
-      if (!claim()) return
+      if (!claimResolution()) return
       forgetPipePermissionSilently()
       clearClassifierChecking(ctx.toolUseID)
       clearClassifierIndicator()
@@ -434,7 +461,7 @@ function handleInteractivePermission(
       const mapUnsub = channelCallbacks.onResponse(
         channelRequestId,
         response => {
-          if (!claim()) return // Another racer won
+          if (!claimResolution()) return // Another racer won
           forgetPipePermission(
             'Permission request was resolved by channel before pipe response.',
           )
@@ -489,7 +516,7 @@ function handleInteractivePermission(
         result.updatedInput,
         permissionPromptStartTimeMs,
       )
-      if (!hookDecision || !claim()) return
+      if (!hookDecision || !claimResolution()) return
       forgetPipePermission(
         'Permission request was resolved by hook before pipe response.',
       )
@@ -521,7 +548,7 @@ function handleInteractivePermission(
           clearClassifierIndicator()
         },
         onAllow: decisionReason => {
-          if (!claim()) return
+          if (!claimResolution()) return
           forgetPipePermission(
             'Permission request was auto-approved before pipe response.',
           )
@@ -544,7 +571,7 @@ function handleInteractivePermission(
             })
           }
 
-          if (
+  if (
             feature('TRANSCRIPT_CLASSIFIER') &&
             decisionReason.type === 'classifier'
           ) {
@@ -596,6 +623,36 @@ function handleInteractivePermission(
         level: 'error',
       })
     })
+  }
+
+  if (
+    !isResolved() &&
+    backgroundPermissionTimeoutMs !== undefined
+  ) {
+    const timeoutMs = backgroundPermissionTimeoutMs
+    permissionTimeoutTimer = setTimeout(() => {
+      if (!claimResolution()) return
+      const message = `Background agent permission request timed out after ${timeoutMs} ms`
+      forgetPipePermission(message)
+      channelUnsubscribe?.()
+      clearClassifierChecking(ctx.toolUseID)
+      clearClassifierIndicator()
+      ctx.removeFromQueue()
+      ctx.logDecision(
+        {
+          decision: 'reject',
+          source: { type: 'user_reject', hasFeedback: false },
+        },
+        { permissionPromptStartTimeMs },
+      )
+      resolveOnce(
+        ctx.buildDeny(message, {
+          type: 'asyncAgent',
+          reason: message,
+        }),
+      )
+    }, timeoutMs)
+    permissionTimeoutTimer.unref?.()
   }
 }
 

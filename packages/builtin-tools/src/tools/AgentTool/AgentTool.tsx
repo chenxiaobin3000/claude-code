@@ -715,6 +715,10 @@ export const AgentTool = buildTool({
       toolUseContext,
       canUseTool,
       isAsync: shouldRunAsync,
+      // Interactive background Agents share the main REPL permission queue.
+      // Headless/stream-json contexts retain deterministic auto-denial.
+      canShowPermissionPrompts:
+        !toolUseContext.options.isNonInteractiveSession,
       querySource:
         toolUseContext.options.querySource ??
         getQuerySourceForAgent(selectedAgent.agentType, isBuiltInAgent(selectedAgent)),
@@ -1049,6 +1053,8 @@ export const AgentTool = buildTool({
                   void runWithAgentContext(syncAgentContext, async () => {
                     let stopBackgroundedSummarization: (() => void) | undefined;
                     let backgroundTokensUsed = foregroundTokensUsed;
+                    let completedAgentResult: ReturnType<typeof finalizeAgentTool> | undefined;
+                    let completedFinalMessage: string | undefined;
                     try {
                       // Clean up the foreground iterator so its finally block runs
                       // (releases MCP connections, session hooks, prompt cache tracking, etc.)
@@ -1107,9 +1113,11 @@ export const AgentTool = buildTool({
                       // cleanupWorktreeIfNeeded can hang — they must not gate
                       // the status transition (gh-20236).
                       completeAsyncAgent(agentResult, rootSetAppState);
+                      completedAgentResult = agentResult;
 
                       // Extract text from agent result content for the notification
                       let finalMessage = extractTextContent(agentResult.content, '\n');
+                      completedFinalMessage = finalMessage;
 
                       if (feature('TRANSCRIPT_CLASSIFIER')) {
                         const backgroundedAppState = toolUseContext.getAppState();
@@ -1123,6 +1131,7 @@ export const AgentTool = buildTool({
                         });
                         if (handoffWarning) {
                           finalMessage = `${handoffWarning}\n\n${finalMessage}`;
+                          completedFinalMessage = finalMessage;
                         }
                       }
 
@@ -1144,6 +1153,39 @@ export const AgentTool = buildTool({
                         ...worktreeResult,
                       });
                     } catch (error) {
+                      if (completedAgentResult) {
+                        logForDebugging(
+                          `Completed agent ${backgroundedTaskId} post-processing failed: ${errorMessage(error)}`,
+                        );
+                        let worktreeResult: Awaited<ReturnType<typeof cleanupWorktreeIfNeeded>> = {};
+                        try {
+                          worktreeResult = await cleanupWorktreeIfNeeded();
+                        } catch (cleanupError) {
+                          logForDebugging(
+                            `Completed agent ${backgroundedTaskId} worktree cleanup retry failed: ${errorMessage(cleanupError)}`,
+                          );
+                        }
+                        enqueueAgentNotification({
+                          taskId: backgroundedTaskId,
+                          description,
+                          status: 'completed',
+                          setAppState: rootSetAppState,
+                          finalMessage:
+                            completedFinalMessage ??
+                            extractTextContent(
+                              completedAgentResult.content,
+                              '\n',
+                            ),
+                          usage: {
+                            totalTokens: completedAgentResult.totalTokens,
+                            toolUses: completedAgentResult.totalToolUseCount,
+                            durationMs: completedAgentResult.totalDurationMs,
+                          },
+                          toolUseId: toolUseContext.toolUseId,
+                          ...worktreeResult,
+                        });
+                        return;
+                      }
                       if (error instanceof AbortError) {
                         // Transition status BEFORE worktree cleanup so
                         // TaskOutput unblocks even if git hangs (gh-20236).

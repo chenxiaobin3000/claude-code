@@ -74,13 +74,13 @@ P0 以 Claude Code `2.1.220` 为冻结对照版本；详细的官方行为、当
 - [x] 统一 Agent、Coordinator、Team 与 Background Session 状态模型：所有本地任务通过同一转换契约归一为 `queued`、`running`、`waiting_permission`、`idle`、`completed`、`failed`、`stopped`、`cancelled`；现有紧凑 `pending/running/completed/failed/killed` 字段只保留为持久化和协议兼容表示。Task Framework 在每次更新时同步权威状态并拒绝迟到回调覆盖终态；Team 的空闲和权限等待进入同一模型且在 UI 可区分。daemon 的 `running/stopped/stale` 仅表示本地守护进程健康状态，不作为任务执行态。
 - [x] 明确前台/后台默认值、`background` 覆盖规则与等待行为：普通 Agent 默认后台运行；全局禁用和不支持后台的上下文保持前台，Coordinator/fork 实验/Assistant 等强制异步上下文其次，调用参数再次，Agent 定义最后覆盖普通默认；显式前台只在调用方必须立即使用结果时等待。
 - [x] 定义嵌套子代理的最大深度、并发、Token 预算和取消传播：默认深度 2、会话 Agent 总数 50、并发 8、累计 Token 1,000,000，可通过已记录的环境变量收紧或放宽；超限明确失败，嵌套前台/后台 Agent 均连接父级取消信号，根后台 Agent 继续独立于主线程 ESC。
-- [ ] 对齐后台优先的子代理生命周期：前台会话可继续工作并收到完成/需输入通知；停止必须永久生效，恢复、重连或守护进程重启不得复活已停止任务。
+- [x] 对齐后台优先的子代理生命周期：前台会话可继续工作并收到完成/需输入通知；Agent 的 `running/completed/failed/stopped` 写入独立持久状态，`stopped` 不可被 `SendMessage`、任务面板、任务淘汰或进程重启恢复；完成后的分类器、worktree 或通知附加处理失败不会反向改写终态或发送矛盾通知。
 - [ ] 支持会话级 Agent 总数上限、嵌套深度上限与可配置的安全预算；在 headless/stream-json 中可选择转发嵌套子代理文本和推理事件，并保持稳定的父 `tool_use` 关联。
 - [ ] 对齐 `/fork` 与 `/subtask` 的职责：`/fork` 生成独立、可管理的后台会话，`/subtask` 保留当前会话内的委派语义；分叉、恢复和清理不得混淆 Transcript 或工作树归属。
 - [ ] 对齐后台任务的 Shell 与 MCP 自动背景化阈值、状态展示和权限回传；长运行任务不能冻结主会话，也不能因后台化丢失输出或取消信号。
 - [ ] 统一 attach、detach、resume、kill、status 的状态转换与错误语义。
-- [ ] 让后台 Agent 的权限请求可靠回到主会话，不因无人处理而无限挂起。
-- [ ] 在崩溃、取消和恢复时回收 worktree、锁、临时目录和后台服务。
+- [x] 让后台 Agent 的权限请求可靠回到主会话：交互式本地 Agent 共用主会话审批队列，显示来源并进入 `waiting_permission`；默认 300,000 ms 未处理时只拒绝当前工具调用，headless/stream-json 保持安全拒绝。
+- [ ] 在崩溃、取消和恢复时回收 worktree、锁、临时目录和后台服务；Agent 的预算、AbortController、cleanup handler、Transcript 输出句柄和 worktree 终态路径已有专项验证，Shell/MCP 子进程、锁及后台服务的交叉恢复仍待后续阶段验收。
 - [ ] 为来自间接外部内容的提示注入建立明确的隔离和确认策略。
 
 完成条件：Agent 状态转换和 Shell cwd 隔离可复现，取消与恢复不会遗留资源，权限与用户可见状态一致，跨目录不会泄漏配置或会话归属，并有独立轻量验证覆盖关键转换。

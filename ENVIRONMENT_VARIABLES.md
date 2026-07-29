@@ -30,6 +30,8 @@ Local safety limits apply to the complete nested Agent tree:
 
 All values must be positive integers. Exceeding a limit fails the new spawn explicitly instead of silently queueing it. Cancelling a parent Agent propagates to its nested Agent subtree; root background Agents remain independently stoppable.
 
+Interactive background Agents relay unresolved permission requests to the main session and identify the requesting Agent. `CLAUDE_CODE_BACKGROUND_PERMISSION_TIMEOUT_MS` controls how long such a request may remain unanswered before only that tool call is denied; the default is `300000` ms. The value must be a positive integer. Non-interactive and stream-json sessions do not open a local permission dialog and retain deterministic safe denial.
+
 ## Local Feature Policy
 
 - `FEATURE_<NAME>=0|1` explicitly disables or enables a feature registered in `scripts/feature-policy.ts`.

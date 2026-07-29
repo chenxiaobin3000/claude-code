@@ -18,6 +18,7 @@ import {
   runWithAgentContext,
 } from 'src/utils/agentContext.js'
 import { reserveAgentExecution } from 'src/utils/agentExecutionPolicy.js'
+import { assertAgentResumeAllowed } from 'src/utils/agentLifecycle.js'
 import { runWithCwdOverride } from 'src/utils/cwd.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import {
@@ -30,6 +31,7 @@ import { getAgentModel } from 'src/utils/model/agent.js'
 import { getQuerySourceForAgent } from 'src/utils/promptCategory.js'
 import {
   getAgentTranscript,
+  readAgentLifecycleStatus,
   readAgentMetadata,
 } from 'src/utils/sessionStorage.js'
 import { buildEffectiveSystemPrompt } from 'src/utils/systemPrompt.js'
@@ -69,11 +71,22 @@ export async function resumeAgentBackground({
   const rootSetAppState =
     toolUseContext.setAppStateForTasks ?? toolUseContext.setAppState
   const permissionMode = appState.toolPermissionContext.mode
+  const currentTask = appState.tasks[agentId]
+  const runtimeStatus =
+    currentTask?.type === 'local_agent'
+      ? currentTask.status
+      : undefined
+  assertAgentResumeAllowed(agentId, { runtimeStatus })
 
-  const [transcript, meta] = await Promise.all([
+  const [transcript, meta, lifecycleStatus] = await Promise.all([
     getAgentTranscript(asAgentId(agentId)),
     readAgentMetadata(asAgentId(agentId)),
+    readAgentLifecycleStatus(asAgentId(agentId)),
   ])
+  assertAgentResumeAllowed(agentId, {
+    runtimeStatus,
+    durableStatus: lifecycleStatus,
+  })
   if (!transcript) {
     throw new Error(`No transcript found for agent ID: ${agentId}`)
   }
@@ -182,6 +195,8 @@ export async function resumeAgentBackground({
     toolUseContext,
     canUseTool,
     isAsync: true,
+    canShowPermissionPrompts:
+      !toolUseContext.options.isNonInteractiveSession,
     querySource: getQuerySourceForAgent(
       selectedAgent.agentType,
       isBuiltInAgent(selectedAgent),

@@ -258,6 +258,75 @@ function getAgentMetadataPath(agentId: AgentId): string {
   return getAgentTranscriptPath(agentId).replace(/\.jsonl$/, '.meta.json')
 }
 
+function getAgentLifecyclePath(agentId: AgentId): string {
+  return getAgentTranscriptPath(agentId).replace(
+    /\.jsonl$/,
+    '.lifecycle.json',
+  )
+}
+
+export type AgentLifecycleStatus =
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'stopped'
+
+const agentLifecycleWrites = new Map<string, Promise<void>>()
+
+/**
+ * Persist the durable Agent lifecycle independently from descriptive metadata.
+ * Writes for one Agent are serialized so a late spawn write cannot overwrite a
+ * subsequent permanent stop marker.
+ */
+export function writeAgentLifecycleStatus(
+  agentId: AgentId,
+  status: AgentLifecycleStatus,
+): Promise<void> {
+  const path = getAgentLifecyclePath(agentId)
+  const previous = agentLifecycleWrites.get(path) ?? Promise.resolve()
+  const next = previous
+    .catch(() => {})
+    .then(async () => {
+      await mkdir(dirname(path), { recursive: true })
+      await writeFile(
+        path,
+        JSON.stringify({
+          status,
+          updatedAt: new Date().toISOString(),
+        }),
+      )
+    })
+  agentLifecycleWrites.set(path, next)
+  const clearPendingWrite = () => {
+    if (agentLifecycleWrites.get(path) === next) {
+      agentLifecycleWrites.delete(path)
+    }
+  }
+  void next.then(clearPendingWrite, clearPendingWrite)
+  return next
+}
+
+export async function readAgentLifecycleStatus(
+  agentId: AgentId,
+): Promise<AgentLifecycleStatus | null> {
+  const path = getAgentLifecyclePath(agentId)
+  await agentLifecycleWrites.get(path)?.catch(() => {})
+  try {
+    const raw = JSON.parse(await readFile(path, 'utf-8')) as {
+      status?: unknown
+    }
+    return raw.status === 'running' ||
+      raw.status === 'completed' ||
+      raw.status === 'failed' ||
+      raw.status === 'stopped'
+      ? raw.status
+      : null
+  } catch (e) {
+    if (isFsInaccessible(e)) return null
+    throw e
+  }
+}
+
 export type AgentMetadata = {
   agentType: string
   /** Root-relative Agent nesting depth, persisted for safe resume. */

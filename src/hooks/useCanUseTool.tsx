@@ -25,6 +25,8 @@ import {
 import { logForDebugging } from '../utils/debug.js';
 import { AbortError } from '../utils/errors.js';
 import { logError } from '../utils/log.js';
+import { updateTaskState } from '../utils/task/framework.js';
+import type { TaskState } from '../tasks/types.js';
 import type { PermissionDecision } from '../utils/permissions/PermissionResult.js';
 import { hasPermissionsToUseTool } from '../utils/permissions/permissions.js';
 import { jsonStringify } from '../utils/slowOperations.js';
@@ -43,13 +45,32 @@ export type CanUseToolFn<Input extends Record<string, unknown> = Record<string, 
   forceDecision?: PermissionDecision<Input>,
 ) => Promise<PermissionDecision<Input>>;
 
+function setAgentPermissionPending(
+  toolUseContext: ToolUseContext,
+  waitingForPermission: boolean,
+): void {
+  const agentId = toolUseContext.agentId;
+  if (!agentId) return;
+  const setAppState =
+    toolUseContext.setAppStateForTasks ?? toolUseContext.setAppState;
+  updateTaskState<TaskState>(agentId, setAppState, task => {
+    if (task.type !== 'local_agent' || task.status !== 'running') {
+      return task;
+    }
+    return task.waitingForPermission === waitingForPermission
+      ? task
+      : { ...task, waitingForPermission };
+  });
+}
+
 function useCanUseTool(
   setToolUseConfirmQueue: React.Dispatch<React.SetStateAction<ToolUseConfirm[]>>,
   setToolPermissionContext: (context: ToolPermissionContext) => void,
 ): CanUseToolFn {
   return useCallback<CanUseToolFn>(
     async (tool, input, toolUseContext, assistantMessage, toolUseID, forceDecision) => {
-      return new Promise(resolve => {
+      let permissionPending = false;
+      return new Promise<PermissionDecision>(resolve => {
         const ctx = createPermissionContext(
           tool,
           input,
@@ -253,6 +274,10 @@ function useCanUseTool(
                 }
 
                 // Show dialog and start hooks/classifier in background
+                permissionPending = Boolean(toolUseContext.agentId);
+                if (permissionPending) {
+                  setAgentPermissionPending(toolUseContext, true);
+                }
                 handleInteractivePermission(
                   {
                     ctx,
@@ -284,6 +309,10 @@ function useCanUseTool(
           .finally(() => {
             clearClassifierChecking(toolUseID);
           });
+      }).finally(() => {
+        if (permissionPending) {
+          setAgentPermissionPending(toolUseContext, false);
+        }
       });
     },
     [setToolUseConfirmQueue, setToolPermissionContext],

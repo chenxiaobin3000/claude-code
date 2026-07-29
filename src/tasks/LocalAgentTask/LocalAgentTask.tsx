@@ -24,9 +24,13 @@ import { asAgentId } from '../../types/ids.js';
 import type { Message } from '../../types/message.js';
 import { createAbortController, createChildAbortController } from '../../utils/abortController.js';
 import { registerCleanup } from '../../utils/cleanupRegistry.js';
+import { logForDebugging } from '../../utils/debug.js';
 import { getSearchExtraToolsOrReadInfo } from '../../utils/collapseReadSearch.js';
 import { enqueuePendingNotification } from '../../utils/messageQueueManager.js';
-import { getAgentTranscriptPath } from '../../utils/sessionStorage.js';
+import {
+  getAgentTranscriptPath,
+  writeAgentLifecycleStatus,
+} from '../../utils/sessionStorage.js';
 import { evictTaskOutput, getTaskOutputPath, initTaskOutputAsSymlink } from '../../utils/task/diskOutput.js';
 import { PANEL_GRACE_MS, registerTask, updateTaskState } from '../../utils/task/framework.js';
 import { emitTaskProgress } from '../../utils/task/sdkProgress.js';
@@ -181,6 +185,17 @@ export function isLocalAgentTask(task: unknown): task is LocalAgentTaskState {
   return typeof task === 'object' && task !== null && 'type' in task && task.type === 'local_agent';
 }
 
+function persistAgentLifecycle(
+  agentId: string,
+  status: 'running' | 'completed' | 'failed',
+): void {
+  void writeAgentLifecycleStatus(asAgentId(agentId), status).catch(error =>
+    logForDebugging(
+      `Failed to persist Agent ${agentId} lifecycle ${status}: ${error}`,
+    ),
+  );
+}
+
 /**
  * A local_agent task that the CoordinatorTaskPanel manages (not main-session).
  * For ants, these render in the panel instead of the background-task pill.
@@ -328,14 +343,17 @@ export const LocalAgentTask: Task = {
   type: 'local_agent',
 
   async kill(taskId, setAppState) {
-    killAsyncAgent(taskId, setAppState);
+    await killAsyncAgent(taskId, setAppState);
   },
 };
 
 /**
  * Kill an agent task. No-op if already killed/completed.
  */
-export function killAsyncAgent(taskId: string, setAppState: SetAppState): void {
+export function killAsyncAgent(
+  taskId: string,
+  setAppState: SetAppState,
+): Promise<void> {
   let killed = false;
   updateTaskState<LocalAgentTaskState>(taskId, setAppState, task => {
     if (task.status !== 'running') {
@@ -356,7 +374,9 @@ export function killAsyncAgent(taskId: string, setAppState: SetAppState): void {
   });
   if (killed) {
     void evictTaskOutput(taskId);
+    return writeAgentLifecycleStatus(asAgentId(taskId), 'stopped');
   }
+  return Promise.resolve();
 }
 
 /**
@@ -464,11 +484,13 @@ export function updateAgentSummary(taskId: string, summary: string, setAppState:
  */
 export function completeAgentTask(result: AgentToolResult, setAppState: SetAppState): void {
   const taskId = result.agentId;
+  let completed = false;
   updateTaskState<LocalAgentTaskState>(taskId, setAppState, task => {
     if (task.status !== 'running') {
       return task;
     }
 
+    completed = true;
     task.unregisterCleanup?.();
 
     return {
@@ -483,6 +505,9 @@ export function completeAgentTask(result: AgentToolResult, setAppState: SetAppSt
     };
   });
   void evictTaskOutput(taskId);
+  if (completed) {
+    persistAgentLifecycle(taskId, 'completed');
+  }
   // Note: Notification is sent by AgentTool via enqueueAgentNotification
 }
 
@@ -490,11 +515,13 @@ export function completeAgentTask(result: AgentToolResult, setAppState: SetAppSt
  * Fail an agent task with error.
  */
 export function failAgentTask(taskId: string, error: string, setAppState: SetAppState): void {
+  let failed = false;
   updateTaskState<LocalAgentTaskState>(taskId, setAppState, task => {
     if (task.status !== 'running') {
       return task;
     }
 
+    failed = true;
     task.unregisterCleanup?.();
 
     return {
@@ -509,6 +536,9 @@ export function failAgentTask(taskId: string, error: string, setAppState: SetApp
     };
   });
   void evictTaskOutput(taskId);
+  if (failed) {
+    persistAgentLifecycle(taskId, 'failed');
+  }
   // Note: Notification is sent by AgentTool via enqueueAgentNotification
 }
 
@@ -564,13 +594,14 @@ export function registerAsyncAgent({
 
   // Register cleanup handler
   const unregisterCleanup = registerCleanup(async () => {
-    killAsyncAgent(agentId, setAppState);
+    await killAsyncAgent(agentId, setAppState);
   });
 
   taskState.unregisterCleanup = unregisterCleanup;
 
   // Register task in AppState
   registerTask(taskState, setAppState);
+  persistAgentLifecycle(agentId, 'running');
 
   return taskState;
 }
@@ -614,7 +645,7 @@ export function registerAgentForeground({
     : createAbortController();
 
   const unregisterCleanup = registerCleanup(async () => {
-    killAsyncAgent(agentId, setAppState);
+    await killAsyncAgent(agentId, setAppState);
   });
 
   const taskState: LocalAgentTaskState = {
@@ -644,6 +675,7 @@ export function registerAgentForeground({
   backgroundSignalResolvers.set(agentId, resolveBackgroundSignal!);
 
   registerTask(taskState, setAppState);
+  persistAgentLifecycle(agentId, 'running');
 
   // Auto-background after timeout if configured
   let cancelAutoBackground: (() => void) | undefined;

@@ -545,6 +545,8 @@ export async function runAsyncAgentLifecycle({
   let stopSummarization: (() => void) | undefined
   const agentMessages: MessageType[] = []
   const tracker = createProgressTracker()
+  let completedResult: AgentToolResult | undefined
+  let completedFinalMessage: string | undefined
   try {
     const resolveActivity = createActivityDescriptionResolver(
       toolUseContext.options.tools,
@@ -610,8 +612,10 @@ export async function runAsyncAgentLifecycle({
     // (git exec) are notification embellishments that can hang — they must
     // not gate the status transition (gh-20236).
     completeAsyncAgent(agentResult, rootSetAppState)
+    completedResult = agentResult
 
     let finalMessage = extractTextContent(agentResult.content, '\n')
+    completedFinalMessage = finalMessage
 
     if (feature('TRANSCRIPT_CLASSIFIER')) {
       const handoffWarning = await classifyHandoffIfNeeded({
@@ -625,6 +629,7 @@ export async function runAsyncAgentLifecycle({
       })
       if (handoffWarning) {
         finalMessage = `${handoffWarning}\n\n${finalMessage}`
+        completedFinalMessage = finalMessage
       }
     }
 
@@ -646,6 +651,39 @@ export async function runAsyncAgentLifecycle({
     })
   } catch (error) {
     stopSummarization?.()
+    if (completedResult) {
+      // The Agent execution already reached a durable completed state.
+      // Classifier/worktree/notification embellishment failures must not
+      // rewrite it to failed or emit a contradictory terminal notification.
+      logForDebugging(
+        `Completed agent ${taskId} post-processing failed: ${errorMessage(error)}`,
+      )
+      let worktreeResult: Awaited<ReturnType<typeof getWorktreeResult>> = {}
+      try {
+        worktreeResult = await getWorktreeResult()
+      } catch (cleanupError) {
+        logForDebugging(
+          `Completed agent ${taskId} worktree cleanup retry failed: ${errorMessage(cleanupError)}`,
+        )
+      }
+      enqueueAgentNotification({
+        taskId,
+        description,
+        status: 'completed',
+        setAppState: rootSetAppState,
+        finalMessage:
+          completedFinalMessage ??
+          extractTextContent(completedResult.content, '\n'),
+        usage: {
+          totalTokens: getTokenCountFromTracker(tracker),
+          toolUses: completedResult.totalToolUseCount,
+          durationMs: completedResult.totalDurationMs,
+        },
+        toolUseId: toolUseContext.toolUseId,
+        ...worktreeResult,
+      })
+      return
+    }
     if (error instanceof AbortError) {
       // killAsyncAgent is a no-op if TaskStop already set status='killed' —
       // but only this catch handler has agentMessages, so the notification
