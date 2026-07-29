@@ -14,6 +14,10 @@ import {
   type TaskType,
 } from '../../Task.js'
 import type { TaskState } from '../../tasks/types.js'
+import {
+  guardTaskLifecycleTransition,
+  normalizeTaskLifecycle,
+} from '../../tasks/stateMachine.js'
 import { enqueuePendingNotification } from '../messageQueueManager.js'
 import { enqueueSdkEvent } from '../sdkEventQueue.js'
 import { getTaskOutputDelta, getTaskOutputPath } from './diskOutput.js'
@@ -55,7 +59,8 @@ export function updateTaskState<T extends TaskState>(
     if (!task) {
       return prev
     }
-    const updated = updater(task)
+    const proposed = updater(task)
+    const updated = guardTaskLifecycleTransition(task, proposed)
     if (updated === task) {
       // Updater returned the same reference (early-return no-op). Skip the
       // spread so s.tasks subscribers don't re-render on unchanged state.
@@ -75,9 +80,10 @@ export function updateTaskState<T extends TaskState>(
  * Register a new task in AppState.
  */
 export function registerTask(task: TaskState, setAppState: SetAppState): void {
+  const normalizedTask = normalizeTaskLifecycle(task)
   let isReplacement = false
   setAppState(prev => {
-    const existing = prev.tasks[task.id]
+    const existing = prev.tasks[normalizedTask.id]
     isReplacement = existing !== undefined
     // Carry forward UI-held state on re-register (resumeAgentBackground
     // replaces the task; user's retain shouldn't reset). startTime keeps
@@ -87,15 +93,18 @@ export function registerTask(task: TaskState, setAppState: SetAppState): void {
     const merged =
       existing && 'retain' in existing
         ? {
-            ...task,
+            ...normalizedTask,
             retain: existing.retain,
             startTime: existing.startTime,
             messages: existing.messages,
             diskLoaded: existing.diskLoaded,
             pendingMessages: existing.pendingMessages,
           }
-        : task
-    return { ...prev, tasks: { ...prev.tasks, [task.id]: merged } }
+        : normalizedTask
+    return {
+      ...prev,
+      tasks: { ...prev.tasks, [normalizedTask.id]: merged },
+    }
   })
 
   // Replacement (resume) — not a new start. Skip to avoid double-emit.
@@ -104,15 +113,18 @@ export function registerTask(task: TaskState, setAppState: SetAppState): void {
   enqueueSdkEvent({
     type: 'system',
     subtype: 'task_started',
-    task_id: task.id,
-    tool_use_id: task.toolUseId,
-    description: task.description,
-    task_type: task.type,
+    task_id: normalizedTask.id,
+    tool_use_id: normalizedTask.toolUseId,
+    description: normalizedTask.description,
+    task_type: normalizedTask.type,
     workflow_name:
-      'workflowName' in task
-        ? (task.workflowName as string | undefined)
+      'workflowName' in normalizedTask
+        ? (normalizedTask.workflowName as string | undefined)
         : undefined,
-    prompt: 'prompt' in task ? (task.prompt as string) : undefined,
+    prompt:
+      'prompt' in normalizedTask
+        ? (normalizedTask.prompt as string)
+        : undefined,
   })
 }
 

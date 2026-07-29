@@ -288,6 +288,8 @@ export function killInProcessTeammate(
         [taskId]: {
           ...teammateTask,
           status: 'killed' as const,
+          lifecycleStatus: 'stopped' as const,
+          waitingForPermission: false,
           notified: true,
           endTime: Date.now(),
           onIdleCallbacks: [], // Clear callbacks to prevent stale references

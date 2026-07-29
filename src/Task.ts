@@ -2,6 +2,7 @@ import { randomBytes } from 'crypto'
 import type { AppState } from './state/AppState.js'
 import type { AgentId } from './types/ids.js'
 import { getTaskOutputPath } from './utils/task/diskOutput.js'
+import type { TaskLifecycleStatus } from './tasks/stateMachine.js'
 
 export type TaskType =
   | 'local_bash'
@@ -46,6 +47,10 @@ export type TaskStateBase = {
   id: string
   type: TaskType
   status: TaskStatus
+  /** Canonical cross-task state; synchronized by the task framework. */
+  lifecycleStatus: TaskLifecycleStatus
+  /** True only while a task is blocked on an actionable permission decision. */
+  waitingForPermission?: boolean
   description: string
   toolUseId?: string
   startTime: number
@@ -115,6 +120,7 @@ export function createTaskStateBase(
     id,
     type,
     status: 'pending',
+    lifecycleStatus: 'queued',
     description,
     toolUseId,
     startTime: Date.now(),

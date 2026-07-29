@@ -38,6 +38,7 @@ import type {
   TeammateIdentity,
 } from '../../tasks/InProcessTeammateTask/types.js'
 import { appendCappedMessage } from '../../tasks/InProcessTeammateTask/types.js'
+import { guardTaskLifecycleTransition } from '../../tasks/stateMachine.js'
 import {
   createActivityDescriptionResolver,
   createProgressTracker,
@@ -136,7 +137,7 @@ const PERMISSION_POLL_INTERVAL_MS = 500
 function createInProcessCanUseTool(
   identity: TeammateIdentity,
   abortController: AbortController,
-  onPermissionWaitMs?: (waitMs: number) => void,
+  onPermissionWaitChange?: (waiting: boolean, waitMs?: number) => void,
 ): CanUseToolFn {
   return async (
     tool,
@@ -204,6 +205,7 @@ function createInProcessCanUseTool(
 
     // Standard path: use ToolUseConfirm dialog with worker badge
     if (setToolUseConfirmQueue) {
+      onPermissionWaitChange?.(true)
       return new Promise<PermissionDecision>(resolve => {
         let decisionMade = false
         const permissionStartMs = Date.now()
@@ -211,7 +213,7 @@ function createInProcessCanUseTool(
         // Report permission wait time to the caller so it can be
         // subtracted from the displayed elapsed time.
         const reportPermissionWait = () => {
-          onPermissionWaitMs?.(Date.now() - permissionStartMs)
+          onPermissionWaitChange?.(false, Date.now() - permissionStartMs)
         }
 
         const onAbortListener = () => {
@@ -342,7 +344,10 @@ function createInProcessCanUseTool(
     }
 
     // Fallback: use mailbox system when leader UI queue is unavailable
+    onPermissionWaitChange?.(true)
     return new Promise<PermissionDecision>(resolve => {
+      const permissionStartMs = Date.now()
+      let permissionWaitReported = false
       const request = createPermissionRequest({
         toolName: (tool as Tool).name,
         toolUseId: toolUseID,
@@ -453,6 +458,10 @@ function createInProcessCanUseTool(
         clearInterval(pollInterval)
         unregisterPermissionCallback(request.id)
         abortController.signal.removeEventListener('abort', onAbortListener)
+        if (!permissionWaitReported) {
+          permissionWaitReported = true
+          onPermissionWaitChange?.(false, Date.now() - permissionStartMs)
+        }
       }
     })
   }
@@ -534,7 +543,8 @@ function updateTaskState(
     if (!task || task.type !== 'in_process_teammate') {
       return prev
     }
-    const updated = updater(task)
+    const proposed = updater(task)
+    const updated = guardTaskLifecycleTransition(task, proposed)
     if (updated === task) {
       return prev
     }
@@ -1200,12 +1210,14 @@ export async function runInProcessTeammate(
             canUseTool: createInProcessCanUseTool(
               identity,
               currentWorkAbortController,
-              (waitMs: number) => {
+              (waiting: boolean, waitMs?: number) => {
                 updateTaskState(
                   taskId,
                   task => ({
                     ...task,
-                    totalPausedMs: (task.totalPausedMs ?? 0) + waitMs,
+                    waitingForPermission: waiting,
+                    totalPausedMs:
+                      (task.totalPausedMs ?? 0) + (waitMs ?? 0),
                   }),
                   setAppState,
                 )

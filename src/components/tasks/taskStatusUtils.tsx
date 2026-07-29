@@ -76,6 +76,7 @@ export function getTaskStatusColor(
  */
 export function describeTeammateActivity(t: DeepImmutable<InProcessTeammateTaskState>): string {
   if (t.shutdownRequested) return 'stopping';
+  if (t.waitingForPermission) return 'waiting for permission';
   if (t.awaitingPlanApproval) return 'awaiting approval';
   if (t.isIdle) return 'idle';
   return (

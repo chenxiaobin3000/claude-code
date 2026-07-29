@@ -190,6 +190,9 @@ export function TeammateSpinnerLine({
     if (teammate.shutdownRequested) {
       return <Text dimColor>[stopping]</Text>;
     }
+    if (teammate.waitingForPermission) {
+      return <Text color="warning">[waiting for permission]</Text>;
+    }
     if (teammate.awaitingPlanApproval) {
       return <Text color="warning">[awaiting approval]</Text>;
     }

@@ -71,7 +71,7 @@ P0 以 Claude Code `2.1.220` 为冻结对照版本；详细的官方行为、当
 
 - [x] 对齐 Shell cwd 规则：主会话的 Bash 与 PowerShell `cd` 仅在项目根或 `--add-dir`、`/add-dir`、`additionalDirectories` 授权目录内跨命令保留；越界在提交持久 cwd 和触发 `CwdChanged` 前拒绝，复位到稳定根并在工具结果中说明；子代理的 Shell cwd 不跨调用保留。
 - [x] 固化 cwd 规范化与隔离：覆盖符号链接/Junction、Windows 盘符大小写、UNC 拒绝、Git Bash `/tmp` 原生路径转换、工作树、并发 Agent、目录失效恢复和 `CwdChanged` 顺序；新建及恢复 Agent 使用独立 AsyncLocalStorage cwd，不继承或回写主会话临时 `/cd`。
-- [ ] 梳理 Agent、Coordinator、Team 与 Background Session 的状态模型，消除重复状态和相互覆盖。
+- [x] 统一 Agent、Coordinator、Team 与 Background Session 状态模型：所有本地任务通过同一转换契约归一为 `queued`、`running`、`waiting_permission`、`idle`、`completed`、`failed`、`stopped`、`cancelled`；现有紧凑 `pending/running/completed/failed/killed` 字段只保留为持久化和协议兼容表示。Task Framework 在每次更新时同步权威状态并拒绝迟到回调覆盖终态；Team 的空闲和权限等待进入同一模型且在 UI 可区分。daemon 的 `running/stopped/stale` 仅表示本地守护进程健康状态，不作为任务执行态。
 - [ ] 明确前台/后台默认值、`background` 覆盖规则与等待行为。
 - [ ] 定义嵌套子代理的最大深度、并发、Token 预算和取消传播。
 - [ ] 对齐后台优先的子代理生命周期：前台会话可继续工作并收到完成/需输入通知；停止必须永久生效，恢复、重连或守护进程重启不得复活已停止任务。
