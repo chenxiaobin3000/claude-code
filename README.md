@@ -16,7 +16,7 @@
 
 - **模型与登录**：官方的 Anthropic 登录、官方模型、组织默认/限制模型、Claude API Provider 与相关云端模型能力不适用。本项目只从 `models.json` 加载 OpenAI-compatible 模型；模型 Profile 静态声明，不做服务端模型发现或自动模型替换。
 - **云端与远程产品**：官方的 Web/Desktop/Mobile、Remote Control、GitHub App、Cloud Code Review、Routines、Channels、Artifacts、语音与账户/用量产品均不提供。本项目也不包含官方自动更新、安装器或远端遥测。
-- **插件与浏览器**：官方插件市场、远端安装/更新、插件自动重命名与 Chrome 内置控制不提供。仅加载本地已安装插件；浏览器能力只验收用户另行安装的 `claude-in-chrome`。
+- **插件与浏览器**：官方插件市场、远端安装/更新和插件自动重命名不提供。主程序不提供 Chrome 控制；Chrome 能力只能来自显式加载的本地 `claudeinchrome` 插件。该插件的 MCP、Skill 与 Native Host 尚未迁移和验收，当前不可用。
 - **Sandbox**：Windows 上启用 Sandbox 时，Shell 会在 Windows Sandbox VM 内执行，默认只映射启动工作区和只读 Shell 运行时，且固定断网、不传递用户主目录或凭据。`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands` 保持上层语义；Windows 不能精确落实域名白名单、代理和目录内文件 allow/deny 规则，配置这些规则时会 fail-closed，而不会回退宿主执行。
 - **会话路径**：官方 `/cd` 可将会话迁移到新的工作目录；本项目 `/cd` 仅临时切换 cwd，不迁移项目身份、会话、配置或扩展作用域。
 - **Agent、Hook、MCP 与 Skill**：官方当前的后台 Agent 默认行为、嵌套 Agent 限额与转发、部分生命周期 Hook、嵌套 Skill 加载和部分 Hook 输出语义尚未宣称对齐；本地 `/mcp login`/`logout` 仅管理用户配置的 MCP OAuth 凭据，以开发计划的未完成项为准。
@@ -108,6 +108,19 @@ Windows Sandbox 不能精确执行域名白名单、代理或映射目录内的 
 主题只有两类来源：内置主题，以及 `~/.claude/themes/*.json`。主题文件在启动时读取；外部修改后重启生效。不提供交互编辑、热更新或插件主题安装。
 
 插件仅支持已安装的本地插件。没有远端市场、下载、原生安装、CLI 自更新或插件自动更新。
+
+### 本地 Chrome 扩展
+
+Chrome 集成边界位于 [`plugins/claudeinchrome`](plugins/claudeinchrome)，目标
+链路为“主程序标准插件加载器 → 插件 MCP/Skill → 插件 Native Host → Chrome
+扩展 → Chrome”。主程序不会自动注入 Chrome MCP，也不提供 `--chrome`、`/chrome`
+或内置 Chrome Skill。
+
+Manifest V3 扩展源码位于
+[`plugins/claudeinchrome/chrome-extension`](plugins/claudeinchrome/chrome-extension)，
+固定扩展 ID 为 `dlpofjonbnceelbmpelkfblmnghclmkm`。目前仅完成插件骨架和扩展
+归位；MCP、Skill 与 Native Host 仍待迁移和验收，因此当前不能通过该插件控制
+Chrome。进度与完成条件见 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)。
 
 ## 构建与验证
 

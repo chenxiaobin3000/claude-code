@@ -2,22 +2,12 @@ import { BROWSER_TOOLS } from '@ant/claude-for-chrome-mcp'
 import { chmod, mkdir, readFile, writeFile } from 'fs/promises'
 import { homedir } from 'os'
 import { join } from 'path'
-import {
-  getIsInteractive,
-  getIsNonInteractiveSession,
-  getSessionBypassPermissionsMode,
-} from '../../bootstrap/state.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
+import { getSessionBypassPermissionsMode } from '../../bootstrap/state.js'
 import type { ScopedMcpServerConfig } from '../../services/mcp/types.js'
 import { isInBundledMode } from '../bundledMode.js'
 import { distRoot } from '../distRoot.js'
-import { getGlobalConfig, saveGlobalConfig } from '../config.js'
 import { logForDebugging } from '../debug.js'
-import {
-  getClaudeConfigHomeDir,
-  isEnvDefinedFalsy,
-  isEnvTruthy,
-} from '../envUtils.js'
+import { getClaudeConfigHomeDir } from '../envUtils.js'
 import { execFileNoThrowWithCwd } from '../execFileNoThrow.js'
 import { getPlatform } from '../platform.js'
 import { jsonStringify } from '../slowOperations.js'
@@ -32,53 +22,6 @@ import { isChromeExtensionInstalledPortable } from './setupPortable.js'
 
 const NATIVE_HOST_IDENTIFIER = 'com.anthropic.claude_code_browser_extension'
 const NATIVE_HOST_MANIFEST_NAME = `${NATIVE_HOST_IDENTIFIER}.json`
-
-export function shouldEnableClaudeInChrome(chromeFlag?: boolean): boolean {
-  // Disable by default in non-interactive sessions (e.g., SDK, CI)
-  if (getIsNonInteractiveSession() && chromeFlag !== true) {
-    return false
-  }
-
-  // Check CLI flags
-  if (chromeFlag === true) {
-    return true
-  }
-  if (chromeFlag === false) {
-    return false
-  }
-
-  // Check environment variables
-  if (isEnvTruthy(process.env.CLAUDE_CODE_ENABLE_CFC)) {
-    return true
-  }
-  if (isEnvDefinedFalsy(process.env.CLAUDE_CODE_ENABLE_CFC)) {
-    return false
-  }
-
-  // Check default config settings
-  const config = getGlobalConfig()
-  if (config.claudeInChromeDefaultEnabled !== undefined) {
-    return config.claudeInChromeDefaultEnabled
-  }
-
-  return false
-}
-
-let shouldAutoEnable: boolean | undefined
-
-export function shouldAutoEnableClaudeInChrome(): boolean {
-  if (shouldAutoEnable !== undefined) {
-    return shouldAutoEnable
-  }
-
-  shouldAutoEnable =
-    getIsInteractive() &&
-    isChromeExtensionInstalled_CACHED_MAY_BE_STALE() &&
-    (process.env.USER_TYPE === 'ant' ||
-      getFeatureValue_CACHED_MAY_BE_STALE('tengu_chrome_auto_enable', false))
-
-  return shouldAutoEnable
-}
 
 /**
  * Setup Claude in Chrome MCP server and tools
@@ -198,6 +141,7 @@ export async function installChromeNativeHostManifest(
     type: 'stdio',
     allowed_origins: [
       `chrome-extension://fcoeoabgfenejglbffodgkkbkcdhcgfn/`, // PROD_EXTENSION_ID
+      `chrome-extension://dlpofjonbnceelbmpelkfblmnghclmkm/`, // LOCAL_EXTENSION_ID
       ...(process.env.USER_TYPE === 'ant'
         ? [
             'chrome-extension://dihbgbndebgnbjfmelmegjepbnkhlgni/', // DEV_EXTENSION_ID
@@ -326,43 +270,6 @@ exec ${command}
     `[Claude in Chrome] Created Chrome native host wrapper script: ${wrapperPath}`,
   )
   return wrapperPath
-}
-
-/**
- * Get cached value of whether Chrome extension is installed. Returns
- * from disk cache immediately, updates cache in background.
- *
- * Use this for sync/startup-critical paths where blocking on filesystem
- * access is not acceptable. The value may be stale if the cache hasn't
- * been updated recently.
- *
- * Only positive detections are persisted. A negative result from the
- * filesystem scan is not cached, because it may come from a machine that
- * shares ~/.claude.json but has no local Chrome (e.g. a remote dev
- * environment using the bridge), and caching it would permanently poison
- * auto-enable for every session on every machine that reads that config.
- */
-function isChromeExtensionInstalled_CACHED_MAY_BE_STALE(): boolean {
-  // Update cache in background without blocking
-  void isChromeExtensionInstalled().then(isInstalled => {
-    // Only persist positive detections — see docstring. The cost of a stale
-    // `true` is one silent MCP connection attempt per session; the cost of a
-    // stale `false` is auto-enable never working again without manual repair.
-    if (!isInstalled) {
-      return
-    }
-    const config = getGlobalConfig()
-    if (config.cachedChromeExtensionInstalled !== isInstalled) {
-      saveGlobalConfig(prev => ({
-        ...prev,
-        cachedChromeExtensionInstalled: isInstalled,
-      }))
-    }
-  })
-
-  // Return cached value immediately from disk
-  const cached = getGlobalConfig().cachedChromeExtensionInstalled
-  return cached ?? false
 }
 
 /**

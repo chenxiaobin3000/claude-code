@@ -26,11 +26,7 @@ import {
 import { isAgentSwarmsEnabled } from '../../utils/agentSwarmsEnabled.js';
 import { count, uniq } from '../../utils/array.js';
 import { installAsciicastRecorder } from '../../utils/asciicast.js';
-import {
-  checkHasTrustDialogAccepted,
-  getGlobalConfig,
-  saveGlobalConfig,
-} from '../../utils/config.js';
+import { checkHasTrustDialogAccepted, getGlobalConfig, saveGlobalConfig } from '../../utils/config.js';
 import { seedEarlyInput } from '../../utils/earlyInput.js';
 import { getInitialEffortSetting, parseEffortValue } from '../../utils/effort.js';
 import {
@@ -74,11 +70,7 @@ import {
 } from '../../bootstrap/state.js';
 import { getCommands } from '../../commands.js';
 import type { StatsStore } from '../../context/stats.js';
-import {
-  launchInvalidSettingsDialog,
-  launchResumeChooser,
-  launchSnapshotUpdateDialog,
-} from '../../dialogLaunchers.js';
+import { launchInvalidSettingsDialog, launchResumeChooser, launchSnapshotUpdateDialog } from '../../dialogLaunchers.js';
 import {
   exitWithError,
   exitWithMessage,
@@ -100,15 +92,6 @@ import {
 } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js';
 import type { LogOption } from '../../types/logs.js';
 import type { Message as MessageType } from '../../types/message.js';
-import {
-  CLAUDE_IN_CHROME_SKILL_HINT,
-  CLAUDE_IN_CHROME_SKILL_HINT_WITH_WEBBROWSER,
-} from '../../utils/claudeInChrome/prompt.js';
-import {
-  setupClaudeInChrome,
-  shouldAutoEnableClaudeInChrome,
-  shouldEnableClaudeInChrome,
-} from '../../utils/claudeInChrome/setup.js';
 import { loadConversationForResume } from '../../utils/conversationRecovery.js';
 import { buildDeepLinkBanner } from '../../utils/deepLink/banner.js';
 import { isBareMode, isEnvTruthy } from '../../utils/envUtils.js';
@@ -148,10 +131,7 @@ import {
 } from '../../utils/sessionStorage.js';
 import { getInitialSettings, getSettingsWithErrors } from '../../utils/settings/settings.js';
 import { TOOL_VALIDATION_CONFIG } from '../../utils/settings/toolValidationConfig.js';
-import {
-  findUnknownDenyRuleWarnings,
-  type ValidationError,
-} from '../../utils/settings/validation.js';
+import { findUnknownDenyRuleWarnings, type ValidationError } from '../../utils/settings/validation.js';
 import { DEFAULT_TASKS_MODE_TASK_LIST_ID } from '../../utils/tasks.js';
 import { validateUuid } from '../../utils/uuid.js';
 // Plugin startup checks are now handled non-blockingly in REPL.tsx
@@ -168,7 +148,6 @@ import {
   parseMcpConfigFromFilePath,
 } from 'src/services/mcp/config.js';
 import { excludeCommandsByServer, excludeResourcesByServer } from 'src/services/mcp/utils.js';
-import { CLAUDE_IN_CHROME_MCP_SERVER_NAME, isClaudeInChromeMCPServer } from 'src/utils/claudeInChrome/common.js';
 import { registerCleanup } from 'src/utils/cleanupRegistry.js';
 import { createEmptyAttributionState } from 'src/utils/commitAttribution.js';
 import { countConcurrentSessions, registerSession, updateSessionName } from 'src/utils/concurrentSessions.js';
@@ -188,7 +167,6 @@ import {
   getSessionId,
   getUserMsgOptIn,
   setAllowedChannels,
-  setChromeFlagOverride,
   setCwdState,
   setDirectConnectServerUrl,
   setInitialMainLoopModel,
@@ -646,9 +624,7 @@ export async function runDefaultMode(
         .map(([name]) => name);
 
       let reservedNameError: string | null = null;
-      if (nonSdkConfigNames.some(isClaudeInChromeMCPServer)) {
-        reservedNameError = `Invalid MCP configuration: "${CLAUDE_IN_CHROME_MCP_SERVER_NAME}" is a reserved MCP name.`;
-      } else if (feature('CHICAGO_MCP')) {
+      if (feature('CHICAGO_MCP')) {
         const { isComputerUseMCPServer, COMPUTER_USE_MCP_SERVER_NAME } = await import(
           'src/utils/computerUse/common.js'
         );
@@ -688,61 +664,6 @@ export async function runDefaultMode(
         );
       }
       dynamicMcpConfig = { ...dynamicMcpConfig, ...(allowed as Record<string, ScopedMcpServerConfig>) };
-    }
-  }
-
-  // Extract the explicitly requested local Chrome integration option.
-  const chromeOpts = options as { chrome?: boolean };
-  // Store the explicit CLI flag so teammates can inherit it
-  setChromeFlagOverride(chromeOpts.chrome);
-  const enableClaudeInChrome = shouldEnableClaudeInChrome(chromeOpts.chrome);
-  const autoEnableClaudeInChrome = !enableClaudeInChrome && shouldAutoEnableClaudeInChrome();
-
-  if (enableClaudeInChrome) {
-    const platform = getPlatform();
-    try {
-      logEvent('tengu_claude_in_chrome_setup', {
-        platform: platform as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      });
-
-      const {
-        mcpConfig: chromeMcpConfig,
-        allowedTools: chromeMcpTools,
-        systemPrompt: chromeSystemPrompt,
-      } = setupClaudeInChrome();
-      dynamicMcpConfig = {
-        ...dynamicMcpConfig,
-        ...chromeMcpConfig,
-      };
-      allowedTools.push(...chromeMcpTools);
-      if (chromeSystemPrompt) {
-        appendSystemPrompt = appendSystemPrompt ? `${chromeSystemPrompt}\n\n${appendSystemPrompt}` : chromeSystemPrompt;
-      }
-    } catch (error) {
-      logEvent('tengu_claude_in_chrome_setup_failed', {
-        platform: platform as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      });
-      logForDebugging(`[Claude in Chrome] Error: ${error}`);
-      logError(error);
-      console.error(`Error: Failed to run with Claude in Chrome.`);
-      process.exit(1);
-    }
-  } else if (autoEnableClaudeInChrome) {
-    try {
-      const { mcpConfig: chromeMcpConfig } = setupClaudeInChrome();
-      dynamicMcpConfig = {
-        ...dynamicMcpConfig,
-        ...chromeMcpConfig,
-      };
-
-      const hint =
-        feature('WEB_BROWSER_TOOL') && typeof Bun !== 'undefined' && 'WebView' in Bun
-          ? CLAUDE_IN_CHROME_SKILL_HINT_WITH_WEBBROWSER
-          : CLAUDE_IN_CHROME_SKILL_HINT;
-      appendSystemPrompt = appendSystemPrompt ? `${appendSystemPrompt}\n\n${hint}` : hint;
-    } catch (error) {
-      // Silently skip any errors for the auto-enable
-      logForDebugging(`[Claude in Chrome] Error (auto-enable): ${error}`);
     }
   }
 
@@ -1441,14 +1362,7 @@ export async function runDefaultMode(
 
     logForDebugging('[STARTUP] Running showSetupScreens()...');
     const setupScreensStart = Date.now();
-    await showSetupScreens(
-      root,
-      permissionMode,
-      allowDangerouslySkipPermissions,
-      commands,
-      enableClaudeInChrome,
-      devChannels,
-    );
+    await showSetupScreens(root, permissionMode, allowDangerouslySkipPermissions, commands, devChannels);
     logForDebugging(`[STARTUP] showSetupScreens() completed in ${Date.now() - setupScreensStart}ms`);
 
     // Check for pending agent memory snapshot updates (only for --agent mode, ant-only)
@@ -1504,18 +1418,12 @@ export async function runDefaultMode(
     ...getAllBaseTools().map(tool => tool.name),
     ...Object.keys(TOOL_VALIDATION_CONFIG.specifiers),
   ]);
-  const permissionRuleWarnings = findUnknownDenyRuleWarnings(
-    settingsResult.settings,
-    knownPermissionToolNames,
-  );
+  const permissionRuleWarnings = findUnknownDenyRuleWarnings(settingsResult.settings, knownPermissionToolNames);
   const nonMcpErrors = settingsResult.errors.filter(e => !e.mcpErrorMetadata);
 
   // Show settings validation errors after trust is established.
   if (!isNonInteractiveSession) {
-    const startupSettingsWarnings = [
-      ...nonMcpErrors,
-      ...permissionRuleWarnings,
-    ];
+    const startupSettingsWarnings = [...nonMcpErrors, ...permissionRuleWarnings];
     if (startupSettingsWarnings.length > 0) {
       await launchInvalidSettingsDialog(root, {
         settingsErrors: startupSettingsWarnings,
@@ -1524,9 +1432,7 @@ export async function runDefaultMode(
     }
   } else {
     for (const warning of [...nonMcpErrors, ...permissionRuleWarnings]) {
-      writeToStderr(
-        `Warning: ${warning.path}: ${warning.message}${warning.file ? ` (${warning.file})` : ''}\n`,
-      );
+      writeToStderr(`Warning: ${warning.path}: ${warning.message}${warning.file ? ` (${warning.file})` : ''}\n`);
     }
   }
 
@@ -1598,9 +1504,7 @@ export async function runDefaultMode(
   const mcpTools: Awaited<typeof mcpPromise>['tools'] = [];
   const mcpCommands: Awaited<typeof mcpPromise>['commands'] = [];
 
-  let thinkingEnabled = shouldEnableThinkingByDefault(
-    resolvedInitialModel ?? getDefaultMainLoopModel(),
-  );
+  let thinkingEnabled = shouldEnableThinkingByDefault(resolvedInitialModel ?? getDefaultMainLoopModel());
   let thinkingConfig: ThinkingConfig = thinkingEnabled !== false ? { type: 'adaptive' } : { type: 'disabled' };
 
   if (options.thinking === 'adaptive' || options.thinking === 'enabled') {
@@ -1663,7 +1567,6 @@ export async function runDefaultMode(
   // Log context metrics once at initialization
 
   void logPermissionContextForAnts(null, 'initialization');
-
 
   // Register PID file for concurrent-session detection (~/.claude/sessions/)
   // and fire multi-clauding telemetry. Lives here (not init.ts) so only the
@@ -2047,8 +1950,7 @@ export async function runDefaultMode(
     ...current,
     numStartups: (current.numStartups ?? 0) + 1,
   }));
-  setImmediate(() => {
-  });
+  setImmediate(() => {});
 
   // Set up per-turn session environment data uploader (ant-only build).
   // Default-enabled for all ant users when working in an Anthropic-owned

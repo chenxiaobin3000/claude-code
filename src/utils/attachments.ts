@@ -172,10 +172,7 @@ import {
 import {
   getMcpInstructionsDelta,
   isMcpInstructionsDeltaEnabled,
-  type ClientSideInstruction,
 } from './mcpInstructionsDelta.js'
-import { CLAUDE_IN_CHROME_MCP_SERVER_NAME } from './claudeInChrome/common.js'
-import { CHROME_SEARCH_EXTRA_TOOLS_INSTRUCTIONS } from './claudeInChrome/prompt.js'
 import type { MCPServerConnection } from '../services/mcp/types.js'
 import type {
   HookEvent,
@@ -190,10 +187,7 @@ import {
   clearAllLSPDiagnostics,
 } from '../services/lsp/LSPDiagnosticRegistry.js'
 import { logForDebugging } from './debug.js'
-import {
-  extractTextContent,
-  getUserMessageText,
-} from './messages/text.js'
+import { extractTextContent, getUserMessageText } from './messages/text.js'
 import { isThinkingMessage } from './messages/predicates.js'
 import { isHumanTurn } from './messagePredicates.js'
 import { isEnvTruthy, getClaudeConfigHomeDir } from './envUtils.js'
@@ -1617,21 +1611,7 @@ export function getMcpInstructionsDeltaAttachment(
 ): Attachment[] {
   if (!isMcpInstructionsDeltaEnabled()) return []
 
-  // The chrome SearchExtraTools hint is client-authored and SearchExtraTools-conditional;
-  // actual server `instructions` are unconditional. Decide the chrome part
-  // here, pass it into the pure diff as a synthesized entry.
-  const clientSide: ClientSideInstruction[] = []
-  if (
-    isSearchExtraToolsEnabledOptimistic() &&
-    isSearchExtraToolsToolAvailable(tools)
-  ) {
-    clientSide.push({
-      serverName: CLAUDE_IN_CHROME_MCP_SERVER_NAME,
-      block: CHROME_SEARCH_EXTRA_TOOLS_INSTRUCTIONS,
-    })
-  }
-
-  const delta = getMcpInstructionsDelta(mcpClients, messages ?? [], clientSide)
+  const delta = getMcpInstructionsDelta(mcpClients, messages ?? [], [])
   if (!delta) return []
   return [{ type: 'mcp_instructions_delta', ...delta }]
 }

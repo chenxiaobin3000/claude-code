@@ -6,9 +6,7 @@ import { useState, useCallback } from 'react';
 import { useKeybinding, useKeybindings } from '../../keybindings/useKeybinding.js';
 import figures from 'figures';
 import { type GlobalConfig, saveGlobalConfig, getCurrentProjectConfig, type OutputStyle } from '../../utils/config.js';
-import {
-  getGlobalConfig,
-} from '../../utils/config.js';
+import { getGlobalConfig } from '../../utils/config.js';
 import chalk from 'chalk';
 import {
   permissionModeShortTitle,
@@ -113,13 +111,7 @@ type Setting =
       type: 'managedEnum';
     });
 
-type SubMenu =
-  | 'Theme'
-  | 'Model'
-  | 'TeammateModel'
-  | 'ExternalIncludes'
-  | 'OutputStyle'
-  | 'Language';
+type SubMenu = 'Theme' | 'Model' | 'TeammateModel' | 'ExternalIncludes' | 'OutputStyle' | 'Language';
 export function Config({
   onClose,
   context,
@@ -878,25 +870,6 @@ export function Config({
           },
         ]
       : []),
-    {
-      id: 'claudeInChromeDefaultEnabled',
-      label: 'Claude in Chrome enabled by default',
-      value: globalConfig.claudeInChromeDefaultEnabled ?? true,
-      type: 'boolean' as const,
-      onChange(enabled: boolean) {
-        saveGlobalConfig(current => ({
-          ...current,
-          claudeInChromeDefaultEnabled: enabled,
-        }));
-        setGlobalConfig({
-          ...getGlobalConfig(),
-          claudeInChromeDefaultEnabled: enabled,
-        });
-        logEvent('tengu_claude_in_chrome_setting_changed', {
-          enabled,
-        });
-      },
-    },
     // Teammate mode (only shown when agent swarms are enabled)
     ...(isAgentSwarmsEnabled()
       ? (() => {
@@ -1263,11 +1236,7 @@ export function Config({
       setting.onChange(setting.options[nextIndex]!);
       return;
     }
-  }, [
-    filteredSettingsItems,
-    selectedIndex,
-    setTabsHidden,
-  ]);
+  }, [filteredSettingsItems, selectedIndex, setTabsHidden]);
 
   const moveSelection = (delta: -1 | 1): void => {
     setShowThinkingWarning(false);

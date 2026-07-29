@@ -63,7 +63,6 @@ export interface HistoryEntry {
   pastedContents: Record<number, PastedContent>
 }
 
-
 export type ProjectConfig = {
   allowedTools: string[]
   mcpContextUris: string[]
@@ -135,7 +134,6 @@ const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
   hasClaudeMdExternalIncludesApproved: false,
   hasClaudeMdExternalIncludesWarningShown: false,
 }
-
 
 export {
   EDITOR_MODES,
@@ -233,7 +231,6 @@ export type GlobalConfig = {
   // Memory usage tracking
   memoryUsageCount: number // Number of times user has added to memory
 
-
   // Display language preference
   preferredLanguage?: 'auto' | 'en' | 'zh' // auto = follow system locale, en = English, zh = 中文
 
@@ -254,7 +251,6 @@ export type GlobalConfig = {
 
   // Plan mode usage tracking
   lastPlanModeUse?: number // Timestamp of last plan mode usage
-
 
   // Todo feature configuration
   todoFeatureEnabled: boolean // Whether the todo feature is enabled
@@ -280,7 +276,6 @@ export type GlobalConfig = {
   // from the title (the dot makes it redundant).
   showStatusInTerminalTab?: boolean
 
-
   // Model switch callout tracking (ant-only)
   modelSwitchCalloutDismissed?: boolean // Whether user chose "Don't show again"
   modelSwitchCalloutLastShown?: number // Timestamp of last shown (don't show for 24h)
@@ -289,7 +284,6 @@ export type GlobalConfig = {
   // Effort callout tracking - shown once for Opus 4.6 users
   effortCalloutDismissed?: boolean // v1 - legacy, read to suppress v2 for Pro users who already saw it
   effortCalloutV2Dismissed?: boolean
-
 
   // Idle-return dialog tracking
   idleReturnDismissed?: boolean // "Don't ask again" picked
@@ -337,12 +331,6 @@ export type GlobalConfig = {
 
   // Skill usage tracking for autocomplete ranking
   skillUsage?: Record<string, { usageCount: number; lastUsedAt: number }>
-  // Claude in Chrome settings
-  hasCompletedClaudeInChromeOnboarding?: boolean // Whether Claude in Chrome onboarding has been shown
-  claudeInChromeDefaultEnabled?: boolean // Whether Claude in Chrome is enabled by default (undefined means platform default)
-  cachedChromeExtensionInstalled?: boolean // Cached result of whether Chrome extension is installed
-
-
   // Permission explainer configuration
   permissionExplainerEnabled?: boolean // Enable Haiku-generated explanations for permission requests (default: true)
 
@@ -448,8 +436,6 @@ export const GLOBAL_CONFIG_KEYS = [
   'terminalProgressBarEnabled',
   'showStatusInTerminalTab',
   'respectGitignore',
-  'claudeInChromeDefaultEnabled',
-  'hasCompletedClaudeInChromeOnboarding',
   'copyFullResponse',
   'copyOnSelect',
   'permissionExplainerEnabled',

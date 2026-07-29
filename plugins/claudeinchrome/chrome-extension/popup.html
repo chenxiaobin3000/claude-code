@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Claude Code Browser Bridge</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <h1>Claude Code</h1>
+      <p class="subtitle">本地浏览器连接</p>
+      <section>
+        <div class="row"><span>Native Host</span><strong id="native-status">检查中</strong></div>
+        <div class="row"><span>MCP 会话</span><strong id="mcp-status">检查中</strong></div>
+        <div class="hint" id="native-version"></div>
+      </section>
+      <section>
+        <div id="site-origin" class="origin">当前页面不可授权</div>
+        <label class="toggle">
+          <input id="site-access" type="checkbox">
+          <span>允许访问当前站点</span>
+        </label>
+        <label class="toggle">
+          <input id="all-sites" type="checkbox">
+          <span>允许访问所有网站</span>
+        </label>
+      </section>
+      <button id="reconnect" type="button">重新连接</button>
+      <p id="message" class="message"></p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

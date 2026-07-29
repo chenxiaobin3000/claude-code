@@ -127,7 +127,6 @@ export async function showSetupScreens(
   permissionMode: PermissionMode,
   allowDangerouslySkipPermissions: boolean,
   commands?: Command[],
-  claudeInChrome?: boolean,
   devChannels?: ChannelEntry[],
 ): Promise<boolean> {
   if (
@@ -256,12 +255,6 @@ export async function showSetupScreens(
         }}
       />
     ));
-  }
-
-  // Show Chrome onboarding for first-time Claude in Chrome users
-  if (claudeInChrome && !getGlobalConfig().hasCompletedClaudeInChromeOnboarding) {
-    const { ClaudeInChromeOnboarding } = await import('./components/ClaudeInChromeOnboarding.js');
-    await showSetupDialog(root, done => <ClaudeInChromeOnboarding onDone={done} />);
   }
 
   return onboardingShown;

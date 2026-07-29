@@ -42,7 +42,10 @@
 - 主题仅来自内置主题和 `~/.claude/themes/*.json`；重启读取，不提供编辑器、热更新或插件主题安装。
 - 插件仅支持本地已安装插件；不支持远端市场、自动下载、原生安装、CLI 自更新或插件自动更新。
 - `/cd` 只改变临时 cwd，不迁移项目身份、会话、设置、Hook、插件或 MCP 作用域。
-- 浏览器控制不作为项目内置能力；仅保留对已安装 `claude-in-chrome` 的验收范围。
+- 主程序不内置、不自动启用 Chrome 控制；`--chrome`/`--no-chrome`、`/chrome`、Chrome Settings/Onboarding/通知、隐藏 MCP/Native Host 进程入口、内置 Chrome Skill、MCP 保留名称和专用客户端渲染均已从主干入口移除。
+- Chrome 能力只能由用户显式加载的本地 `claudeinchrome` 插件提供，目标链路固定为：主程序标准插件加载器 → 插件 MCP/Skill → 插件 Native Host → 插件 Chrome 扩展 → Chrome；主干禁止绕过插件直接连接。
+- `plugins/claudeinchrome` 已建立标准 `.claude-plugin/plugin.json` 骨架，Chrome 扩展已归入 `plugins/claudeinchrome/chrome-extension`，固定扩展 ID 为 `dlpofjonbnceelbmpelkfblmnghclmkm`。
+- MCP、Skill 与 Native Host 尚未迁移和验收，因此当前插件不声明这些组件，Chrome 自动化暂不可用且不得回退原主干实现。
 
 ### 工程与验证
 
@@ -56,7 +59,7 @@
 - Anthropic 官方账号、网络 Provider、原生安装器和任何 CLI 自更新能力。
 - ChatGPT/Codex OAuth、云模型供应商专用适配、自动能力探测与隐式请求字段降级。
 - 官方 MCP Registry 预取、远端插件市场、远端插件下载和插件自动更新。
-- 内置浏览器控制、已移除的 `mcp-chrome`、Artifact 工具和 VS Code 插件路线。
+- Anthropic 云端浏览器桥接、已移除的 `mcp-chrome`、Artifact 工具和 VS Code 插件路线。
 - 官方大型测试体系；项目只维护独立的 `scripts/validation` 轻量验证脚本。
 
 ## 未开发路线图
@@ -119,9 +122,14 @@
 ### P3：可选产品能力
 
 - [ ] 支持 macOS 专用、默认关闭的 `sandbox.allowAppleEvents`，并确保该例外不会放宽文件系统、网络或其他平台的边界。
-- [ ] 验收已安装的 `claude-in-chrome`：连接生命周期、权限提示、错误可见性与失败恢复。
+- [ ] 将 `claude-in-chrome` MCP Server、Native Host 实现/清单安装和协议代码从主干迁入 `plugins/claudeinchrome`；插件使用标准本地 MCP 声明启动，主干不得恢复隐藏进程入口、保留 Server 名、自动注入或 in-process 特例。
+- [ ] 将 Chrome Skill、Prompt 和必要的工具展示元数据迁入 `plugins/claudeinchrome`；只在插件启用且 MCP 可用时暴露，未安装插件时不得在系统提示、Skill 列表或工具列表中宣传 Chrome 能力。
+- [ ] 为插件 MCP、Skill 与 Native Host 完成独立轻量验收后，才在插件清单声明对应组件；覆盖插件启用/禁用、加载失败、进程退出、消息上限、权限同步、提示注入和卸载后的能力回收。
+- [ ] 在真实 Chrome 中端到端验收插件：固定扩展 ID、Native Host 安装/刷新、CLI 与 MCP 连接生命周期、Service Worker 休眠后重连、按站点授权、拒绝路径、错误可见性和失败恢复。
+- [ ] 验收核心工具矩阵：标签页枚举/创建、导航、页面读取、查找、表单输入、JavaScript、点击/滚动/键盘、截图与窗口缩放；覆盖页面刷新、标签关闭、非法 Tab ID、Chrome 内部页面、Unicode URL 和超过 Native Messaging 消息上限的结果。
+- [ ] 对 GIF、图片上传、Console/Network 和快捷方式等尚未实现的浏览器工具作出产品决策：补齐实现，或从本地扩展可用工具集合中移除，避免 MCP 广告能力与扩展实现不一致。
 
-完成条件：可选能力须默认关闭、显式启用且不扩大既有安全边界；浏览器仅对外部已安装能力做集成验收，不把浏览器控制实现重新纳入本项目代码。
+完成条件：可选能力须默认关闭或要求显式授权且不扩大既有安全边界；Chrome 能力只能来自标准本地插件，不得存在主干旁路；浏览器连接不得依赖云端账号，广告的工具集合必须与扩展实际实现一致，并通过插件级和真实 Chrome 端到端验收。
 
 ## 维护规则
 

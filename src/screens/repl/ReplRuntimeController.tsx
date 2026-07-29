@@ -363,8 +363,6 @@ const UndercoverAutoCallout =
 import { activityManager } from '../../utils/activityManager.js';
 import { createAbortController } from '../../utils/abortController.js';
 import { MCPConnectionManager } from 'src/services/mcp/MCPConnectionManager.js';
-import { useChromeExtensionNotification } from 'src/hooks/useChromeExtensionNotification.js';
-import { usePromptsFromClaudeInChrome } from 'src/hooks/usePromptsFromClaudeInChrome.js';
 import { getTipToShowOnSpinner, recordShownTip } from 'src/services/tips/tipScheduler.js';
 import type { Theme } from 'src/utils/theme.js';
 import {
@@ -649,7 +647,6 @@ export function REPL({
   useFastModeNotification();
   useDeprecationWarningNotification(mainLoopModel);
   useAntOrgWarningNotification();
-  useChromeExtensionNotification();
   useLspInitializationNotification();
   useTeammateLifecycleNotification();
   const searchExtraToolsHint = useSearchExtraToolsHint();
@@ -663,11 +660,6 @@ export function REPL({
   useManagePlugins({ enabled: !isRemoteSession });
 
   const tasksV2 = useTasksV2WithCollapseEffect();
-
-
-  // Allow Claude in Chrome MCP to send prompts through MCP notifications
-  // and sync permission mode changes to the Chrome extension
-  usePromptsFromClaudeInChrome(isRemoteSession ? EMPTY_MCP_CLIENTS : mcpClients, toolPermissionContext.mode);
 
   // Initialize swarm features: teammate hooks and context
   // Handles both fresh spawns and resumed teammate sessions
@@ -1092,21 +1084,17 @@ export function REPL({
       setIsPromptInputActive,
       trySuggestBgPRIntercept,
     });
-  const {
-    activeRemote,
-    inProgressToolUseIDs,
-    setInProgressToolUseIDs,
-    hasInterruptibleToolInProgressRef,
-  } = useRemoteRuntime({
-    directConnectConfig,
-    sshSession,
-    setMessages,
-    setIsLoading: setIsExternalLoading,
-    setToolUseConfirmQueue,
-    tools: combinedInitialTools,
-    setStreamingToolUses,
-    setStreamMode,
-  });
+  const { activeRemote, inProgressToolUseIDs, setInProgressToolUseIDs, hasInterruptibleToolInProgressRef } =
+    useRemoteRuntime({
+      directConnectConfig,
+      sshSession,
+      setMessages,
+      setIsLoading: setIsExternalLoading,
+      setToolUseConfirmQueue,
+      tools: combinedInitialTools,
+      setStreamingToolUses,
+      setStreamMode,
+    });
 
   const [pastedContents, setPastedContents] = useState<Record<number, PastedContent>>({});
   const [submitCount, setSubmitCount] = useState(0);
@@ -1678,7 +1666,6 @@ export function REPL({
             resolvePromise: resolveOnce,
           },
         ]);
-
       });
     },
     [setAppState, store],
