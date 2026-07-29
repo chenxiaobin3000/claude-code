@@ -9,7 +9,8 @@ import { logEvent } from 'src/services/analytics/index.js'
 import type { ToolPermissionContext } from 'src/Tool.js'
 import { getCwd } from 'src/utils/cwd.js'
 import { pathInAllowedWorkingPath } from 'src/utils/permissions/filesystem.js'
-import { setCwd } from 'src/utils/Shell.js'
+import { setCwd, type ExecOptions } from 'src/utils/Shell.js'
+import type { ExecResult } from 'src/utils/ShellCommand.js'
 import { shouldMaintainProjectWorkingDir } from 'src/utils/envUtils.js'
 import { maybeResizeAndDownsampleImageBuffer } from 'src/utils/imageResizer.js'
 import { getMaxOutputLength } from 'src/utils/shell/outputLimits.js'
@@ -166,6 +167,25 @@ export function formatOutput(content: string): {
 
 export const stdErrAppendShellResetMessage = (stderr: string): string =>
   `${stderr.trim()}\nShell cwd was reset to ${getOriginalCwd()}`
+
+export function createShellCwdPolicy(
+  toolPermissionContext: ToolPermissionContext,
+): NonNullable<ExecOptions['cwdPolicy']> {
+  return {
+    fallbackCwd: getOriginalCwd(),
+    isAllowed: candidateCwd =>
+      pathInAllowedWorkingPath(candidateCwd, toolPermissionContext),
+  }
+}
+
+export function formatShellCwdResetMessage(
+  reset: NonNullable<ExecResult['cwdReset']>,
+): string {
+  if (reset.reason === 'cwd_unavailable') {
+    return `Shell cwd "${reset.attemptedCwd}" was unavailable and was reset to "${reset.fallbackCwd}".`
+  }
+  return `Shell cwd change to "${reset.attemptedCwd}" was rejected because it is outside the authorized working directories; cwd was reset to "${reset.fallbackCwd}".`
+}
 
 export function resetCwdIfOutsideProject(
   toolPermissionContext: ToolPermissionContext,

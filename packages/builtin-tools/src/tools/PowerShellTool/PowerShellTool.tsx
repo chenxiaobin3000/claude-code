@@ -50,6 +50,8 @@ import { shouldUseSandbox } from '../BashTool/shouldUseSandbox.js';
 import { BackgroundHint } from '../BashTool/UI.js';
 import {
   buildImageToolResult,
+  createShellCwdPolicy,
+  formatShellCwdResetMessage,
   isImageOutput,
   resetCwdIfOutsideProject,
   resizeShellImageOutput,
@@ -568,6 +570,9 @@ export const PowerShellTool = buildTool({
         isMainThread,
         toolUseId: toolUseContext.toolUseId,
         agentId: toolUseContext.agentId,
+        cwdPolicy: isMainThread
+          ? createShellCwdPolicy(getAppState().toolPermissionContext)
+          : undefined,
       });
 
       let generatorResult;
@@ -624,7 +629,9 @@ export const PowerShellTool = buildTool({
       // Start-Sleep 60`), and BashTool has no such early return — its
       // backgrounded results flow through resetCwdIfOutsideProject at :945.
       let stderrForShellReset = '';
-      if (isMainThread) {
+      if (result.cwdReset) {
+        stderrForShellReset = formatShellCwdResetMessage(result.cwdReset);
+      } else if (isMainThread) {
         const appState = toolUseContext.getAppState();
         if (resetCwdIfOutsideProject(appState.toolPermissionContext)) {
           stderrForShellReset = stdErrAppendShellResetMessage('');
@@ -772,6 +779,7 @@ async function* runPowerShellCommand({
   isMainThread,
   toolUseId,
   agentId,
+  cwdPolicy,
 }: {
   input: PowerShellToolInput;
   abortController: AbortController;
@@ -782,6 +790,7 @@ async function* runPowerShellCommand({
   isMainThread?: boolean;
   toolUseId?: string;
   agentId?: AgentId;
+  cwdPolicy?: NonNullable<import('src/utils/Shell.js').ExecOptions['cwdPolicy']>;
 }): AsyncGenerator<
   {
     type: 'progress';
@@ -853,6 +862,7 @@ async function* runPowerShellCommand({
       // persistent Windows Sandbox VM instead of bwrap/sandbox-exec.
       shouldUseSandbox: shouldUseSandbox({ command, dangerouslyDisableSandbox }),
       shouldAutoBackground,
+      cwdPolicy,
     });
   } catch (e) {
     logError(e);

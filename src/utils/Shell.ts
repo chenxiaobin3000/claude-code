@@ -9,10 +9,13 @@ import { logEvent } from 'src/services/analytics/index.js'
 import {
   getOriginalCwd,
   getSessionId,
-  setCwdState,
 } from '../bootstrap/state.js'
 import { generateTaskId } from '../Task.js'
-import { pwd } from './cwd.js'
+import {
+  getCwdFallback,
+  pwd,
+  setCwdForCurrentContext,
+} from './cwd.js'
 import { logForDebugging } from './debug.js'
 import { errorMessage, isENOENT } from './errors.js'
 import { getFsImplementation } from './fsOperations.js'
@@ -245,6 +248,15 @@ export type ExecOptions = {
   shouldAutoBackground?: boolean
   /** When provided, stdout is piped (not sent to file) and this callback fires on each data chunk. */
   onStdout?: (data: string) => void
+  /**
+   * Restricts persistent Shell cwd changes. The child command may visit any
+   * path allowed by its own permission decision, but only an authorized
+   * working directory can become the cwd of a later tool call.
+   */
+  cwdPolicy?: {
+    fallbackCwd: string
+    isAllowed: (candidateCwd: string) => boolean
+  }
 }
 
 /**
@@ -264,6 +276,7 @@ export async function exec(
     shouldUseSandbox,
     shouldAutoBackground,
     onStdout,
+    cwdPolicy,
   } = options ?? {}
   const commandTimeout = timeout || DEFAULT_TIMEOUT
 
@@ -299,23 +312,55 @@ export async function exec(
   let commandString = builtCommand
 
   let cwd = pwd()
+  let initialCwdReset:
+    | NonNullable<import('./ShellCommand.js').ExecResult['cwdReset']>
+    | undefined
 
   // Recover if the current working directory no longer exists on disk.
   // This can happen when a command deletes its own CWD (e.g., temp dir cleanup).
   try {
     await realpath(cwd)
   } catch {
-    const fallback = getOriginalCwd()
+    const fallback = getCwdFallback()
     logForDebugging(
       `Shell CWD "${cwd}" no longer exists, recovering to "${fallback}"`,
     )
     try {
       await realpath(fallback)
-      setCwdState(fallback)
+      setCwd(fallback)
+      initialCwdReset = {
+        attemptedCwd: cwd,
+        fallbackCwd: fallback,
+        reason: 'cwd_unavailable',
+      }
       cwd = fallback
     } catch {
       return createFailedCommand(
         `Working directory "${cwd}" no longer exists. Please restart Claude from an existing directory.`,
+      )
+    }
+  }
+
+  // `/cd` is intentionally a main-session temporary cwd command, but it must
+  // not become a way to start Shell inside a directory that was never added to
+  // the working-directory permission scope. Enforce the same policy before
+  // spawn as after a child `cd`, so no command executes from an unauthorized
+  // directory even briefly.
+  if (cwdPolicy && !cwdPolicy.isAllowed(cwd)) {
+    try {
+      const fallback = getFsImplementation().realpathSync(
+        cwdPolicy.fallbackCwd,
+      )
+      setCwd(fallback)
+      initialCwdReset = {
+        attemptedCwd: cwd,
+        fallbackCwd: fallback,
+        reason: 'outside_authorized_directories',
+      }
+      cwd = fallback
+    } catch {
+      return createFailedCommand(
+        `Working directory "${cwd}" is outside the authorized working directories and the safe fallback is unavailable.`,
       )
     }
   }
@@ -428,6 +473,12 @@ export async function exec(
         return result
       },
     })
+    if (initialCwdReset) {
+      shellCommand.result = shellCommand.result.then(result => {
+        result.cwdReset = initialCwdReset
+        return result
+      })
+    }
     return shellCommand
   }
 
@@ -516,7 +567,10 @@ export async function exec(
         ? posixPathToWindowsPath(cwdFilePath)
         : cwdFilePath
 
-    void shellCommand.result.then(async result => {
+    shellCommand.result = shellCommand.result.then(async result => {
+      if (initialCwdReset) {
+        result.cwdReset = initialCwdReset
+      }
       // On Linux, bwrap creates 0-byte mount-point files on the host to deny
       // writes to non-existent paths (.bashrc, HEAD, etc.). These persist after
       // bwrap exits as ghost dotfiles in cwd. Cleanup is synchronous and a no-op
@@ -538,9 +592,29 @@ export async function exec(
           // NFD on macOS APFS. Normalize before comparing so Unicode paths
           // don't false-positive as "changed" on every command.
           if (newCwd.normalize('NFC') !== cwd) {
-            setCwd(newCwd, cwd)
-            invalidateSessionEnvCache()
-            void onCwdChangedForHooks(cwd, newCwd)
+            const normalizedNewCwd = newCwd.normalize('NFC')
+            if (cwdPolicy && !cwdPolicy.isAllowed(normalizedNewCwd)) {
+              const fallback = getFsImplementation().realpathSync(
+                cwdPolicy.fallbackCwd,
+              )
+              setCwd(fallback)
+              result.cwdReset = {
+                attemptedCwd: normalizedNewCwd,
+                fallbackCwd: fallback,
+                reason: 'outside_authorized_directories',
+              }
+              logForDebugging(
+                `Rejected persistent Shell CWD "${normalizedNewCwd}"; recovered to authorized directory "${fallback}"`,
+              )
+              if (fallback.normalize('NFC') !== cwd) {
+                invalidateSessionEnvCache()
+                void onCwdChangedForHooks(cwd, fallback)
+              }
+            } else {
+              setCwd(normalizedNewCwd, cwd)
+              invalidateSessionEnvCache()
+              void onCwdChangedForHooks(cwd, normalizedNewCwd)
+            }
           }
         } catch {
           logEvent('tengu_shell_set_cwd', { success: false })
@@ -552,6 +626,7 @@ export async function exec(
       } catch {
         // File may not exist if command failed before pwd -P ran
       }
+      return result
     })
 
     return shellCommand
@@ -595,7 +670,7 @@ export function setCwd(path: string, relativeTo?: string): void {
     throw e
   }
 
-  setCwdState(physicalPath)
+  setCwdForCurrentContext(physicalPath)
   if (process.env.NODE_ENV !== 'test') {
     try {
       logEvent('tengu_shell_set_cwd', {

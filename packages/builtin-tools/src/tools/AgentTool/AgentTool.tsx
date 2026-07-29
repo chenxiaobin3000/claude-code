@@ -4,7 +4,11 @@ import { buildTool, type ToolDef, toolMatchesName } from 'src/Tool.js';
 import type { AssistantMessage, Message as MessageType, NormalizedUserMessage } from 'src/types/message.js';
 import { getQuerySourceForAgent } from 'src/utils/promptCategory.js';
 import { z } from 'zod/v4';
-import { clearInvokedSkillsForAgent, getSdkAgentProgressSummariesEnabled } from 'src/bootstrap/state.js';
+import {
+  clearInvokedSkillsForAgent,
+  getOriginalCwd,
+  getSdkAgentProgressSummariesEnabled,
+} from 'src/bootstrap/state.js';
 import { enhanceSystemPromptWithEnvDetails, getSystemPrompt } from 'src/constants/prompts.js';
 import { isCoordinatorMode } from 'src/coordinator/coordinatorMode.js';
 import { startAgentSummarization } from 'src/services/AgentSummary/agentSummary.js';
@@ -685,6 +689,16 @@ export const AgentTool = buildTool({
       );
     }
 
+    // `/cd` is a main-session-only temporary cwd. A newly spawned agent starts
+    // from the stable session/worktree root unless it has an explicit cwd or
+    // its own isolated worktree. The AsyncLocalStorage scope below prevents
+    // any child cwd mutation from writing back into the main session.
+    const cwdOverridePath =
+      cwd ??
+      worktreeInfo?.worktreePath ??
+      appState.toolPermissionContext.writeIsolationRoot ??
+      getOriginalCwd();
+
     const runAgentParams: Parameters<typeof runAgent>[0] = {
       agentDefinition: selectedAgent,
       promptMessages,
@@ -708,7 +722,10 @@ export const AgentTool = buildTool({
       // returns the override path.
       override: isForkPath
         ? { systemPrompt: forkParentSystemPrompt }
-        : enhancedSystemPrompt && !worktreeInfo && !cwd
+        : enhancedSystemPrompt &&
+            !worktreeInfo &&
+            !cwd &&
+            getCwd() === cwdOverridePath
           ? { systemPrompt: asSystemPrompt(enhancedSystemPrompt) }
           : undefined,
       availableTools: isForkPath ? filterParentToolsForFork(toolUseContext.options.tools) : workerTools,
@@ -722,8 +739,8 @@ export const AgentTool = buildTool({
 
     // Helper to wrap execution with a cwd override: explicit cwd arg (KAIROS)
     // takes precedence over worktree isolation path.
-    const cwdOverridePath = cwd ?? worktreeInfo?.worktreePath;
-    const wrapWithCwd = <T,>(fn: () => T): T => (cwdOverridePath ? runWithCwdOverride(cwdOverridePath, fn) : fn());
+    const wrapWithCwd = <T,>(fn: () => T): T =>
+      runWithCwdOverride(cwdOverridePath, fn);
 
     // Helper to clean up worktree after agent completes
     const cleanupWorktreeIfNeeded = async (): Promise<{

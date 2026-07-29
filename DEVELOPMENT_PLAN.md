@@ -2,7 +2,7 @@
 
 ## 基线
 
-项目当前发行版本为 `2.1.116`。官方对照基线为 Claude Code `2.1.141`；上游功能与行为以 [Claude Code 官方文档](https://code.claude.com/docs/en/overview)和[官方 Changelog](https://code.claude.com/docs/en/changelog)为准。
+项目当前发行版本为 `2.1.116`。官方对照基线固定为 Claude Code `2.1.220`；上游功能与行为以 [Claude Code 官方文档](https://code.claude.com/docs/en/overview)和[官方 Changelog](https://code.claude.com/docs/en/changelog)为准。升级对照版本前必须先更新差异审计和对应验收矩阵，不能使用滚动的“最新版本”作为未冻结的验收目标。
 
 本文件只维护本项目的已固化差异、明确边界和未开发任务。与官方一致的功能不在此重复列出，也不保留历史实施顺序、日期快照或阶段性验收记录。
 
@@ -42,7 +42,7 @@
 - 主题仅来自内置主题和 `~/.claude/themes/*.json`；重启读取，不提供编辑器、热更新或插件主题安装。
 - 插件仅支持本地已安装插件；不支持远端市场、自动下载、原生安装、CLI 自更新或插件自动更新。
 - `/cd` 有意保持为本项目的临时 cwd 命令，不对齐官方的跨项目会话迁移：它只改变主会话后续工具使用的当前目录，不改变启动项目根、Session ID、Transcript/Resume 归属、权限根、Settings、CLAUDE.md、Hook、Skill、Plugin、MCP、Memory、Plan 或 Checkpoint 作用域。
-- `/cd` 的变化不传播给已存在或新建的子 Agent，子 Agent 的 cwd 变化也不得回写主会话；`/clear` 和进程重启恢复到启动项目目录。无参数只报告当前 cwd，失败不得改变现有 cwd。
+- `/cd` 不改变已运行子 Agent 的 cwd；新建 Agent 从稳定的会话/工作树根启动，不继承主会话的临时 `/cd`，子 Agent 的 cwd 变化也不得回写主会话。`/clear` 和进程重启恢复到启动项目目录；无参数只报告当前 cwd，失败不得改变现有 cwd。
 - 主程序不内置、不自动启用 Chrome 控制；`--chrome`/`--no-chrome`、`/chrome`、Chrome Settings/Onboarding/通知、隐藏 MCP/Native Host 进程入口、内置 Chrome Skill、MCP 保留名称和专用客户端渲染均已从主干入口移除。
 - Chrome 能力只能由用户显式加载的本地 `claudeinchrome` 插件提供，目标链路固定为：主程序标准插件加载器 → 插件 MCP/Skill → 插件 Native Host → 插件 Chrome 扩展 → Chrome；主干禁止绕过插件直接连接。
 - `plugins/claudeinchrome` 已建立标准 `.claude-plugin/plugin.json` 骨架，Chrome 扩展已归入 `plugins/claudeinchrome/chrome-extension`，固定扩展 ID 为 `dlpofjonbnceelbmpelkfblmnghclmkm`。
@@ -67,8 +67,10 @@
 
 ### P0：Agent 与后台任务模型
 
-- [ ] 对齐 Shell cwd 规则：主会话的 Bash `cd` 仅在项目根或 `--add-dir`、`/add-dir`、`additionalDirectories` 授权目录内跨命令保留；越界时复位并在工具结果中说明；子代理不继承 cwd 变更。
-- [ ] 为 Bash `cd` 增加规范化路径、符号链接、Windows 盘符/UNC、工作树、会话恢复和 `CwdChanged` Hook 验证，确保 Shell cwd 变化不导致跨项目配置泄漏。
+P0 以 Claude Code `2.1.220` 为冻结对照版本；详细的官方行为、当前实现、目标、明确差异、源码入口和验证入口见 [P0 Agent 与后台任务行为矩阵](P0_AGENT_BEHAVIOR_MATRIX.md)。矩阵中的 `/cd`、OpenAI-compatible Provider、本地安全增强以及云端/远程产品缺失属于明确差异，不参与“与官方一致”的通过判定；Shell 内部 `cd`、Agent、本地后台任务、权限和生命周期仍须按矩阵验收。
+
+- [x] 对齐 Shell cwd 规则：主会话的 Bash 与 PowerShell `cd` 仅在项目根或 `--add-dir`、`/add-dir`、`additionalDirectories` 授权目录内跨命令保留；越界在提交持久 cwd 和触发 `CwdChanged` 前拒绝，复位到稳定根并在工具结果中说明；子代理的 Shell cwd 不跨调用保留。
+- [x] 固化 cwd 规范化与隔离：覆盖符号链接/Junction、Windows 盘符大小写、UNC 拒绝、Git Bash `/tmp` 原生路径转换、工作树、并发 Agent、目录失效恢复和 `CwdChanged` 顺序；新建及恢复 Agent 使用独立 AsyncLocalStorage cwd，不继承或回写主会话临时 `/cd`。
 - [ ] 梳理 Agent、Coordinator、Team 与 Background Session 的状态模型，消除重复状态和相互覆盖。
 - [ ] 明确前台/后台默认值、`background` 覆盖规则与等待行为。
 - [ ] 定义嵌套子代理的最大深度、并发、Token 预算和取消传播。

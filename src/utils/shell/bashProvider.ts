@@ -182,8 +182,17 @@ export async function createBashShellProvider(
       // because the shell parses the entire line before execution. Using eval after
       // sourcing causes a second parsing pass where aliases are now available for expansion.
       commandParts.push(`eval ${quotedCommand}`)
-      // Use `pwd -P` to get the physical path of the current working directory for consistency with `process.cwd()`
-      commandParts.push(`pwd -P >| ${quote([shellCwdFilePath])}`)
+      // Use `pwd -P` to get the physical path of the current working
+      // directory. Git Bash can print virtual mount paths such as `/tmp/...`
+      // which a pure `/c/...` converter cannot map back to the host. Ask
+      // `cygpath` for the native path before persisting the tracker file so
+      // Windows temp directories, drive letters, junctions and UNC paths all
+      // reach the shared cwd policy in one canonical representation.
+      commandParts.push(
+        isWindows
+          ? `cygpath -w "$(pwd -P)" >| ${quote([shellCwdFilePath])}`
+          : `pwd -P >| ${quote([shellCwdFilePath])}`,
+      )
       let commandString = commandParts.join(' && ')
 
       // Apply CLAUDE_CODE_SHELL_PREFIX if set

@@ -1,5 +1,8 @@
 import { promises as fsp } from 'fs'
-import { getSdkAgentProgressSummariesEnabled } from 'src/bootstrap/state.js'
+import {
+  getOriginalCwd,
+  getSdkAgentProgressSummariesEnabled,
+} from 'src/bootstrap/state.js'
 import { getSystemPrompt } from 'src/constants/prompts.js'
 import { isCoordinatorMode } from 'src/coordinator/coordinatorMode.js'
 import type { CanUseToolFn } from 'src/hooks/useCanUseTool.js'
@@ -225,8 +228,12 @@ export async function resumeAgentBackground({
     invocationEmitted: false,
   }
 
+  const resumedCwd =
+    resumedWorktreePath ??
+    appState.toolPermissionContext.writeIsolationRoot ??
+    getOriginalCwd()
   const wrapWithCwd = <T>(fn: () => T): T =>
-    resumedWorktreePath ? runWithCwdOverride(resumedWorktreePath, fn) : fn()
+    runWithCwdOverride(resumedCwd, fn)
 
   void runWithAgentContext(asyncAgentContext, () =>
     wrapWithCwd(() =>

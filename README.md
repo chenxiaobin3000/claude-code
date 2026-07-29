@@ -154,6 +154,7 @@ bun run verify
 ## 项目文档
 
 - [开发计划与差异基线](DEVELOPMENT_PLAN.md)
+- [P0 Agent 与后台任务行为矩阵](P0_AGENT_BEHAVIOR_MATRIX.md)
 - [环境变量](ENVIRONMENT_VARIABLES.md)
 - [Feature Flag 策略](FEATURE_FLAGS.md)
 - [依赖审计](DEPENDENCY_AUDIT.md)

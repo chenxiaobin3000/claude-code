@@ -27,6 +27,12 @@ export type ExecResult = {
   outputTaskId?: string
   /** Error message when the command failed before spawning (e.g., deleted cwd). */
   preSpawnError?: string
+  /** Set when tracked shell cwd was rejected or recovered to a safe directory. */
+  cwdReset?: {
+    attemptedCwd: string
+    fallbackCwd: string
+    reason: 'outside_authorized_directories' | 'cwd_unavailable'
+  }
 }
 
 export type ShellCommand = {

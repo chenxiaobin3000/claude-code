@@ -75,6 +75,8 @@ import {
 } from './UI.js';
 import {
   buildImageToolResult,
+  createShellCwdPolicy,
+  formatShellCwdResetMessage,
   isImageOutput,
   resetCwdIfOutsideProject,
   resizeShellImageOutput,
@@ -799,6 +801,9 @@ export const BashTool = buildTool({
         isMainThread,
         toolUseId: toolUseContext.toolUseId,
         agentId: toolUseContext.agentId,
+        cwdPolicy: preventCwdChanges
+          ? undefined
+          : createShellCwdPolicy(getAppState().toolPermissionContext),
       });
 
       // Consume the generator and capture the return value
@@ -848,7 +853,9 @@ export const BashTool = buildTool({
         }
       }
 
-      if (!preventCwdChanges) {
+      if (result.cwdReset) {
+        stderrForShellReset = formatShellCwdResetMessage(result.cwdReset);
+      } else if (!preventCwdChanges) {
         const appState = getAppState();
         if (resetCwdIfOutsideProject(appState.toolPermissionContext)) {
           stderrForShellReset = stdErrAppendShellResetMessage('');
@@ -984,6 +991,7 @@ async function* runShellCommand({
   isMainThread,
   toolUseId,
   agentId,
+  cwdPolicy,
 }: {
   input: BashToolInput;
   abortController: AbortController;
@@ -994,6 +1002,7 @@ async function* runShellCommand({
   isMainThread?: boolean;
   toolUseId?: string;
   agentId?: AgentId;
+  cwdPolicy?: NonNullable<import('src/utils/Shell.js').ExecOptions['cwdPolicy']>;
 }): AsyncGenerator<
   {
     type: 'progress';
@@ -1052,6 +1061,7 @@ async function* runShellCommand({
     preventCwdChanges,
     shouldUseSandbox: shouldUseSandbox(input),
     shouldAutoBackground,
+    cwdPolicy,
   });
 
   // Start the command execution

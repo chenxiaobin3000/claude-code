@@ -78,14 +78,14 @@ for (const [label, source, required] of [
   [
     'Agent worktree cwd selection',
     agentToolSource,
-    'const cwdOverridePath = cwd ?? worktreeInfo?.worktreePath',
+    'worktreeInfo?.worktreePath ??',
   ],
   ['async Agent worktree wrapper', agentToolSource, 'wrapWithCwd(() =>'],
   ['sync Agent worktree wrapper', agentToolSource, 'wrapWithCwd(async () =>'],
   [
     'resumed Agent worktree wrapper',
     resumeAgentSource,
-    'runWithCwdOverride(resumedWorktreePath, fn)',
+    'runWithCwdOverride(resumedCwd, fn)',
   ],
   [
     'Agent hard write boundary propagation',

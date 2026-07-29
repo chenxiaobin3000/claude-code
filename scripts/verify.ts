@@ -41,6 +41,7 @@ const validationScripts = [
   'scripts/validation/session-transcript.ts',
   'scripts/validation/clear-resume-rewind.ts',
   'scripts/validation/temporary-cd.ts',
+  'scripts/validation/agent-cwd-isolation.ts',
   'scripts/validation/hook-protocol.ts',
   'scripts/validation/openai-stream.ts',
   'scripts/validation/openai-client.ts',
