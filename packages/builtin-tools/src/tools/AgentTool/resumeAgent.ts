@@ -2,6 +2,7 @@ import { promises as fsp } from 'fs'
 import {
   getOriginalCwd,
   getSdkAgentProgressSummariesEnabled,
+  getSessionId,
 } from 'src/bootstrap/state.js'
 import { getSystemPrompt } from 'src/constants/prompts.js'
 import { isCoordinatorMode } from 'src/coordinator/coordinatorMode.js'
@@ -11,7 +12,12 @@ import { registerAsyncAgent } from 'src/tasks/LocalAgentTask/LocalAgentTask.js'
 import { assembleToolPool } from 'src/tools.js'
 import { filterParentToolsForFork } from 'src/utils/agentToolFilter.js'
 import { asAgentId } from 'src/types/ids.js'
-import { runWithAgentContext } from 'src/utils/agentContext.js'
+import {
+  getAgentContext,
+  isSubagentContext,
+  runWithAgentContext,
+} from 'src/utils/agentContext.js'
+import { reserveAgentExecution } from 'src/utils/agentExecutionPolicy.js'
 import { runWithCwdOverride } from 'src/utils/cwd.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import {
@@ -198,15 +204,35 @@ export async function resumeAgentBackground({
     contentReplacementState: resumedReplacementState,
   }
 
-  // Skip name-registry write — original entry persists from the initial spawn
-  const agentBackgroundTask = registerAsyncAgent({
-    agentId,
-    description: uiDescription,
-    prompt,
-    selectedAgent,
-    setAppState: rootSetAppState,
-    toolUseId: toolUseContext.toolUseId,
+  const parentAgentContext = getAgentContext()
+  const parentSubagentContext = isSubagentContext(parentAgentContext)
+    ? parentAgentContext
+    : undefined
+  const executionReservation = reserveAgentExecution({
+    sessionId: getSessionId(),
+    parentDepth: Math.max(0, (meta?.agentDepth ?? 1) - 1),
+    inheritedLedger: parentSubagentContext?.budgetLedger,
+    countAsNewAgent: false,
   })
+
+  // Skip name-registry write — original entry persists from the initial spawn
+  let agentBackgroundTask: ReturnType<typeof registerAsyncAgent>
+  try {
+    agentBackgroundTask = registerAsyncAgent({
+      agentId,
+      description: uiDescription,
+      prompt,
+      selectedAgent,
+      setAppState: rootSetAppState,
+      parentAbortController: parentSubagentContext
+        ? toolUseContext.abortController
+        : undefined,
+      toolUseId: toolUseContext.toolUseId,
+    })
+  } catch (error) {
+    executionReservation.release()
+    throw error
+  }
 
   const metadata = {
     prompt,
@@ -221,6 +247,8 @@ export async function resumeAgentBackground({
     agentId,
     parentSessionId: getParentSessionId(),
     agentType: 'subagent' as const,
+    depth: executionReservation.depth,
+    budgetLedger: executionReservation.ledger,
     subagentName: selectedAgent.agentType,
     isBuiltIn: isBuiltInAgent(selectedAgent),
     invokingRequestId,
@@ -261,6 +289,7 @@ export async function resumeAgentBackground({
           getSdkAgentProgressSummariesEnabled(),
         getWorktreeResult: async () =>
           resumedWorktreePath ? { worktreePath: resumedWorktreePath } : {},
+        onFinished: executionReservation.release,
       }),
     ),
   )

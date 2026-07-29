@@ -24,6 +24,7 @@
 import { AsyncLocalStorage } from 'async_hooks'
 import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../services/analytics/index.js'
 import { isAgentSwarmsEnabled } from './agentSwarmsEnabled.js'
+import type { AgentBudgetLedger } from './agentExecutionPolicy.js'
 
 /**
  * Context for subagents (Agent tool agents).
@@ -36,6 +37,10 @@ export type SubagentContext = {
   parentSessionId?: string
   /** Agent type - 'subagent' for Agent tool agents */
   agentType: 'subagent'
+  /** Root-relative nesting depth. Direct children of the main session are 1. */
+  depth?: number
+  /** Shared session budget across the complete nested Agent tree. */
+  budgetLedger?: AgentBudgetLedger
   /** The subagent's type name (e.g., "Explore", "Bash", "code-reviewer") */
   subagentName?: string
   /** Whether this is a built-in agent (vs user-defined custom agent) */

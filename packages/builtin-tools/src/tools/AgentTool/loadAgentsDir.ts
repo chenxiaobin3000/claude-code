@@ -502,7 +502,9 @@ export function parseAgentFromJson(
         ? { skills: parsed.skills }
         : {}),
       ...(parsed.initialPrompt ? { initialPrompt: parsed.initialPrompt } : {}),
-      ...(parsed.background ? { background: parsed.background } : {}),
+      ...(parsed.background !== undefined
+        ? { background: parsed.background }
+        : {}),
       ...(parsed.memory ? { memory: parsed.memory } : {}),
       ...(parsed.isolation ? { isolation: parsed.isolation } : {}),
     }
@@ -589,7 +591,11 @@ export function parseAgentFromMarkdown(
     }
 
     const background =
-      backgroundRaw === 'true' || backgroundRaw === true ? true : undefined
+      backgroundRaw === 'true' || backgroundRaw === true
+        ? true
+        : backgroundRaw === 'false' || backgroundRaw === false
+          ? false
+          : undefined
 
     // Parse memory scope
     const VALID_MEMORY_SCOPES: AgentMemoryScope[] = ['user', 'project', 'local']
@@ -742,7 +748,7 @@ export function parseAgentFromMarkdown(
         ? { permissionMode: permissionModeRaw as PermissionMode }
         : {}),
       ...(maxTurns !== undefined ? { maxTurns } : {}),
-      ...(background ? { background } : {}),
+      ...(background !== undefined ? { background } : {}),
       ...(memory ? { memory } : {}),
       ...(isolation ? { isolation } : {}),
     }

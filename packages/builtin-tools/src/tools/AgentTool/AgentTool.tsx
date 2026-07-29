@@ -8,11 +8,11 @@ import {
   clearInvokedSkillsForAgent,
   getOriginalCwd,
   getSdkAgentProgressSummariesEnabled,
+  getSessionId,
 } from 'src/bootstrap/state.js';
 import { enhanceSystemPromptWithEnvDetails, getSystemPrompt } from 'src/constants/prompts.js';
 import { isCoordinatorMode } from 'src/coordinator/coordinatorMode.js';
 import { startAgentSummarization } from 'src/services/AgentSummary/agentSummary.js';
-import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js';
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
@@ -37,7 +37,16 @@ import {
 import { assembleToolPool } from 'src/tools.js';
 import { filterParentToolsForFork } from 'src/utils/agentToolFilter.js';
 import { asAgentId } from 'src/types/ids.js';
-import { runWithAgentContext, type SubagentContext } from 'src/utils/agentContext.js';
+import {
+  getAgentContext,
+  isSubagentContext,
+  runWithAgentContext,
+  type SubagentContext,
+} from 'src/utils/agentContext.js';
+import {
+  reserveAgentExecution,
+  resolveAgentBackgroundDecision,
+} from 'src/utils/agentExecutionPolicy.js';
 import { isAgentSwarmsEnabled } from 'src/utils/agentSwarmsEnabled.js';
 import { getCwd, runWithCwdOverride } from 'src/utils/cwd.js';
 import { logForDebugging } from 'src/utils/debug.js';
@@ -115,18 +124,6 @@ const isBackgroundTasksDisabled =
   // eslint-disable-next-line custom-rules/no-process-env-top-level -- Intentional: schema must be defined at module load
   isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS);
 
-// Auto-background agent tasks after this many ms (0 = disabled)
-// Enabled by env var OR GrowthBook gate (checked lazily since GB may not be ready at module load)
-function getAutoBackgroundMs(): number {
-  if (
-    isEnvTruthy(process.env.CLAUDE_AUTO_BACKGROUND_TASKS) ||
-    getFeatureValue_CACHED_MAY_BE_STALE('tengu_auto_background_agents', false)
-  ) {
-    return 120_000;
-  }
-  return 0;
-}
-
 // Multi-agent type constants are defined inline inside gated blocks to enable dead code elimination
 
 // Base input schema without multi-agent parameters
@@ -144,7 +141,9 @@ const baseInputSchema = lazySchema(() =>
     run_in_background: z
       .boolean()
       .optional()
-      .describe('Set to true to run this agent in the background. You will be notified when it completes.'),
+      .describe(
+        'Defaults to true. Set false only when the caller must wait for this result before continuing.',
+      ),
   }),
 );
 
@@ -530,6 +529,27 @@ export const AgentTool = buildTool({
       permissionMode,
     );
 
+    // Use inline env check instead of coordinatorModule to avoid circular
+    // dependency issues during test module loading.
+    const isCoordinator = feature('COORDINATOR_MODE')
+      ? isEnvTruthy(process.env.CLAUDE_CODE_COORDINATOR_MODE)
+      : false;
+    const forceAsync = isForkSubagentEnabled();
+    const assistantForceAsync = feature('KAIROS') ? appState.kairosEnabled : false;
+    const forcedBackground =
+      isCoordinator ||
+      forceAsync ||
+      assistantForceAsync ||
+      (proactiveModule?.isProactiveActive() ?? false);
+    const backgroundDecision = resolveAgentBackgroundDecision({
+      backgroundTasksDisabled: isBackgroundTasksDisabled,
+      backgroundSupported: !(isInProcessTeammate() && Boolean(teamName)),
+      explicit: run_in_background,
+      agentDefault: selectedAgent.background,
+      forced: forcedBackground,
+    });
+    const shouldRunAsync = backgroundDecision.runInBackground;
+
     logEvent('tengu_agent_tool_selected', {
       agent_type: selectedAgent.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       model: resolvedAgentModel as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -537,7 +557,7 @@ export const AgentTool = buildTool({
       color: selectedAgent.color as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       is_built_in_agent: isBuiltInAgent(selectedAgent),
       is_resume: false,
-      is_async: (run_in_background === true || selectedAgent.background === true) && !isBackgroundTasksDisabled,
+      is_async: shouldRunAsync,
       is_fork: isForkPath,
     });
 
@@ -622,34 +642,9 @@ export const AgentTool = buildTool({
       isBuiltInAgent: isBuiltInAgent(selectedAgent),
       startTime,
       agentType: selectedAgent.agentType,
-      isAsync: (run_in_background === true || selectedAgent.background === true) && !isBackgroundTasksDisabled,
+      isAsync: shouldRunAsync,
     };
 
-    // Use inline env check instead of coordinatorModule to avoid circular
-    // dependency issues during test module loading.
-    const isCoordinator = feature('COORDINATOR_MODE') ? isEnvTruthy(process.env.CLAUDE_CODE_COORDINATOR_MODE) : false;
-
-    // Fork subagent experiment: force ALL spawns async for a unified
-    // <task-notification> interaction model (not just fork spawns — all of them).
-    const forceAsync = isForkSubagentEnabled();
-
-    // Assistant mode: force all agents async. Synchronous subagents hold the
-    // main loop's turn open until they complete — the daemon's inputQueue
-    // backs up, and the first overdue cron catch-up on spawn becomes N
-    // serial subagent turns blocking all user input. Same gate as
-    // executeForkedSlashCommand's fire-and-forget path; the
-    // <task-notification> re-entry there is handled by the else branch
-    // below (registerAsyncAgentTask + notifyOnCompletion).
-    const assistantForceAsync = feature('KAIROS') ? appState.kairosEnabled : false;
-
-    const shouldRunAsync =
-      (run_in_background === true ||
-        selectedAgent.background === true ||
-        isCoordinator ||
-        forceAsync ||
-        assistantForceAsync ||
-        (proactiveModule?.isProactiveActive() ?? false)) &&
-      !isBackgroundTasksDisabled;
     // Assemble the worker's tool pool independently of the parent's.
     // Workers always get their tools from assembleToolPool with their own
     // permission mode, so they aren't affected by the parent's tool
@@ -660,6 +655,16 @@ export const AgentTool = buildTool({
       mode: selectedAgent.permissionMode ?? 'acceptEdits',
     };
     const workerTools = assembleToolPool(workerPermissionContext, appState.mcp.tools);
+
+    const parentAgentContext = getAgentContext();
+    const parentSubagentContext = isSubagentContext(parentAgentContext)
+      ? parentAgentContext
+      : undefined;
+    const executionReservation = reserveAgentExecution({
+      sessionId: getSessionId(),
+      parentDepth: parentSubagentContext?.depth ?? 0,
+      inheritedLedger: parentSubagentContext?.budgetLedger,
+    });
 
     // Create a stable agent ID early so it can be used for worktree slug
     const earlyAgentId = createAgentId();
@@ -675,7 +680,12 @@ export const AgentTool = buildTool({
 
     if (effectiveIsolation === 'worktree') {
       const slug = `agent-${earlyAgentId.slice(0, 8)}`;
-      worktreeInfo = await createAgentWorktree(slug);
+      try {
+        worktreeInfo = await createAgentWorktree(slug);
+      } catch (error) {
+        executionReservation.release();
+        throw error;
+      }
     }
 
     // Fork + worktree: inject a notice telling the child to translate paths
@@ -766,6 +776,7 @@ export const AgentTool = buildTool({
           // writeAgentMetadata handling.
           void writeAgentMetadata(asAgentId(earlyAgentId), {
             agentType: selectedAgent.agentType,
+            agentDepth: executionReservation.depth,
             description,
           }).catch(_err => logForDebugging(`Failed to clear worktree metadata: ${_err}`));
           return {};
@@ -777,17 +788,26 @@ export const AgentTool = buildTool({
 
     if (shouldRunAsync) {
       const asyncAgentId = earlyAgentId;
-      const agentBackgroundTask = registerAsyncAgent({
-        agentId: asyncAgentId,
-        description,
-        prompt,
-        selectedAgent,
-        setAppState: rootSetAppState,
-        // Don't link to parent's abort controller -- background agents should
-        // survive when the user presses ESC to cancel the main thread.
-        // They are killed explicitly via chat:killAgents.
-        toolUseId: toolUseContext.toolUseId,
-      });
+      let agentBackgroundTask: ReturnType<typeof registerAsyncAgent>;
+      try {
+        agentBackgroundTask = registerAsyncAgent({
+          agentId: asyncAgentId,
+          description,
+          prompt,
+          selectedAgent,
+          setAppState: rootSetAppState,
+          // Root background agents survive main-thread ESC. Nested agents are
+          // linked to their immediate parent so subtree cancellation propagates.
+          parentAbortController: parentSubagentContext
+            ? toolUseContext.abortController
+            : undefined,
+          toolUseId: toolUseContext.toolUseId,
+        });
+      } catch (error) {
+        executionReservation.release();
+        await cleanupWorktreeIfNeeded();
+        throw error;
+      }
 
       // Register name → agentId for SendMessage routing. Post-registerAsyncAgent
       // so we don't leave a stale entry if spawn fails. Sync agents skipped —
@@ -807,6 +827,8 @@ export const AgentTool = buildTool({
         // For subagents from main REPL: undefined (no parent session)
         parentSessionId: getParentSessionId(),
         agentType: 'subagent' as const,
+        depth: executionReservation.depth,
+        budgetLedger: executionReservation.ledger,
         subagentName: selectedAgent.agentType,
         isBuiltIn: isBuiltInAgent(selectedAgent),
         invokingRequestId: assistantMessage?.requestId as string | undefined,
@@ -841,6 +863,7 @@ export const AgentTool = buildTool({
             agentIdForCleanup: asyncAgentId,
             enableSummarization: isCoordinator || isForkSubagentEnabled() || getSdkAgentProgressSummariesEnabled(),
             getWorktreeResult: cleanupWorktreeIfNeeded,
+            onFinished: executionReservation.release,
           }),
         ),
       );
@@ -862,6 +885,8 @@ export const AgentTool = buildTool({
     } else {
       // Create an explicit agentId for sync agents
       const syncAgentId = asAgentId(earlyAgentId);
+      let reservationTransferredToBackground = false;
+      let foregroundTokensUsed = 0;
 
       // Set up agent context for sync execution (for analytics attribution)
       const syncAgentContext: SubagentContext = {
@@ -870,6 +895,8 @@ export const AgentTool = buildTool({
         // For subagents from main REPL: undefined (no parent session)
         parentSessionId: getParentSessionId(),
         agentType: 'subagent' as const,
+        depth: executionReservation.depth,
+        budgetLedger: executionReservation.ledger,
         subagentName: selectedAgent.agentType,
         isBuiltIn: isBuiltInAgent(selectedAgent),
         invokingRequestId: assistantMessage?.requestId as string | undefined,
@@ -879,7 +906,7 @@ export const AgentTool = buildTool({
 
       // Wrap entire sync agent execution in context for analytics attribution
       // and optionally in a worktree cwd override for filesystem isolation
-      return runWithAgentContext(syncAgentContext, () =>
+      const foregroundExecution = runWithAgentContext(syncAgentContext, () =>
         wrapWithCwd(async () => {
           const agentMessages: MessageType[] = [];
           const agentStartTime = Date.now();
@@ -912,7 +939,6 @@ export const AgentTool = buildTool({
           // each iteration adds a new .then() reaction to the same pending
           // promise, accumulating callbacks for the lifetime of the agent.
           let backgroundPromise: Promise<{ type: 'background' }> | undefined;
-          let cancelAutoBackground: (() => void) | undefined;
           if (!isBackgroundTasksDisabled) {
             const registration = registerAgentForeground({
               agentId: syncAgentId,
@@ -921,13 +947,14 @@ export const AgentTool = buildTool({
               selectedAgent,
               setAppState: rootSetAppState,
               toolUseId: toolUseContext.toolUseId,
-              autoBackgroundMs: getAutoBackgroundMs() || undefined,
+              parentAbortController: parentSubagentContext
+                ? toolUseContext.abortController
+                : undefined,
             });
             foregroundTaskId = registration.taskId;
             backgroundPromise = registration.backgroundSignal.then(() => ({
               type: 'background' as const,
             }));
-            cancelAutoBackground = registration.cancelAutoBackground;
           }
 
           // Track if we've shown the background hint UI
@@ -1011,6 +1038,7 @@ export const AgentTool = buildTool({
                   // Capture the taskId for use in the async callback
                   const backgroundedTaskId = foregroundTaskId;
                   wasBackgrounded = true;
+                  reservationTransferredToBackground = true;
                   // Stop foreground summarization; the backgrounded closure
                   // below owns its own independent stop function.
                   stopForegroundSummarization?.();
@@ -1020,6 +1048,7 @@ export const AgentTool = buildTool({
                   // Continue agent in background and return async result
                   void runWithAgentContext(syncAgentContext, async () => {
                     let stopBackgroundedSummarization: (() => void) | undefined;
+                    let backgroundTokensUsed = foregroundTokensUsed;
                     try {
                       // Clean up the foreground iterator so its finally block runs
                       // (releases MCP connections, session hooks, prompt cache tracking, etc.)
@@ -1071,6 +1100,7 @@ export const AgentTool = buildTool({
                         }
                       }
                       const agentResult = finalizeAgentTool(agentMessages, backgroundedTaskId, metadata);
+                      backgroundTokensUsed = agentResult.totalTokens;
 
                       // Mark task completed FIRST so TaskOutput(block=true)
                       // unblocks immediately. classifyHandoffIfNeeded and
@@ -1154,6 +1184,7 @@ export const AgentTool = buildTool({
                         ...worktreeResult,
                       });
                     } finally {
+                      executionReservation.release(backgroundTokensUsed);
                       stopBackgroundedSummarization?.();
                       clearInvokedSkillsForAgent(syncAgentId);
                       clearDumpState(syncAgentId);
@@ -1331,10 +1362,8 @@ export const AgentTool = buildTool({
             // Skip if backgrounded — the backgrounded agent's finally handles cleanup
             if (!wasBackgrounded) {
               clearDumpState(syncAgentId);
+              foregroundTokensUsed = getTokenCountFromTracker(syncTracker);
             }
-
-            // Cancel auto-background timer if agent completed before it fired
-            cancelAutoBackground?.();
 
             // Clean up worktree if applicable (in finally to handle abort/error paths)
             // Skip if backgrounded — the background continuation is still running in it
@@ -1402,6 +1431,11 @@ export const AgentTool = buildTool({
           };
         }),
       );
+      return Promise.resolve(foregroundExecution).finally(() => {
+        if (!reservationTransferredToBackground) {
+          executionReservation.release(foregroundTokensUsed);
+        }
+      });
     }
   },
   isReadOnly() {

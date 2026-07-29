@@ -99,11 +99,6 @@ export function filterToolsForAgent({
     }
     if (isAsync && !ASYNC_AGENT_ALLOWED_TOOLS.has(tool.name)) {
       if (isAgentSwarmsEnabled() && isInProcessTeammate()) {
-        // Allow AgentTool for in-process teammates to spawn sync subagents.
-        // Validation in AgentTool.call() prevents background agents and teammate spawning.
-        if (toolMatchesName(tool, AGENT_TOOL_NAME)) {
-          return true
-        }
         // Allow task tools for in-process teammates to coordinate via shared task list
         if (IN_PROCESS_TEAMMATE_ALLOWED_TOOLS.has(tool.name)) {
           return true
@@ -193,9 +188,9 @@ export function resolveAgentTools(
         // Parse comma-separated agent types: "worker, researcher" → ["worker", "researcher"]
         allowedAgentTypes = ruleContent.split(',').map(s => s.trim())
       }
-      // For sub-agents, Agent is excluded by filterToolsForAgent — mark the spec
-      // valid for allowedAgentTypes tracking but skip tool resolution.
-      if (!isMainThread) {
+      // Some constrained contexts may still remove Agent entirely. Preserve
+      // allowedAgentTypes metadata without advertising an unavailable tool.
+      if (!isMainThread && !availableToolMap.has(AGENT_TOOL_NAME)) {
         validTools.push(toolSpec)
         continue
       }
@@ -528,6 +523,7 @@ export async function runAsyncAgentLifecycle({
   agentIdForCleanup,
   enableSummarization,
   getWorktreeResult,
+  onFinished,
 }: {
   taskId: string
   abortController: AbortController
@@ -544,11 +540,12 @@ export async function runAsyncAgentLifecycle({
     worktreePath?: string
     worktreeBranch?: string
   }>
+  onFinished?: (tokensUsed: number) => void
 }): Promise<void> {
   let stopSummarization: (() => void) | undefined
   const agentMessages: MessageType[] = []
+  const tracker = createProgressTracker()
   try {
-    const tracker = createProgressTracker()
     const resolveActivity = createActivityDescriptionResolver(
       toolUseContext.options.tools,
     )
@@ -692,6 +689,7 @@ export async function runAsyncAgentLifecycle({
       ...worktreeResult,
     })
   } finally {
+    onFinished?.(getTokenCountFromTracker(tracker))
     clearInvokedSkillsForAgent(agentIdForCleanup)
     clearDumpState(agentIdForCleanup)
   }

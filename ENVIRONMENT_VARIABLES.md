@@ -17,6 +17,19 @@ Model IDs and endpoints are configured in `~/.claude/models.json`, not with prov
 
 Once text, reasoning, or a tool-call delta has been exposed, the CLI never replays that request automatically: replay can duplicate a tool invocation. It retains the partial response and appends an incomplete-response error; send `continue` to start a new, explicit continuation request. Authentication, context-limit, model, request-schema and response-schema errors are never retried.
 
+## Agent execution
+
+Subagents run in the background by default. A tool call may set `run_in_background: false` when its result is required before the current turn continues; Agent frontmatter may set `background: true` or `background: false`. `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` disables background execution and has the highest priority. Contexts whose lifecycle requires asynchronous execution (Coordinator, the fork experiment, and Assistant mode) remain backgrounded after the global disable and platform-support checks.
+
+Local safety limits apply to the complete nested Agent tree:
+
+- `CLAUDE_CODE_MAX_AGENT_DEPTH`: maximum root-relative nesting depth; default `2`.
+- `CLAUDE_CODE_MAX_AGENT_COUNT`: maximum new Agents spawned in one session; default `50`.
+- `CLAUDE_CODE_MAX_AGENT_CONCURRENCY`: maximum simultaneously active Agents; default `8`.
+- `CLAUDE_CODE_MAX_AGENT_TOKENS`: cumulative Agent Token budget for the session; default `1000000`.
+
+All values must be positive integers. Exceeding a limit fails the new spawn explicitly instead of silently queueing it. Cancelling a parent Agent propagates to its nested Agent subtree; root background Agents remain independently stoppable.
+
 ## Local Feature Policy
 
 - `FEATURE_<NAME>=0|1` explicitly disables or enables a feature registered in `scripts/feature-policy.ts`.

@@ -43,6 +43,8 @@ const validationScripts = [
   'scripts/validation/temporary-cd.ts',
   'scripts/validation/agent-cwd-isolation.ts',
   'scripts/validation/agent-state-machine.ts',
+  'scripts/validation/agent-background-policy.ts',
+  'scripts/validation/agent-execution-limits.ts',
   'scripts/validation/hook-protocol.ts',
   'scripts/validation/openai-stream.ts',
   'scripts/validation/openai-client.ts',

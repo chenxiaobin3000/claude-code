@@ -72,8 +72,8 @@ P0 以 Claude Code `2.1.220` 为冻结对照版本；详细的官方行为、当
 - [x] 对齐 Shell cwd 规则：主会话的 Bash 与 PowerShell `cd` 仅在项目根或 `--add-dir`、`/add-dir`、`additionalDirectories` 授权目录内跨命令保留；越界在提交持久 cwd 和触发 `CwdChanged` 前拒绝，复位到稳定根并在工具结果中说明；子代理的 Shell cwd 不跨调用保留。
 - [x] 固化 cwd 规范化与隔离：覆盖符号链接/Junction、Windows 盘符大小写、UNC 拒绝、Git Bash `/tmp` 原生路径转换、工作树、并发 Agent、目录失效恢复和 `CwdChanged` 顺序；新建及恢复 Agent 使用独立 AsyncLocalStorage cwd，不继承或回写主会话临时 `/cd`。
 - [x] 统一 Agent、Coordinator、Team 与 Background Session 状态模型：所有本地任务通过同一转换契约归一为 `queued`、`running`、`waiting_permission`、`idle`、`completed`、`failed`、`stopped`、`cancelled`；现有紧凑 `pending/running/completed/failed/killed` 字段只保留为持久化和协议兼容表示。Task Framework 在每次更新时同步权威状态并拒绝迟到回调覆盖终态；Team 的空闲和权限等待进入同一模型且在 UI 可区分。daemon 的 `running/stopped/stale` 仅表示本地守护进程健康状态，不作为任务执行态。
-- [ ] 明确前台/后台默认值、`background` 覆盖规则与等待行为。
-- [ ] 定义嵌套子代理的最大深度、并发、Token 预算和取消传播。
+- [x] 明确前台/后台默认值、`background` 覆盖规则与等待行为：普通 Agent 默认后台运行；全局禁用和不支持后台的上下文保持前台，Coordinator/fork 实验/Assistant 等强制异步上下文其次，调用参数再次，Agent 定义最后覆盖普通默认；显式前台只在调用方必须立即使用结果时等待。
+- [x] 定义嵌套子代理的最大深度、并发、Token 预算和取消传播：默认深度 2、会话 Agent 总数 50、并发 8、累计 Token 1,000,000，可通过已记录的环境变量收紧或放宽；超限明确失败，嵌套前台/后台 Agent 均连接父级取消信号，根后台 Agent 继续独立于主线程 ESC。
 - [ ] 对齐后台优先的子代理生命周期：前台会话可继续工作并收到完成/需输入通知；停止必须永久生效，恢复、重连或守护进程重启不得复活已停止任务。
 - [ ] 支持会话级 Agent 总数上限、嵌套深度上限与可配置的安全预算；在 headless/stream-json 中可选择转发嵌套子代理文本和推理事件，并保持稳定的父 `tool_use` 关联。
 - [ ] 对齐 `/fork` 与 `/subtask` 的职责：`/fork` 生成独立、可管理的后台会话，`/subtask` 保留当前会话内的委派语义；分叉、恢复和清理不得混淆 Transcript 或工作树归属。

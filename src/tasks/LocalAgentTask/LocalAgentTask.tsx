@@ -592,6 +592,7 @@ export function registerAgentForeground({
   setAppState,
   autoBackgroundMs,
   toolUseId,
+  parentAbortController,
 }: {
   agentId: string;
   description: string;
@@ -600,6 +601,7 @@ export function registerAgentForeground({
   setAppState: SetAppState;
   autoBackgroundMs?: number;
   toolUseId?: string;
+  parentAbortController?: AbortController;
 }): {
   taskId: string;
   backgroundSignal: Promise<void>;
@@ -607,7 +609,9 @@ export function registerAgentForeground({
 } {
   void initTaskOutputAsSymlink(agentId, getAgentTranscriptPath(asAgentId(agentId)));
 
-  const abortController = createAbortController();
+  const abortController = parentAbortController
+    ? createChildAbortController(parentAbortController)
+    : createAbortController();
 
   const unregisterCleanup = registerCleanup(async () => {
     killAsyncAgent(agentId, setAppState);

@@ -124,7 +124,6 @@ export const RUNTIME_FEATURE_DEFAULTS: Readonly<Record<string, unknown>> =
     tengu_pebble_leaf_prune: true,
     tengu_chair_sermon: true,
     tengu_lodestone_enabled: true,
-    tengu_auto_background_agents: true,
     tengu_fgts: true,
     tengu_session_memory: true,
     tengu_passport_quail: true,

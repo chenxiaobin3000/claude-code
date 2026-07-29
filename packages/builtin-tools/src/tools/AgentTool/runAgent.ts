@@ -74,6 +74,10 @@ import {
 } from 'src/utils/systemPromptType.js'
 import type { ContentReplacementState } from 'src/utils/toolResultStorage.js'
 import { createAgentId } from 'src/utils/uuid.js'
+import {
+  getAgentContext,
+  isSubagentContext,
+} from 'src/utils/agentContext.js'
 import { resolveAgentTools } from './agentToolUtils.js'
 import { filterIncompleteToolCalls } from './filterIncompleteToolCalls.js'
 import { type AgentDefinition, isBuiltInAgent } from './loadAgentsDir.js'
@@ -739,8 +743,13 @@ export async function* runAgent({
   void recordSidechainTranscript(initialMessages, agentId).catch(_err =>
     logForDebugging(`Failed to record sidechain transcript: ${_err}`),
   )
+  const currentAgentContext = getAgentContext()
   void writeAgentMetadata(agentId, {
     agentType: agentDefinition.agentType,
+    ...(isSubagentContext(currentAgentContext) &&
+      currentAgentContext.depth !== undefined && {
+        agentDepth: currentAgentContext.depth,
+      }),
     ...(worktreePath && { worktreePath }),
     ...(description && { description }),
   }).catch(_err => logForDebugging(`Failed to write agent metadata: ${_err}`))

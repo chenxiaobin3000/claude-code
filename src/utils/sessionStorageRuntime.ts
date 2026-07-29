@@ -260,6 +260,8 @@ function getAgentMetadataPath(agentId: AgentId): string {
 
 export type AgentMetadata = {
   agentType: string
+  /** Root-relative Agent nesting depth, persisted for safe resume. */
+  agentDepth?: number
   /** Worktree path if the agent was spawned with isolation: "worktree" */
   worktreePath?: string
   /** Original task description from the AgentTool input. Persisted so a

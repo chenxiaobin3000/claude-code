@@ -171,8 +171,8 @@ Usage notes:
     !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS) &&
     !isInProcessTeammate()
       ? `
-- You can optionally run agents in the background using the run_in_background parameter. When an agent runs in the background, you will be automatically notified when it completes — do NOT sleep, poll, or proactively check on its progress. Continue with other work or respond to the user instead.
-- **Foreground vs background**: Use foreground (default) when you need the agent's results before you can proceed — e.g., research agents whose findings inform your next steps. Use background when you have genuinely independent work to do in parallel.`
+- Agents run in the background by default. You will be notified automatically when one completes — do NOT sleep, poll, or proactively check its progress. Continue with other work or respond to the user instead.
+- Set \`run_in_background: false\` only when you must use the agent's result before the current turn can proceed. An agent definition's explicit \`background: true|false\` is used when the call omits this field.`
       : ''
   }
 - To continue a previously spawned agent, use ${SEND_MESSAGE_TOOL_NAME} with the agent's ID or name as the \`to\` field. The agent resumes with its full context preserved. ${forkEnabled ? 'Each non-fork Agent invocation starts without context — provide a complete task description.' : 'Each Agent invocation starts fresh — provide a complete task description.'}
