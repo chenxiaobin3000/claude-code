@@ -10,6 +10,7 @@ import type { Root } from '@anthropic/ink';
 import { launchRepl } from '../../replLauncher.js';
 import { hasGrowthBookEnvOverride, initializeGrowthBook } from '../../services/analytics/growthbook.js';
 import type { McpSdkServerConfig, McpServerConfig, ScopedMcpServerConfig } from '../../services/mcp/types.js';
+import { getPluginErrorMessage } from '../../types/plugin.js';
 import type { ToolInputJSONSchema } from '../../Tool.js';
 import {
   createSyntheticOutputTool,
@@ -875,6 +876,7 @@ export async function runDefaultMode(
     strictMcpConfig || isBareMode()
       ? Promise.resolve({
           servers: {} as Record<string, ScopedMcpServerConfig>,
+          errors: [],
         })
       : getClaudeCodeMcpConfigs(dynamicMcpConfig)
   ).then(result => {
@@ -1441,7 +1443,15 @@ export async function runDefaultMode(
   }
 
   // Resolve MCP configs (started early, overlaps with setup/trust dialog work)
-  const { servers: existingMcpConfigs } = await mcpConfigPromise;
+  const {
+    servers: existingMcpConfigs,
+    errors: mcpStartupErrors = [],
+  } = await mcpConfigPromise;
+  if (isNonInteractiveSession) {
+    for (const error of mcpStartupErrors) {
+      writeToStderr(`MCP configuration warning: ${getPluginErrorMessage(error)}\n`);
+    }
+  }
   logForDebugging(
     `[STARTUP] MCP configs resolved in ${mcpConfigResolvedMs}ms (awaited at +${Date.now() - mcpConfigStart}ms)`,
   );

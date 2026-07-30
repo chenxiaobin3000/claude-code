@@ -37,11 +37,14 @@ import {
   type PromptMessage,
   type ResourceLink,
 } from '@modelcontextprotocol/sdk/types.js'
-import mapValues from 'lodash-es/mapValues.js'
 import memoize from 'lodash-es/memoize.js'
 import zipObject from 'lodash-es/zipObject.js'
 import pMap from 'p-map'
-import { getOriginalCwd, getSessionId } from '../../bootstrap/state.js'
+import {
+  getOriginalCwd,
+  getSessionId,
+  onCwdChange,
+} from '../../bootstrap/state.js'
 import type { Command } from '../../commands.js'
 import { PRODUCT_URL } from '../../constants/product.js'
 import type { AppState } from '../../state/AppState.js'
@@ -74,6 +77,16 @@ import {
   maybeResizeAndDownsampleImageBuffer,
 } from '../../utils/imageResizer.js'
 import { logMCPDebug, logMCPError } from '../../utils/log.js'
+import {
+  completeMonitorMcpTask,
+  failMonitorMcpTask,
+  registerMonitorMcpTask,
+} from '../../tasks/MonitorMcpTask/MonitorMcpTask.js'
+import {
+  appendTaskOutput,
+  flushTaskOutput,
+  getTaskOutputPath,
+} from '../../utils/task/diskOutput.js'
 import {
   getBinaryBlobSavedMessage,
   getFormatDescription,
@@ -113,6 +126,17 @@ import {
 import { buildMcpToolName } from './mcpStringUtils.js'
 import { normalizeNameForMCP } from './normalization.js'
 import { getLoggingSafeMcpBaseUrl } from './utils.js'
+import {
+  getMcpStartupBackoffMs,
+  isRemoteMcpConfig,
+  isTransientMcpStartupError,
+  MCP_STARTUP_MAX_ATTEMPTS,
+} from './retryPolicy.js'
+import {
+  redactMcpError,
+  redactMcpHeaders,
+  redactMcpUrl,
+} from './security.js'
 
 // Package imports — delegate to mcp-client package utilities where applicable
 import {
@@ -491,6 +515,28 @@ function isLocalMcpServer(config: ScopedMcpServerConfig): boolean {
   return !config.type || config.type === 'stdio' || config.type === 'sdk'
 }
 
+const rootAwareClients = new Set<Client>()
+const DEFAULT_MCP_TOOL_BACKGROUND_THRESHOLD_MS = 30_000
+
+function getMcpToolBackgroundThresholdMs(): number {
+  const configured = Number(process.env.MCP_TOOL_BACKGROUND_THRESHOLD_MS)
+  return Number.isFinite(configured) && configured >= 0
+    ? configured
+    : DEFAULT_MCP_TOOL_BACKGROUND_THRESHOLD_MS
+}
+
+// `/cd` changes the temporary execution directory but not project identity or
+// the single root returned by roots/list. The notification still lets servers
+// invalidate cwd-sensitive caches without widening the filesystem boundary.
+onCwdChange(() => {
+  for (const client of rootAwareClients) {
+    void client.sendRootsListChanged().catch(() => {
+      // A closing transport can race with cwd changes. Reconnection will
+      // initialize the server with the current state.
+    })
+  }
+})
+
 // For the IDE MCP servers, we only include specific tools
 const ALLOWED_IDE_TOOLS = ['mcp__ide__executeCode', 'mcp__ide__getDiagnostics']
 function isIncludedMcpTool(tool: Tool): boolean {
@@ -603,7 +649,10 @@ export const connectToServer = memoize(
         )
         logMCPDebug(name, `SSE transport initialized, awaiting connection`)
       } else if (serverRef.type === 'sse-ide') {
-        logMCPDebug(name, `Setting up SSE-IDE transport to ${serverRef.url}`)
+        logMCPDebug(
+          name,
+          `Setting up SSE-IDE transport to ${redactMcpUrl(serverRef.url)}`,
+        )
         // IDE servers don't need authentication
         // TODO: Use the auth token provided in the lockfile
         const proxyOptions = getProxyFetchOptions()
@@ -662,7 +711,7 @@ export const connectToServer = memoize(
       } else if (serverRef.type === 'ws') {
         logMCPDebug(
           name,
-          `Initializing WebSocket transport to ${serverRef.url}`,
+          `Initializing WebSocket transport to ${redactMcpUrl(serverRef.url)}`,
         )
 
         const combinedHeaders = await getMcpServerHeaders(name, serverRef)
@@ -677,14 +726,12 @@ export const connectToServer = memoize(
         }
 
         // Redact sensitive headers before logging
-        const wsHeadersForLogging = mapValues(wsHeaders, (value, key) =>
-          key.toLowerCase() === 'authorization' ? '[REDACTED]' : value,
-        )
+        const wsHeadersForLogging = redactMcpHeaders(wsHeaders)
 
         logMCPDebug(
           name,
           `WebSocket transport options: ${jsonStringify({
-            url: serverRef.url,
+            url: redactMcpUrl(serverRef.url),
             headers: wsHeadersForLogging,
             hasSessionAuth: !!sessionIngressToken,
           })}`,
@@ -709,7 +756,10 @@ export const connectToServer = memoize(
         }
         transport = new WebSocketTransport(wsClient)
       } else if (serverRef.type === 'http') {
-        logMCPDebug(name, `Initializing HTTP transport to ${serverRef.url}`)
+        logMCPDebug(
+          name,
+          `Initializing HTTP transport to ${redactMcpUrl(serverRef.url)}`,
+        )
         logMCPDebug(
           name,
           `Node version: ${process.version}, Platform: ${process.platform}`,
@@ -767,18 +817,16 @@ export const connectToServer = memoize(
         }
 
         // Redact sensitive headers before logging
-        const headersForLogging = transportOptions.requestInit?.headers
-          ? mapValues(
-              transportOptions.requestInit.headers as Record<string, string>,
-              (value, key) =>
-                key.toLowerCase() === 'authorization' ? '[REDACTED]' : value,
-            )
-          : undefined
+        const headersForLogging = redactMcpHeaders(
+          transportOptions.requestInit?.headers as
+            | Record<string, string>
+            | undefined,
+        )
 
         logMCPDebug(
           name,
           `HTTP transport options: ${jsonStringify({
-            url: serverRef.url,
+            url: redactMcpUrl(serverRef.url),
             headers: headersForLogging,
             hasAuthProvider: !!authProvider,
             timeoutMs: MCP_REQUEST_TIMEOUT_MS,
@@ -828,6 +876,9 @@ export const connectToServer = memoize(
           env: {
             ...subprocessEnv(),
             ...stdioRef.env,
+            // Stable across a restored CLI session and intentionally reserved:
+            // user-provided server env must not replace the identity.
+            CLAUDE_CODE_SESSION_ID: getSessionId(),
           } as Record<string, string>,
           stderr: 'pipe', // prevents error output from the MCP server from printing to the UI
         })
@@ -904,7 +955,10 @@ export const connectToServer = memoize(
 
       // For HTTP transport, try a basic connectivity test first
       if (serverRef.type === 'http') {
-        logMCPDebug(name, `Testing basic HTTP connectivity to ${serverRef.url}`)
+        logMCPDebug(
+          name,
+          `Testing basic HTTP connectivity to ${redactMcpUrl(serverRef.url)}`,
+        )
         try {
           const testUrl = new URL(serverRef.url)
           logMCPDebug(
@@ -920,7 +974,10 @@ export const connectToServer = memoize(
             logMCPDebug(name, `Using loopback address: ${testUrl.hostname}`)
           }
         } catch (urlError) {
-          logMCPDebug(name, `Failed to parse URL: ${urlError}`)
+          logMCPDebug(
+            name,
+            `Failed to parse URL: ${redactMcpError(urlError)}`,
+          )
         }
       }
 
@@ -958,7 +1015,7 @@ export const connectToServer = memoize(
       try {
         await Promise.race([connectPromise, timeoutPromise])
         if (stderrOutput) {
-          logMCPError(name, `Server stderr: ${stderrOutput}`)
+          logMCPError(name, `Server stderr: ${redactMcpError(stderrOutput)}`)
           stderrOutput = '' // Release accumulated string to prevent memory growth
         }
         const elapsed = Date.now() - connectStartTime
@@ -973,13 +1030,12 @@ export const connectToServer = memoize(
           logMCPDebug(
             name,
             `SSE Connection failed after ${elapsed}ms: ${jsonStringify({
-              url: serverRef.url,
-              error: error.message,
+              url: redactMcpUrl(serverRef.url),
+              error: redactMcpError(error),
               errorType: error.constructor.name,
-              stack: error.stack,
             })}`,
           )
-          logMCPError(name, error)
+          logMCPError(name, redactMcpError(error))
 
           if (error instanceof UnauthorizedError) {
             return handleRemoteAuthFailure(name, serverRef, 'sse')
@@ -993,9 +1049,9 @@ export const connectToServer = memoize(
           }
           logMCPDebug(
             name,
-            `HTTP Connection failed after ${elapsed}ms: ${error.message} (code: ${errorObj.code || 'none'}, errno: ${errorObj.errno || 'none'})`,
+            `HTTP Connection failed after ${elapsed}ms: ${redactMcpError(error)} (code: ${errorObj.code || 'none'}, errno: ${errorObj.errno || 'none'})`,
           )
-          logMCPError(name, error)
+          logMCPError(name, redactMcpError(error))
 
           if (error instanceof UnauthorizedError) {
             return handleRemoteAuthFailure(name, serverRef, 'http')
@@ -1013,11 +1069,12 @@ export const connectToServer = memoize(
         }
         transport.close().catch(() => {})
         if (stderrOutput) {
-          logMCPError(name, `Server stderr: ${stderrOutput}`)
+          logMCPError(name, `Server stderr: ${redactMcpError(stderrOutput)}`)
         }
         throw error
       }
 
+      rootAwareClients.add(client)
       const capabilities = client.getServerCapabilities()
       const serverVersion = client.getServerVersion()
       const rawInstructions = client.getInstructions()
@@ -1259,6 +1316,7 @@ export const connectToServer = memoize(
       }
 
       const cleanup = async () => {
+        rootAwareClients.delete(client)
         // In-process servers (e.g. Chrome MCP) don't have child processes or stderr
         if (inProcessServer) {
           try {
@@ -1480,9 +1538,9 @@ export const connectToServer = memoize(
       })
       logMCPDebug(
         name,
-        `Connection failed after ${connectionDurationMs}ms: ${errorMessage(error)}`,
+        `Connection failed after ${connectionDurationMs}ms: ${redactMcpError(error)}`,
       )
-      logMCPError(name, `Connection failed: ${errorMessage(error)}`)
+      logMCPError(name, `Connection failed: ${redactMcpError(error)}`)
 
       if (inProcessServer) {
         inProcessServer.close().catch(() => {})
@@ -1491,7 +1549,7 @@ export const connectToServer = memoize(
         name,
         type: 'failed' as const,
         config: serverRef,
-        error: errorMessage(error),
+        error: redactMcpError(error),
       }
     }
   },
@@ -1541,6 +1599,34 @@ export function invalidateServerCaches(
   if (feature('MCP_SKILLS')) {
     fetchMcpSkillsForClient!.cache.delete(name)
   }
+}
+
+async function connectToServerWithStartupRetry(
+  name: string,
+  config: ScopedMcpServerConfig,
+  serverStats?: Parameters<typeof connectToServer>[2],
+): Promise<MCPServerConnection> {
+  let connection = await connectToServer(name, config, serverStats)
+  if (!isRemoteMcpConfig(config)) return connection
+
+  for (
+    let attempt = 1;
+    attempt < MCP_STARTUP_MAX_ATTEMPTS &&
+    connection.type === 'failed' &&
+    isTransientMcpStartupError(connection.error);
+    attempt++
+  ) {
+    const delayMs = getMcpStartupBackoffMs(attempt)
+    logMCPDebug(
+      name,
+      `Transient startup failure; retrying connection in ${delayMs}ms (attempt ${attempt + 1}/${MCP_STARTUP_MAX_ATTEMPTS})`,
+    )
+    await new Promise(resolve => setTimeout(resolve, delayMs))
+    invalidateServerCaches(name, config)
+    connection = await connectToServer(name, config, serverStats)
+  }
+
+  return connection
 }
 
 /**
@@ -1731,13 +1817,20 @@ export const fetchToolsForClient = memoizeWithLRU(
               for (let attempt = 0; ; attempt++) {
                 try {
                   const connectedClient = await ensureConnectedClient(client)
-                  const mcpResult = await callMCPToolWithUrlElicitationRetry({
+                  const callAbortController = new AbortController()
+                  const abortForegroundCall = () => callAbortController.abort()
+                  context.abortController.signal.addEventListener(
+                    'abort',
+                    abortForegroundCall,
+                    { once: true },
+                  )
+                  const callPromise = callMCPToolWithUrlElicitationRetry({
                     client: connectedClient,
                     clientConnection: client,
                     tool: tool.name,
                     args,
                     meta,
-                    signal: context.abortController.signal,
+                    signal: callAbortController.signal,
                     setAppState: context.setAppState,
                     onProgress:
                       onProgress && toolUseId
@@ -1750,6 +1843,88 @@ export const fetchToolsForClient = memoizeWithLRU(
                         : undefined,
                     handleElicitation: context.handleElicitation,
                   })
+                  const backgroundThresholdMs =
+                    getMcpToolBackgroundThresholdMs()
+                  let thresholdTimer: NodeJS.Timeout | undefined
+                  const thresholdReached = new Promise<{
+                    background: true
+                  }>(resolve => {
+                    thresholdTimer = setTimeout(
+                      () => resolve({ background: true }),
+                      backgroundThresholdMs,
+                    )
+                  })
+                  void callPromise
+                    .finally(() => {
+                      if (thresholdTimer) clearTimeout(thresholdTimer)
+                      context.abortController.signal.removeEventListener(
+                        'abort',
+                        abortForegroundCall,
+                      )
+                    })
+                    .catch(() => {})
+                  const outcome = await Promise.race([
+                    callPromise.then(result => ({
+                      background: false as const,
+                      result,
+                    })),
+                    thresholdReached,
+                  ])
+
+                  if (outcome.background) {
+                    // The foreground turn no longer owns cancellation after the
+                    // handoff. /tasks and TaskStop own the independent request.
+                    context.abortController.signal.removeEventListener(
+                      'abort',
+                      abortForegroundCall,
+                    )
+                    const setTaskState =
+                      context.setAppStateForTasks ?? context.setAppState
+                    const taskId = registerMonitorMcpTask(setTaskState, {
+                      description: `MCP ${client.name}:${tool.name}`,
+                      serverName: client.name,
+                      resourceUri: `tool:${tool.name}`,
+                      toolUseId,
+                      abortController: callAbortController,
+                    })
+                    const outputFile = getTaskOutputPath(taskId)
+                    void callPromise.then(
+                      async result => {
+                        appendTaskOutput(
+                          taskId,
+                          `${jsonStringify(result.content)}\n`,
+                        )
+                        await flushTaskOutput(taskId)
+                        completeMonitorMcpTask(taskId, setTaskState)
+                      },
+                      async error => {
+                        appendTaskOutput(
+                          taskId,
+                          `MCP tool failed: ${redactMcpError(error)}\n`,
+                        )
+                        await flushTaskOutput(taskId)
+                        failMonitorMcpTask(taskId, setTaskState)
+                      },
+                    )
+                    return {
+                      data: [
+                        {
+                          type: 'text' as const,
+                          text:
+                            `MCP tool is still running in background.\n` +
+                            `Task ID: ${taskId}\nOutput file: ${outputFile}\n` +
+                            `Use TaskOutput with task_id "${taskId}" or Read the output file; use TaskStop to cancel.`,
+                        },
+                      ],
+                    }
+                  }
+
+                  if (thresholdTimer) clearTimeout(thresholdTimer)
+                  context.abortController.signal.removeEventListener(
+                    'abort',
+                    abortForegroundCall,
+                  )
+                  const mcpResult = outcome.result
 
                   // Emit progress when tool completes successfully
                   if (onProgress && toolUseId) {
@@ -2180,7 +2355,11 @@ export async function getMcpToolsCommandsAndResources(
         return
       }
 
-      const client = await connectToServer(name, config, serverStats)
+      const client = await connectToServerWithStartupRetry(
+        name,
+        config,
+        serverStats,
+      )
 
       if (client.type !== 'connected') {
         onConnectionAttempt({

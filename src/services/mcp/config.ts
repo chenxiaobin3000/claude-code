@@ -995,7 +995,10 @@ export async function getClaudeCodeMcpConfigs(
   servers: Record<string, ScopedMcpServerConfig>
   errors: PluginError[]
 }> {
-  const { servers: enterpriseServers } = getMcpConfigsByScope('enterprise')
+  const {
+    servers: enterpriseServers,
+    errors: enterpriseConfigErrors,
+  } = getMcpConfigsByScope('enterprise')
 
   // If an enterprise mcp config exists, do not use any others; this has exclusive control over all MCP servers
   // (enterprise customers often do not want their users to be able to add their own MCP servers).
@@ -1010,22 +1013,35 @@ export async function getClaudeCodeMcpConfigs(
       filtered[name] = serverConfig
     }
 
-    return { servers: filtered, errors: [] }
+    return {
+      servers: filtered,
+      errors: enterpriseConfigErrors.map((error, index) => ({
+        type: 'mcp-config-invalid' as const,
+        source: `enterprise:${index}`,
+        plugin: 'configuration',
+        serverName: 'enterprise',
+        validationError: error.message,
+      })),
+    }
   }
 
   // Load other scopes — unless the managed policy locks MCP to plugin-only.
   // Unlike the enterprise-exclusive block above, this keeps plugin servers.
   const mcpLocked = isRestrictedToPluginOnly('mcp')
-  const noServers: { servers: Record<string, ScopedMcpServerConfig> } = {
+  const noServers: {
+    servers: Record<string, ScopedMcpServerConfig>
+    errors: ValidationError[]
+  } = {
     servers: {},
+    errors: [],
   }
-  const { servers: userServers } = mcpLocked
+  const { servers: userServers, errors: userConfigErrors } = mcpLocked
     ? noServers
     : getMcpConfigsByScope('user')
-  const { servers: projectServers } = mcpLocked
+  const { servers: projectServers, errors: projectConfigErrors } = mcpLocked
     ? noServers
     : getMcpConfigsByScope('project')
-  const { servers: localServers } = mcpLocked
+  const { servers: localServers, errors: localConfigErrors } = mcpLocked
     ? noServers
     : getMcpConfigsByScope('local')
 
@@ -1036,6 +1052,21 @@ export async function getClaudeCodeMcpConfigs(
 
   // Collect MCP-specific errors during server loading
   const mcpErrors: PluginError[] = []
+  for (const [scope, errors] of [
+    ['user', userConfigErrors],
+    ['project', projectConfigErrors],
+    ['local', localConfigErrors],
+  ] as const) {
+    errors.forEach((error, index) => {
+      mcpErrors.push({
+        type: 'mcp-config-invalid',
+        source: `${scope}:${index}`,
+        plugin: 'configuration',
+        serverName: scope,
+        validationError: error.message,
+      })
+    })
+  }
 
   // Log any plugin loading errors - NEVER silently fail in production
   if (pluginResult.errors.length > 0) {
@@ -1082,8 +1113,18 @@ export async function getClaudeCodeMcpConfigs(
   // Filter project servers to only include approved ones
   const approvedProjectServers: Record<string, ScopedMcpServerConfig> = {}
   for (const [name, config] of Object.entries(projectServers)) {
-    if (getProjectMcpServerStatus(name) === 'approved') {
+    const status = getProjectMcpServerStatus(name)
+    if (status === 'approved') {
       approvedProjectServers[name] = config
+    } else if (status === 'pending') {
+      mcpErrors.push({
+        type: 'mcp-config-invalid',
+        source: `project-approval:${name}`,
+        plugin: 'configuration',
+        serverName: name,
+        validationError:
+          'approval required for this project .mcp.json server; run interactively to review it',
+      })
     }
   }
 
@@ -1330,7 +1371,7 @@ export function parseMcpConfigFromFilePath(params: {
 
   if (!parsedJson) {
     logForDebugging(
-      `MCP config is not valid JSON: ${filePath} (scope=${scope}, length=${configContent.length}, first100=${jsonStringify(configContent.slice(0, 100))})`,
+      `MCP config is not valid JSON: ${filePath} (scope=${scope}, length=${configContent.length})`,
       { level: 'error' },
     )
     return {

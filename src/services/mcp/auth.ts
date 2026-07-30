@@ -45,6 +45,7 @@ import { jsonParse, jsonStringify } from '../../utils/slowOperations.js'
 import { logEvent } from '../analytics/index.js'
 import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../analytics/metadata.js'
 import { buildRedirectUri, findAvailablePort } from './oauthPort.js'
+import { redactMcpUrl } from './security.js'
 import type { McpHTTPServerConfig, McpSSEServerConfig } from './types.js'
 import { getLoggingSafeMcpBaseUrl } from './utils.js'
 import { performCrossAppAccess, XaaTokenExchangeError } from './xaa.js'
@@ -93,34 +94,11 @@ type MCPOAuthFlowErrorReason =
 const MAX_LOCK_RETRIES = 5
 
 /**
- * OAuth query parameters that should be redacted from logs.
- * These contain sensitive values that could enable CSRF or session fixation attacks.
- */
-const SENSITIVE_OAUTH_PARAMS = [
-  'state',
-  'nonce',
-  'code_challenge',
-  'code_verifier',
-  'code',
-]
-
-/**
- * Redacts sensitive OAuth query parameters from a URL for safe logging.
- * Prevents exposure of state, nonce, code_challenge, code_verifier, and authorization codes.
+ * Servers may use non-standard credential parameter names, so every query
+ * value is redacted in logs.
  */
 function redactSensitiveUrlParams(url: string): string {
-  try {
-    const parsedUrl = new URL(url)
-    for (const param of SENSITIVE_OAUTH_PARAMS) {
-      if (parsedUrl.searchParams.has(param)) {
-        parsedUrl.searchParams.set(param, '[REDACTED]')
-      }
-    }
-    return parsedUrl.toString()
-  } catch {
-    // Return as-is if not a valid URL
-    return url
-  }
+  return redactMcpUrl(url)
 }
 
 /**
@@ -1170,7 +1148,7 @@ export async function performMCPOAuthFlow(
       server.listen(port, '127.0.0.1', async () => {
         try {
           logMCPDebug(serverName, `Starting SDK auth`)
-          logMCPDebug(serverName, `Server URL: ${serverConfig.url}`)
+          logMCPDebug(serverName, `Server URL: ${redactMcpUrl(serverConfig.url)}`)
 
           // First call to start the auth flow - should redirect
           // Pass the scope and resource_metadata from WWW-Authenticate header if available
@@ -1444,7 +1422,10 @@ export class ClaudeAuthProvider implements OAuthClientProvider {
   get clientMetadataUrl(): string | undefined {
     const override = process.env.MCP_OAUTH_CLIENT_METADATA_URL
     if (override) {
-      logMCPDebug(this.serverName, `Using CIMD URL from env: ${override}`)
+      logMCPDebug(
+        this.serverName,
+        `Using CIMD URL from env: ${redactMcpUrl(override)}`,
+      )
       return override
     }
     return undefined

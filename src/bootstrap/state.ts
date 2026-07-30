@@ -455,8 +455,12 @@ export function getCwdState(): string {
   return STATE.cwd
 }
 
+const cwdChanged = createSignal<[string]>()
+export const onCwdChange = cwdChanged.subscribe
+
 export function setCwdState(cwd: string): void {
   STATE.cwd = cwd.normalize('NFC')
+  cwdChanged.emit(STATE.cwd)
 }
 
 export function getDirectConnectServerUrl(): string | undefined {

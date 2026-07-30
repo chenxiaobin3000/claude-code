@@ -30,6 +30,14 @@ import {
 } from '../../services/mcp/config.js';
 import type { ConfigScope, ScopedMcpServerConfig } from '../../services/mcp/types.js';
 import { describeMcpConfigFilePath, ensureConfigScope, getScopeLabel } from '../../services/mcp/utils.js';
+import {
+  describeMcpArguments,
+  getMcpHttpStatus,
+  redactMcpEnvironment,
+  redactMcpError,
+  redactMcpHeaders,
+  redactMcpUrl,
+} from '../../services/mcp/security.js';
 import { AppStateProvider } from '../../state/AppState.js';
 import { getCurrentProjectConfig, getGlobalConfig, saveCurrentProjectConfig } from '../../utils/config.js';
 import { isFsInaccessible } from '../../utils/errors.js';
@@ -44,12 +52,20 @@ async function checkMcpServerHealth(name: string, server: ScopedMcpServerConfig)
     if (result.type === 'connected') {
       return '✓ Connected';
     } else if (result.type === 'needs-auth') {
-      return '! Needs authentication';
+      return '! HTTP 401 - needs authentication';
+    } else if (result.type === 'failed') {
+      const status = getMcpHttpStatus(result.error);
+      const detail = redactMcpError(result.error);
+      return status
+        ? `✗ HTTP ${status} - ${detail}`
+        : `✗ Failed to connect - ${detail}`;
+    } else if (result.type === 'disabled') {
+      return '○ Disabled';
     } else {
-      return '✗ Failed to connect';
+      return '… Pending';
     }
-  } catch (_error) {
-    return '✗ Connection error';
+  } catch (error) {
+    return `✗ Connection error - ${redactMcpError(error)}`;
   }
 }
 
@@ -172,13 +188,13 @@ export async function mcpListHandler(): Promise<void> {
     for (const { name, server, status } of results) {
       // Intentionally excluding sse-ide servers here since they're internal
       if (server.type === 'sse') {
-        console.log(`${name}: ${server.url} (SSE) - ${status}`);
+        console.log(`${name}: ${redactMcpUrl(server.url)} (SSE) - ${status}`);
       } else if (server.type === 'http') {
-        console.log(`${name}: ${server.url} (HTTP) - ${status}`);
+        console.log(`${name}: ${redactMcpUrl(server.url)} (HTTP) - ${status}`);
       } else if (!server.type || server.type === 'stdio') {
         const stdioServer = server as { command: string; args: string[]; type?: string };
         const args = Array.isArray(stdioServer.args) ? stdioServer.args : [];
-        console.log(`${name}: ${stdioServer.command} ${args.join(' ')} - ${status}`);
+        console.log(`${name}: ${stdioServer.command} ${describeMcpArguments(args)} - ${status}`);
       }
     }
   }
@@ -207,10 +223,10 @@ export async function mcpGetHandler(name: string): Promise<void> {
   // Intentionally excluding sse-ide servers here since they're internal
   if (server.type === 'sse') {
     console.log(`  Type: sse`);
-    console.log(`  URL: ${server.url}`);
+    console.log(`  URL: ${redactMcpUrl(server.url)}`);
     if (server.headers) {
       console.log('  Headers:');
-      for (const [key, value] of Object.entries(server.headers)) {
+      for (const [key, value] of Object.entries(redactMcpHeaders(server.headers) ?? {})) {
         console.log(`    ${key}: ${value}`);
       }
     }
@@ -226,10 +242,10 @@ export async function mcpGetHandler(name: string): Promise<void> {
     }
   } else if (server.type === 'http') {
     console.log(`  Type: http`);
-    console.log(`  URL: ${server.url}`);
+    console.log(`  URL: ${redactMcpUrl(server.url)}`);
     if (server.headers) {
       console.log('  Headers:');
-      for (const [key, value] of Object.entries(server.headers)) {
+      for (const [key, value] of Object.entries(redactMcpHeaders(server.headers) ?? {})) {
         console.log(`    ${key}: ${value}`);
       }
     }
@@ -247,10 +263,10 @@ export async function mcpGetHandler(name: string): Promise<void> {
     console.log(`  Type: stdio`);
     console.log(`  Command: ${server.command}`);
     const args = Array.isArray(server.args) ? server.args : [];
-    console.log(`  Args: ${args.join(' ')}`);
+    console.log(`  Args: ${describeMcpArguments(args)}`);
     if (server.env) {
       console.log('  Environment:');
-      for (const [key, value] of Object.entries(server.env)) {
+      for (const [key, value] of Object.entries(redactMcpEnvironment(server.env) ?? {})) {
         console.log(`    ${key}=${value}`);
       }
     }

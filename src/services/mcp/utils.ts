@@ -1,9 +1,6 @@
 import { createHash } from 'crypto'
 import { join } from 'path'
-import {
-  getIsNonInteractiveSession,
-  getOriginalCwd,
-} from '../../bootstrap/state.js'
+import { getOriginalCwd } from '../../bootstrap/state.js'
 import type { Command } from '../../commands.js'
 import type { AgentMcpServerInfo } from '../../components/mcp/types.js'
 import type { Tool } from '../../Tool.js'
@@ -374,18 +371,6 @@ export function getProjectMcpServerStatus(
   // which would allow RCE attacks via malicious project settings.
   if (
     hasSkipDangerousModePermissionPrompt() &&
-    isSettingSourceEnabled('projectSettings')
-  ) {
-    return 'approved'
-  }
-
-  // In non-interactive mode (SDK, claude -p, piped input), there's no way to
-  // show an approval popup. Auto-approve if projectSettings is enabled since:
-  // 1. The user/developer explicitly chose to run in this mode
-  // 2. For SDK, projectSettings is off by default - they must explicitly enable it
-  // 3. For -p mode, the help text warns to only use in trusted directories
-  if (
-    getIsNonInteractiveSession() &&
     isSettingSourceEnabled('projectSettings')
   ) {
     return 'approved'
