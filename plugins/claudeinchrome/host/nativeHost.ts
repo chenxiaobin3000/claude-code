@@ -6,49 +6,44 @@
  * previously implemented as a Rust NAPI binding but now in pure TypeScript.
  */
 
+import { chmod, mkdir, readdir, rmdir, stat, unlink } from 'node:fs/promises'
+import { createServer, type Server, type Socket } from 'node:net'
+import { platform } from 'node:os'
+import { join } from 'node:path'
 import {
-  appendFile,
-  chmod,
-  mkdir,
-  readdir,
-  rmdir,
-  stat,
-  unlink,
-} from 'fs/promises'
-import { createServer, type Server, type Socket } from 'net'
-import { homedir, platform } from 'os'
-import { join } from 'path'
+  isImplementedChromeToolName,
+  MAX_CHROME_BRIDGE_MESSAGE_BYTES,
+  type ChromeBridgeToolRequest,
+} from '../mcp/index.js'
 import { z } from 'zod'
-import { lazySchema } from '../lazySchema.js'
-import { jsonParse, jsonStringify } from '../slowOperations.js'
-import { getSecureSocketPath, getSocketDir } from './common.js'
+import { getNativeSocketPath, getSocketDirectory } from './paths.js'
 
 const VERSION = '1.0.0'
-const MAX_MESSAGE_SIZE = 1024 * 1024 // 1MB - Max message size that can be sent to Chrome
-
-const LOG_FILE =
-  process.env.USER_TYPE === 'ant'
-    ? join(homedir(), '.claude', 'debug', 'chrome-native-host.txt')
-    : undefined
 
 function log(message: string, ...args: unknown[]): void {
-  if (LOG_FILE) {
-    const timestamp = new Date().toISOString()
-    const formattedArgs = args.length > 0 ? ' ' + jsonStringify(args) : ''
-    const logLine = `[${timestamp}] [Claude Chrome Native Host] ${message}${formattedArgs}\n`
-    // Fire-and-forget: logging is best-effort and callers (including event
-    // handlers) don't await
-    void appendFile(LOG_FILE, logLine).catch(() => {
-      // Ignore file write errors
-    })
-  }
   console.error(`[Claude Chrome Native Host] ${message}`, ...args)
+}
+
+function jsonParse(value: string): unknown {
+  return JSON.parse(value)
+}
+
+function jsonStringify(value: unknown): string {
+  return JSON.stringify(value)
 }
 /**
  * Send a message to stdout (Chrome native messaging protocol)
  */
 export function sendChromeMessage(message: string): void {
   const jsonBytes = Buffer.from(message, 'utf-8')
+  if (
+    jsonBytes.length === 0 ||
+    jsonBytes.length > MAX_CHROME_BRIDGE_MESSAGE_BYTES
+  ) {
+    throw new Error(
+      `Chrome Native Messaging payload must be between 1 and ${MAX_CHROME_BRIDGE_MESSAGE_BYTES} bytes`,
+    )
+  }
   const lengthBuffer = Buffer.alloc(4)
   lengthBuffer.writeUInt32LE(jsonBytes.length, 0)
 
@@ -81,18 +76,11 @@ export async function runChromeNativeHost(): Promise<void> {
   await host.stop()
 }
 
-const messageSchema = lazySchema(() =>
-  z
-    .object({
-      type: z.string(),
-    })
-    .passthrough(),
-)
-
-type ToolRequest = {
-  method: string
-  params?: unknown
-}
+const messageSchema = z
+  .object({
+    type: z.string(),
+  })
+  .passthrough()
 
 type McpClient = {
   id: number
@@ -102,6 +90,7 @@ type McpClient = {
 
 class ChromeNativeHost {
   private mcpClients = new Map<number, McpClient>()
+  private requestOwners = new Map<string, number>()
   private nextClientId = 1
   private server: Server | null = null
   private running = false
@@ -112,10 +101,10 @@ class ChromeNativeHost {
       return
     }
 
-    this.socketPath = getSecureSocketPath()
+    this.socketPath = getNativeSocketPath()
 
     if (platform() !== 'win32') {
-      const socketDir = getSocketDir()
+      const socketDir = getSocketDirectory()
 
       // Migrate legacy socket: if socket dir path exists as a file/socket, remove it
       try {
@@ -200,6 +189,7 @@ class ChromeNativeHost {
       client.socket.destroy()
     }
     this.mcpClients.clear()
+    this.requestOwners.clear()
 
     // Close server
     if (this.server) {
@@ -220,7 +210,7 @@ class ChromeNativeHost {
 
       // Remove directory if empty
       try {
-        const socketDir = getSocketDir()
+        const socketDir = getSocketDirectory()
         const remaining = await readdir(socketDir)
         if (remaining.length === 0) {
           await rmdir(socketDir)
@@ -256,7 +246,7 @@ class ChromeNativeHost {
       )
       return
     }
-    const parsed = messageSchema().safeParse(rawMessage)
+    const parsed = messageSchema.safeParse(rawMessage)
     if (!parsed.success) {
       log('Invalid message from Chrome:', parsed.error.message)
       sendChromeMessage(
@@ -293,23 +283,28 @@ class ChromeNativeHost {
         break
 
       case 'tool_response': {
-        if (this.mcpClients.size > 0) {
-          log(`Forwarding tool response to ${this.mcpClients.size} MCP clients`)
+        const requestId = message.request_id
+        if (typeof requestId !== 'string' || requestId.length === 0) {
+          log('Dropping tool response without request_id')
+          break
+        }
+        const clientId = this.requestOwners.get(requestId)
+        this.requestOwners.delete(requestId)
+        if (clientId === undefined) {
+          log(`Dropping tool response for unknown request ${requestId}`)
+          break
+        }
+        const client = this.mcpClients.get(clientId)
+        if (!client) {
+          log(`Dropping tool response for disconnected client ${clientId}`)
+          break
+        }
 
-          // Extract the data portion (everything except 'type')
-          const { type: _, ...data } = message
-          const responseData = Buffer.from(jsonStringify(data), 'utf-8')
-          const lengthBuffer = Buffer.alloc(4)
-          lengthBuffer.writeUInt32LE(responseData.length, 0)
-          const responseMsg = Buffer.concat([lengthBuffer, responseData])
-
-          for (const [id, client] of this.mcpClients) {
-            try {
-              client.socket.write(responseMsg)
-            } catch (e) {
-              log(`Failed to send to MCP client ${id}:`, e)
-            }
-          }
+        const { type: _, ...data } = message
+        try {
+          this.writeMcpResponse(client, data)
+        } catch (e) {
+          log(`Failed to send response to MCP client ${clientId}:`, e)
         }
         break
       }
@@ -321,6 +316,13 @@ class ChromeNativeHost {
           // Extract the data portion (everything except 'type')
           const { type: _, ...data } = message
           const notificationData = Buffer.from(jsonStringify(data), 'utf-8')
+          if (
+            notificationData.length === 0 ||
+            notificationData.length > MAX_CHROME_BRIDGE_MESSAGE_BYTES
+          ) {
+            log('Dropping oversized Chrome notification')
+            break
+          }
           const lengthBuffer = Buffer.alloc(4)
           lengthBuffer.writeUInt32LE(notificationData.length, 0)
           const notificationMsg = Buffer.concat([
@@ -378,7 +380,10 @@ class ChromeNativeHost {
       while (client.buffer.length >= 4) {
         const length = client.buffer.readUInt32LE(0)
 
-        if (length === 0 || length > MAX_MESSAGE_SIZE) {
+        if (
+          length === 0 ||
+          length > MAX_CHROME_BRIDGE_MESSAGE_BYTES
+        ) {
           log(`Invalid message length from MCP client ${clientId}: ${length}`)
           socket.destroy()
           return
@@ -392,21 +397,57 @@ class ChromeNativeHost {
         client.buffer = client.buffer.slice(4 + length)
 
         try {
-          const request = jsonParse(
-            messageBytes.toString('utf-8'),
-          ) as ToolRequest
+          const request = jsonParse(messageBytes.toString('utf-8')) as Partial<
+            ChromeBridgeToolRequest
+          >
+          if (
+            typeof request.request_id !== 'string' ||
+            request.request_id.length === 0 ||
+            request.method !== 'execute_tool' ||
+            !request.params ||
+            typeof request.params.tool !== 'string' ||
+            !isImplementedChromeToolName(request.params.tool)
+          ) {
+            log(`Rejecting invalid tool request from MCP client ${clientId}`)
+            socket.destroy()
+            return
+          }
+          if (this.requestOwners.has(request.request_id)) {
+            log(`Rejecting duplicate request_id ${request.request_id}`)
+            socket.destroy()
+            return
+          }
+          this.requestOwners.set(request.request_id, clientId)
           log(
             `Forwarding tool request from MCP client ${clientId}: ${request.method}`,
           )
 
           // Forward to Chrome
-          sendChromeMessage(
-            jsonStringify({
-              type: 'tool_request',
-              method: request.method,
-              params: request.params,
-            }),
-          )
+          const nativeRequest = jsonStringify({
+            type: 'tool_request',
+            request_id: request.request_id,
+            method: request.method,
+            params: request.params,
+          })
+          if (
+            Buffer.byteLength(nativeRequest, 'utf8') >
+            MAX_CHROME_BRIDGE_MESSAGE_BYTES
+          ) {
+            this.requestOwners.delete(request.request_id)
+            this.writeMcpResponse(client, {
+              request_id: request.request_id,
+              error: {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Chrome tool request exceeds the ${MAX_CHROME_BRIDGE_MESSAGE_BYTES}-byte bridge limit.`,
+                  },
+                ],
+              },
+            })
+            continue
+          }
+          sendChromeMessage(nativeRequest)
         } catch (e) {
           log(`Failed to parse tool request from MCP client ${clientId}:`, e)
         }
@@ -422,14 +463,34 @@ class ChromeNativeHost {
         `MCP client ${clientId} disconnected. Remaining clients: ${this.mcpClients.size - 1}`,
       )
       this.mcpClients.delete(clientId)
+      for (const [requestId, ownerId] of this.requestOwners) {
+        if (ownerId === clientId) this.requestOwners.delete(requestId)
+      }
 
-      // Notify Chrome of disconnection
-      sendChromeMessage(
-        jsonStringify({
-          type: 'mcp_disconnected',
-        }),
-      )
+      // Keep the extension connected while another MCP client still owns the
+      // shared Native Host socket. Only the final client changes bridge state.
+      if (this.mcpClients.size === 0) {
+        sendChromeMessage(
+          jsonStringify({
+            type: 'mcp_disconnected',
+          }),
+        )
+      }
     })
+  }
+
+  private writeMcpResponse(client: McpClient, response: unknown): void {
+    const responseData = Buffer.from(jsonStringify(response), 'utf8')
+    if (
+      responseData.length === 0 ||
+      responseData.length > MAX_CHROME_BRIDGE_MESSAGE_BYTES
+    ) {
+      log(`Dropping oversized response to MCP client ${client.id}`)
+      return
+    }
+    const lengthBuffer = Buffer.alloc(4)
+    lengthBuffer.writeUInt32LE(responseData.length, 0)
+    client.socket.write(Buffer.concat([lengthBuffer, responseData]))
   }
 }
 
@@ -477,7 +538,10 @@ class ChromeMessageReader {
 
     const length = this.buffer.readUInt32LE(0)
 
-    if (length === 0 || length > MAX_MESSAGE_SIZE) {
+    if (
+      length === 0 ||
+      length > MAX_CHROME_BRIDGE_MESSAGE_BYTES
+    ) {
       log(`Invalid message length: ${length}`)
       this.pendingResolve(null)
       this.pendingResolve = null
@@ -508,7 +572,7 @@ class ChromeMessageReader {
       const length = this.buffer.readUInt32LE(0)
       if (
         length > 0 &&
-        length <= MAX_MESSAGE_SIZE &&
+        length <= MAX_CHROME_BRIDGE_MESSAGE_BYTES &&
         this.buffer.length >= 4 + length
       ) {
         const messageBytes = this.buffer.subarray(4, 4 + length)

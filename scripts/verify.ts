@@ -28,6 +28,8 @@ const validationScripts = [
   'scripts/validation/extension-api-compat.ts',
   'scripts/validation/mcp-lifecycle.ts',
   'scripts/validation/claudeinchrome-plugin-boundary.ts',
+  'scripts/validation/claudeinchrome-protocol.ts',
+  'scripts/validation/claudeinchrome-host.ts',
   'scripts/validation/product-surface-boundary.ts',
   'scripts/validation/observability-boundary.ts',
   'scripts/validation/self-update-boundary.ts',
@@ -315,6 +317,11 @@ async function main(): Promise<void> {
     '--frozen-lockfile',
   ])
   await runStep('TypeScript typecheck', [bunExecutable, 'run', 'typecheck'])
+  await runStep('claudeinchrome Host typecheck', [
+    bunExecutable,
+    'run',
+    'typecheck:chrome-host',
+  ])
   await runStep('Biome lint', [bunExecutable, 'run', 'lint'])
   await runStep('workspace contract, checks, builds, and smoke', [
     bunExecutable,
@@ -367,6 +374,43 @@ async function main(): Promise<void> {
       command: [resolve(projectRoot, 'dist', 'claude.exe')],
     }
     await verifyCliArtifact(exeArtifact, config)
+    await runStep('claudeinchrome standalone Host build', [
+      bunExecutable,
+      'run',
+      'build:chrome-host',
+    ])
+    await runStep('claudeinchrome distributable Plugin validation', [
+      bunExecutable,
+      'run',
+      'scripts/validation/claudeinchrome-distribution.ts',
+    ])
+    const chromeHost = resolve(
+      projectRoot,
+      'dist',
+      'plugins',
+      'claudeinchrome',
+      'claudeinchrome-host.exe',
+    )
+    const chromeHostVersion = await runStep(
+      'claudeinchrome standalone Host version',
+      [chromeHost, '--version'],
+      { capture: true },
+    )
+    if (chromeHostVersion.stdout.trim() !== '1.0.0') {
+      throw new Error(
+        `claudeinchrome Host version mismatch: ${chromeHostVersion.stdout.trim()}`,
+      )
+    }
+    await runStep(
+      'claudeinchrome Native Host EOF lifecycle',
+      [chromeHost],
+      { capture: true, timeoutMs: 10_000 },
+    )
+    await runStep(
+      'claudeinchrome MCP Host EOF lifecycle',
+      [chromeHost, 'mcp'],
+      { capture: true, timeoutMs: 10_000 },
+    )
   } else {
     console.log(
       `\n[verify] SKIP Windows x64 standalone EXE on ${process.platform}-${process.arch}`,

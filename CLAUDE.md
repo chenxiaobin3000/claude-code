@@ -59,7 +59,6 @@
   - `autonomy`：自治状态查询
   - `--bg` / `--background`：后台会话快捷方式
   - `job`：模板任务
-  - `--claude-in-chrome-mcp` / `--chrome-native-host`：Chrome 集成
   - `--computer-use-mcp`：Computer Use MCP 服务
   - `--worktree --tmux`：工作区 tmux 模式
   - `--update` / `--upgrade`：更新子命令
@@ -73,6 +72,7 @@
 | `dist/cli-bun.js` | `bun run build:bun` | `bun dist/cli-bun.js` |
 | `dist/cli-node.js` | `bun run build:vite` | `node dist/cli-node.js` |
 | `dist/claude.exe` | `bun run build:exe` | Windows 独立可执行文件 |
+| `dist/plugins/claudeinchrome/` | `bun run build:chrome-host` | 可选 Chrome 插件完整分发目录；内含独立 Native Messaging/MCP Host |
 
 ### 构建流程（`build.ts`）
 
@@ -172,6 +172,7 @@ bun run dev:inspect      # 带调试器的开发模式
 bun run build:bun        # 构建 Bun 产物
 bun run build:vite       # 构建 Vite/Node 产物
 bun run build:exe        # 构建 Windows 独立 EXE
+bun run build:chrome-host # 构建 claudeinchrome 分发插件与独立 Host
 bun run typecheck        # TypeScript 类型检查
 bun run lint             # Biome 代码检查
 bun run check:fix        # Biome 自动修复

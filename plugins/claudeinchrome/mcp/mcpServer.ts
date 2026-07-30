@@ -8,11 +8,11 @@ import {
 import { BROWSER_TOOLS } from './browserTools.js'
 import { createMcpSocketClient } from './mcpSocketClient.js'
 import { createMcpSocketPool } from './mcpSocketPool.js'
-import { handleToolCall } from './toolCalls.js'
+import { handlePluginToolCall } from './toolCalls.js'
 import type { ClaudeForChromeContext, SocketClient } from './types.js'
 
 /**
- * Create the local socket client for the Chrome extension MCP server.
+ * Create the plugin-local socket client for the Chrome extension MCP server.
  * Exported so Desktop can share a single instance between the registered
  * MCP server and the InternalMcpServerManager (CCD sessions).
  */
@@ -60,7 +60,7 @@ export function createClaudeForChromeMcpServer(
     async (request): Promise<CallToolResult> => {
       logger.info(`[${serverName}] Executing tool: ${request.params.name}`)
 
-      return handleToolCall(
+      return handlePluginToolCall(
         context,
         socketClient,
         request.params.name,

@@ -41,6 +41,10 @@
   ],
   "scripts": {
     "build": "bun run build.ts",
+    "build:chrome-host": "bun run scripts/build-chrome-host.ts",
+    "chrome:fixture": "bun run scripts/validation/claudeinchrome-browser-e2e.ts --serve-fixture",
+    "chrome:verify": "bun run scripts/validation/claudeinchrome-browser-e2e.ts --connection",
+    "chrome:verify:tools": "bun run scripts/validation/claudeinchrome-browser-e2e.ts --matrix",
     "build:exe": "bun run scripts/build-exe.ts",
     "build:vite": "vite build && bun run scripts/post-build.ts",
     "build:vite:only": "vite build",
@@ -62,6 +66,7 @@
     "postinstall": "node scripts/postinstall.cjs",
     "docs:dev": "npx mintlify dev",
     "typecheck": "tsc --noEmit",
+    "typecheck:chrome-host": "tsc -p plugins/claudeinchrome/tsconfig.json --noEmit --pretty false",
     "precheck": "bun run typecheck && bun run check:fix",
     "rcs": "bun run scripts/rcs.ts"
   },
@@ -73,7 +78,6 @@
   "devDependencies": {
     "@agentclientprotocol/sdk": "^0.19.0",
     "@alcalzone/ansi-tokenize": "^0.3.0",
-    "@ant/claude-for-chrome-mcp": "workspace:*",
     "@ant/computer-use-input": "workspace:*",
     "@ant/computer-use-mcp": "workspace:*",
     "@ant/computer-use-swift": "workspace:*",

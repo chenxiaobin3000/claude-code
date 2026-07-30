@@ -9,7 +9,7 @@ import type {
 } from './types.js'
 import { toLoggerDetail } from './types.js'
 
-export const handleToolCall = async (
+export const handlePluginToolCall = async (
   context: ClaudeForChromeContext,
   socketClient: SocketClient,
   name: string,

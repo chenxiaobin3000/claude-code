@@ -10,7 +10,7 @@ import type {
 } from './types.js'
 
 /**
- * Manages connections to multiple Chrome native host sockets (one per Chrome profile).
+ * Manages plugin-local connections to Chrome native host sockets.
  * Routes tool calls to the correct socket based on tab ID.
  *
  * For `tabs_context_mcp`: queries all connected sockets and merges results.

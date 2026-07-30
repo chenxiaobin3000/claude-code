@@ -1,4 +1,6 @@
-export const BROWSER_TOOLS = [
+import { IMPLEMENTED_CHROME_TOOL_NAMES } from '../protocol/index.js'
+
+const BROWSER_TOOL_DEFINITIONS = [
   {
     name: 'javascript_tool',
     description:
@@ -6,10 +8,6 @@ export const BROWSER_TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        action: {
-          type: 'string',
-          description: "Must be set to 'javascript_exec'",
-        },
         text: {
           type: 'string',
           description:
@@ -21,7 +19,7 @@ export const BROWSER_TOOLS = [
             "Tab ID to execute the code in. Must be a tab in the current group. Use tabs_context_mcp first if you don't have a valid tab ID.",
         },
       },
-      required: ['action', 'text', 'tabId'],
+      required: ['text', 'tabId'],
     },
   },
   {
@@ -41,11 +39,6 @@ export const BROWSER_TOOLS = [
           type: 'number',
           description:
             "Tab ID to read from. Must be a tab in the current group. Use tabs_context_mcp first if you don't have a valid tab ID.",
-        },
-        depth: {
-          type: 'number',
-          description:
-            'Maximum depth of the tree to traverse (default: 15). Use a smaller depth if output is too large.',
         },
         ref_id: {
           type: 'string',
@@ -127,12 +120,11 @@ export const BROWSER_TOOLS = [
             'left_click_drag',
             'double_click',
             'triple_click',
-            'zoom',
             'scroll_to',
             'hover',
           ],
           description:
-            'The action to perform:\n* `left_click`: Click the left mouse button at the specified coordinates.\n* `right_click`: Click the right mouse button at the specified coordinates to open context menus.\n* `double_click`: Double-click the left mouse button at the specified coordinates.\n* `triple_click`: Triple-click the left mouse button at the specified coordinates.\n* `type`: Type a string of text.\n* `screenshot`: Take a screenshot of the screen.\n* `wait`: Wait for a specified number of seconds.\n* `scroll`: Scroll up, down, left, or right at the specified coordinates.\n* `key`: Press a specific keyboard key.\n* `left_click_drag`: Drag from start_coordinate to coordinate.\n* `zoom`: Take a screenshot of a specific region for closer inspection.\n* `scroll_to`: Scroll an element into view using its element reference ID from read_page or find tools.\n* `hover`: Move the mouse cursor to the specified coordinates or element without clicking. Useful for revealing tooltips, dropdown menus, or triggering hover states.',
+            'The action to perform:\n* `left_click`: Click the left mouse button at the specified coordinates.\n* `right_click`: Click the right mouse button at the specified coordinates to open context menus.\n* `double_click`: Double-click the left mouse button at the specified coordinates.\n* `triple_click`: Triple-click the left mouse button at the specified coordinates.\n* `type`: Type a string of text.\n* `screenshot`: Take a screenshot of the screen.\n* `wait`: Wait for a specified number of seconds.\n* `scroll`: Scroll up, down, left, or right at the specified coordinates.\n* `key`: Press a specific keyboard key.\n* `left_click_drag`: Drag from start_coordinate to coordinate.\n* `scroll_to`: Scroll an element into view using its element reference ID from read_page or find tools.\n* `hover`: Move the mouse cursor to the specified coordinates or element without clicking. Useful for revealing tooltips, dropdown menus, or triggering hover states.',
         },
         coordinate: {
           type: 'array',
@@ -173,14 +165,6 @@ export const BROWSER_TOOLS = [
           maxItems: 2,
           description:
             '(x, y): The starting coordinates for `left_click_drag`.',
-        },
-        region: {
-          type: 'array',
-          items: { type: 'number' },
-          minItems: 4,
-          maxItems: 4,
-          description:
-            '(x0, y0, x1, y1): The rectangular region to capture for `zoom`. Coordinates define a rectangle from top-left (x0, y0) to bottom-right (x1, y1) in pixels from the viewport origin. Required for `zoom` action. Useful for inspecting small UI elements like icons, buttons, or text.',
         },
         repeat: {
           type: 'number',
@@ -405,7 +389,7 @@ export const BROWSER_TOOLS = [
   {
     name: 'update_plan',
     description:
-      'Present a plan to the user for approval before taking actions. The user will see the domains you intend to visit and your approach. Once approved, you can proceed with actions on the approved domains without additional permission prompts.',
+      'Check that every domain required by a browser plan is already allowed by the local extension. This tool does not grant site access; the user must grant access from the extension popup.',
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -413,7 +397,7 @@ export const BROWSER_TOOLS = [
           type: 'array' as const,
           items: { type: 'string' as const },
           description:
-            "List of domains you will visit (e.g., ['github.com', 'stackoverflow.com']). These domains will be approved for the session when the user accepts the plan.",
+            "List of domains you intend to visit (e.g., ['github.com', 'stackoverflow.com']). Every domain must already be allowed by the extension.",
         },
         approach: {
           type: 'array' as const,
@@ -534,3 +518,18 @@ export const BROWSER_TOOLS = [
     },
   },
 ]
+
+const implementedToolNames = new Set<string>(IMPLEMENTED_CHROME_TOOL_NAMES)
+
+export const BROWSER_TOOLS = BROWSER_TOOL_DEFINITIONS.filter(tool =>
+  implementedToolNames.has(tool.name),
+)
+
+const advertisedToolNames = new Set(BROWSER_TOOLS.map(tool => tool.name))
+for (const name of IMPLEMENTED_CHROME_TOOL_NAMES) {
+  if (!advertisedToolNames.has(name)) {
+    throw new Error(
+      `Chrome tool "${name}" is implemented by the extension but has no MCP definition.`,
+    )
+  }
+}

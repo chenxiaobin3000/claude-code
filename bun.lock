@@ -12,7 +12,6 @@
       "devDependencies": {
         "@agentclientprotocol/sdk": "^0.19.0",
         "@alcalzone/ansi-tokenize": "^0.3.0",
-        "@ant/claude-for-chrome-mcp": "workspace:*",
         "@ant/computer-use-input": "workspace:*",
         "@ant/computer-use-mcp": "workspace:*",
         "@ant/computer-use-swift": "workspace:*",
@@ -110,10 +109,6 @@
         "yaml": "^2.8.3",
         "zod": "^4.3.6",
       },
-    },
-    "packages/@ant/claude-for-chrome-mcp": {
-      "name": "@ant/claude-for-chrome-mcp",
-      "version": "1.0.0",
     },
     "packages/@ant/computer-use-input": {
       "name": "@ant/computer-use-input",
@@ -321,8 +316,6 @@
     "@ai-sdk/react": ["@ai-sdk/react@3.0.228", "", { "dependencies": { "@ai-sdk/provider-utils": "4.0.39", "ai": "6.0.226", "swr": "^2.2.5", "throttleit": "2.1.0" }, "peerDependencies": { "react": "^18 || ~19.0.1 || ~19.1.2 || ^19.2.1" } }, "sha512-EkVDg3j+t82yA4IJNiRqUIzMzYYnljuMao5+N7DD05iVkG8R8p9PruuZjMOqv8Mi2871Z+dkYMifNPQp0gF8iw=="],
 
     "@alcalzone/ansi-tokenize": ["@alcalzone/ansi-tokenize@0.3.0", "", { "dependencies": { "ansi-styles": "^6.2.1", "is-fullwidth-code-point": "^5.0.0" } }, "sha512-p+CMKJ93HFmLkjXKlXiVGlMQEuRb6H0MokBSwUsX+S6BRX8eV5naFZpQJFfJHjRZY0Hmnqy1/r6UWl3x+19zYA=="],
-
-    "@ant/claude-for-chrome-mcp": ["@ant/claude-for-chrome-mcp@workspace:packages/@ant/claude-for-chrome-mcp"],
 
     "@ant/computer-use-input": ["@ant/computer-use-input@workspace:packages/@ant/computer-use-input"],
 

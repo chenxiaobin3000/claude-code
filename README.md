@@ -16,7 +16,7 @@
 
 - **模型与登录**：官方的 Anthropic 登录、官方模型、组织默认/限制模型、Claude API Provider 与相关云端模型能力不适用。本项目只从 `models.json` 加载 OpenAI-compatible 模型；模型 Profile 静态声明，不做服务端模型发现或自动模型替换。
 - **云端与远程产品**：官方的 Web/Desktop/Mobile、Remote Control、GitHub App、Cloud Code Review、Routines、Channels、Artifacts、语音与账户/用量产品均不提供。本项目也不包含官方自动更新、安装器或远端遥测。
-- **插件与浏览器**：官方插件市场、远端安装/更新和插件自动重命名不提供。主程序不提供 Chrome 控制；Chrome 能力只能来自显式加载的本地 `claudeinchrome` 插件。该插件的 MCP、Skill 与 Native Host 尚未迁移和验收，当前不可用。
+- **插件与浏览器**：官方插件市场、远端安装/更新和插件自动重命名不提供。主程序本身不实现 Chrome 操作；Chrome 能力只能由显式加载的本地 `claudeinchrome` 插件提供。插件的标准 MCP、Skill、独立 Host、无运行时分发结构及真实 Chrome 工具矩阵已经验收。
 - **Sandbox**：Windows 上启用 Sandbox 时，Shell 会在 Windows Sandbox VM 内执行，默认只映射启动工作区和只读 Shell 运行时，且固定断网、不传递用户主目录或凭据。`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands` 保持上层语义；Windows 不能精确落实域名白名单、代理和目录内文件 allow/deny 规则，配置这些规则时会 fail-closed，而不会回退宿主执行。
 - **会话路径**：官方 `/cd` 可迁移会话；本项目有意保持临时 cwd 语义，只改变主会话后续工具的当前目录，不迁移项目身份、会话存储、权限根、配置或扩展作用域。
 - **Agent、Hook、MCP 与 Skill**：本地 Agent、后台任务、Hook、Plugin、Skill 与 MCP 已完成当前 P0 基线验收；嵌套 Skill 使用相对启动项目根的限定名，连续 inline Skill 可在同一条输入中组合。`/cd` 的临时 cwd、OpenAI-compatible Provider、本地安全增强和不提供云端 Agent 产品仍是明确差异。本地 `/mcp login`/`logout` 仅管理用户配置的 MCP OAuth 凭据。
@@ -127,18 +127,32 @@ Bash/PowerShell 命令中的 `cd` 属于 Shell cwd 持久化规则，不会触�
 
 本地 Plugin Manifest 可用 `apiVersion` 声明所需的扩展 API SemVer 范围，例如 `"apiVersion": "^1.0.0"`。当前扩展 API 为 `1.0.0`，并与 CLI 产品版本独立；同一主版本只允许新增可选字段或能力，删除、改名、默认行为变化等破坏性修改必须升级主版本。旧 Manifest 缺少该字段时按 v1 契约继续加载。显式范围不兼容时会禁用整个 Plugin，并连带收回其 Hook、Skill、Agent、Command、MCP、LSP 和 Settings，避免组件半加载；依赖该 Plugin 的其他 Plugin 也会按依赖闭包安全降级。MCP 和 ACP 仍使用各自协议的原生版本协商，不复用 Plugin API 版本。
 
-### 本地 Chrome 扩展
+### claudeinchrome 插件与 Chrome 扩展
 
-Chrome 集成边界位于 [`plugins/claudeinchrome`](plugins/claudeinchrome)，目标
-链路为“主程序标准插件加载器 → 插件 MCP/Skill → 插件 Native Host → Chrome
-扩展 → Chrome”。主程序不会自动注入 Chrome MCP，也不提供 `--chrome`、`/chrome`
-或内置 Chrome Skill。
+主程序自身不包含 Chrome 操作实现。Chrome 集成全部位于
+[`plugins/claudeinchrome`](plugins/claudeinchrome)，连接链路为“主程序标准插件
+加载器 → 插件 MCP/Skill → 插件 Native Host → Chrome 扩展 → Chrome”。主程序
+不会自动注入 Chrome MCP，也不提供 `--chrome`、`/chrome` 或内置 Chrome Skill。
 
 Manifest V3 扩展源码位于
 [`plugins/claudeinchrome/chrome-extension`](plugins/claudeinchrome/chrome-extension)，
-固定扩展 ID 为 `dlpofjonbnceelbmpelkfblmnghclmkm`。目前仅完成插件骨架和扩展
-归位；MCP、Skill 与 Native Host 仍待迁移和验收，因此当前不能通过该插件控制
-Chrome。进度与完成条件见 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)。
+固定扩展 ID 为 `dlpofjonbnceelbmpelkfblmnghclmkm`。扩展端已经实现标签页、
+导航、页面读取与交互、截图和窗口缩放等能力。插件目录已经包含标准 MCP 声明、
+正式 Skill、独立 MCP/Native Messaging Host、注册命令和 doctor；旧 workspace
+MCP 包及主程序兼容实现已经删除。真实 Chrome 的连接、授权、Host 重连、拒绝
+路径和核心工具矩阵已经验收，且不依赖 Anthropic 账号或云端浏览器服务。
+
+插件工具与 Native Messaging 协议的权威定义位于
+[`plugins/claudeinchrome/protocol`](plugins/claudeinchrome/protocol)。MCP 只能
+广告扩展已经实现的 11 个工具；GIF、图片上传、Console/Network、快捷方式和
+`computer.zoom` 不属于当前能力。工具请求使用必填 `request_id` 精确匹配响应，
+消息上限为 1 MiB，工具超时为 30 秒。
+
+扩展固定访问所有普通 HTTP/HTTPS 页面，不提供页面授权或站点白名单；Chrome
+内部页、扩展页、文件页和无效 Tab 仍拒绝。真实浏览器验收使用
+`bun run chrome:verify` 检查连接和失效 Tab 拒绝；使用 `bun run chrome:fixture`
+启动本地页面后，`bun run chrome:verify:tools` 覆盖页面读取、交互、截图、
+前进后退、刷新、Unicode URL 与超限结果恢复。
 
 ## 构建与验证
 
@@ -149,6 +163,7 @@ bun run lint
 bun run build
 bun run build:node
 bun run build:exe
+bun run build:chrome-host
 bun run verify
 ```
 
@@ -157,6 +172,8 @@ bun run verify
 - Bun bundle：开发和 Bun 运行时产物。
 - Vite/Rollup Node bundle：Node 兼容分发产物。
 - Bun standalone EXE：Windows standalone EXE 单文件 `claude.exe`。
+- claudeinchrome Plugin：`dist/plugins/claudeinchrome` 是完整分发目录，其中
+  Host 为独立 Native Messaging/MCP 单文件，目标机器无需 Bun 或 Node.js。
 
 项目保持 TypeScript + Bun 实现，不以 Rust 或其他平台原生语言重写 CLI。`claude.exe` 是包含 Bun Runtime 的 standalone 产物；它的目标是免安装运行时分发，而不是追随官方的原生二进制实现或安装/自更新机制。
 

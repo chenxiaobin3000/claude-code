@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { promises as fsPromises } from 'fs'
 import { createConnection } from 'net'
 import type { Socket } from 'net'
@@ -10,6 +11,13 @@ import type {
   PermissionOverrides,
 } from './types.js'
 import { toLoggerDetail } from './types.js'
+import {
+  CHROME_TOOL_TIMEOUT_MS,
+  isImplementedChromeToolName,
+  MAX_CHROME_BRIDGE_MESSAGE_BYTES,
+  type ChromeBridgeToolRequest,
+  type ChromeBridgeToolResponse,
+} from '../protocol/index.js'
 
 export class SocketConnectionError extends Error {
   constructor(message: string) {
@@ -18,19 +26,8 @@ export class SocketConnectionError extends Error {
   }
 }
 
-interface ToolRequest {
-  method: string // "execute_tool"
-  params?: {
-    client_id?: string // "desktop" | "claude-code"
-    tool?: string
-    args?: Record<string, unknown>
-  }
-}
-
-interface ToolResponse {
-  result?: unknown
-  error?: string
-}
+type ToolRequestWithoutId = Omit<ChromeBridgeToolRequest, 'request_id'>
+type ToolResponse = ChromeBridgeToolResponse
 
 interface Notification {
   method: string
@@ -40,7 +37,11 @@ interface Notification {
 type SocketMessage = ToolResponse | Notification
 
 function isToolResponse(message: SocketMessage): message is ToolResponse {
-  return 'result' in message || 'error' in message
+  return (
+    'request_id' in message &&
+    typeof message.request_id === 'string' &&
+    ('result' in message || 'error' in message)
+  )
 }
 
 function isNotification(message: SocketMessage): message is Notification {
@@ -51,7 +52,14 @@ class McpSocketClient {
   private socket: Socket | null = null
   private connected = false
   private connecting = false
-  private responseCallback: ((response: ToolResponse) => void) | null = null
+  private pendingResponses = new Map<
+    string,
+    {
+      resolve: (response: ToolResponse) => void
+      reject: (error: Error) => void
+      timeout: NodeJS.Timeout
+    }
+  >()
   private notificationHandler: ((notification: Notification) => void) | null =
     null
   private responseBuffer = Buffer.alloc(0)
@@ -122,6 +130,14 @@ class McpSocketClient {
 
       while (this.responseBuffer.length >= 4) {
         const length = this.responseBuffer.readUInt32LE(0)
+
+        if (length === 0 || length > MAX_CHROME_BRIDGE_MESSAGE_BYTES) {
+          logger.info(
+            `[${serverName}] Invalid bridge response length: ${length}`,
+          )
+          this.closeSocket()
+          return
+        }
 
         if (this.responseBuffer.length < 4 + length) {
           break
@@ -240,11 +256,11 @@ class McpSocketClient {
   }
 
   private handleResponse(response: ToolResponse): void {
-    if (this.responseCallback) {
-      const callback = this.responseCallback
-      this.responseCallback = null
-      callback(response)
-    }
+    const pending = this.pendingResponses.get(response.request_id)
+    if (!pending) return
+    this.pendingResponses.delete(response.request_id)
+    clearTimeout(pending.timeout)
+    pending.resolve(response)
   }
 
   public setNotificationHandler(
@@ -292,8 +308,8 @@ class McpSocketClient {
   }
 
   private async sendRequest(
-    request: ToolRequest,
-    timeoutMs = 30000,
+    requestWithoutId: ToolRequestWithoutId,
+    timeoutMs = CHROME_TOOL_TIMEOUT_MS,
   ): Promise<ToolResponse> {
     const { serverName } = this.context
 
@@ -305,9 +321,24 @@ class McpSocketClient {
 
     const socket = this.socket
 
+    const request: ChromeBridgeToolRequest = {
+      request_id: randomUUID(),
+      ...requestWithoutId,
+    }
+    const requestJson = JSON.stringify(request)
+    const requestBytes = Buffer.from(requestJson, 'utf-8')
+    if (
+      requestBytes.length === 0 ||
+      requestBytes.length > MAX_CHROME_BRIDGE_MESSAGE_BYTES
+    ) {
+      throw new Error(
+        `[${serverName}] Bridge request exceeds ${MAX_CHROME_BRIDGE_MESSAGE_BYTES} bytes`,
+      )
+    }
+
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        this.responseCallback = null
+        this.pendingResponses.delete(request.request_id)
         reject(
           new SocketConnectionError(
             `[${serverName}] Tool request timed out after ${timeoutMs}ms`,
@@ -315,13 +346,11 @@ class McpSocketClient {
         )
       }, timeoutMs)
 
-      this.responseCallback = response => {
-        clearTimeout(timeout)
-        resolve(response)
-      }
-
-      const requestJson = JSON.stringify(request)
-      const requestBytes = Buffer.from(requestJson, 'utf-8')
+      this.pendingResponses.set(request.request_id, {
+        resolve,
+        reject,
+        timeout,
+      })
 
       const lengthPrefix = Buffer.allocUnsafe(4)
       lengthPrefix.writeUInt32LE(requestBytes.length, 0)
@@ -336,7 +365,10 @@ class McpSocketClient {
     args: Record<string, unknown>,
     _permissionOverrides?: PermissionOverrides,
   ): Promise<unknown> {
-    const request: ToolRequest = {
+    if (!isImplementedChromeToolName(name)) {
+      throw new Error(`Chrome tool "${name}" is not implemented`)
+    }
+    const request: ToolRequestWithoutId = {
       method: 'execute_tool',
       params: {
         client_id: this.context.clientTypeId,
@@ -355,7 +387,9 @@ class McpSocketClient {
    * to dead Chrome). Force reconnect to pick up a fresh native host process
    * and retry once.
    */
-  private async sendRequestWithRetry(request: ToolRequest): Promise<unknown> {
+  private async sendRequestWithRetry(
+    request: ToolRequestWithoutId,
+  ): Promise<unknown> {
     const { serverName, logger } = this.context
 
     try {
@@ -396,6 +430,19 @@ class McpSocketClient {
     }
     this.connected = false
     this.connecting = false
+    this.rejectPendingResponses()
+  }
+
+  private rejectPendingResponses(): void {
+    if (this.pendingResponses.size === 0) return
+    const error = new SocketConnectionError(
+      `[${this.context.serverName}] Bridge connection closed`,
+    )
+    for (const pending of this.pendingResponses.values()) {
+      clearTimeout(pending.timeout)
+      pending.reject(error)
+    }
+    this.pendingResponses.clear()
   }
 
   private cleanup(): void {
@@ -407,7 +454,7 @@ class McpSocketClient {
     this.closeSocket()
     this.reconnectAttempts = 0
     this.responseBuffer = Buffer.alloc(0)
-    this.responseCallback = null
+    this.rejectPendingResponses()
   }
 
   public disconnect(): void {

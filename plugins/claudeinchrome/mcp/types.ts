@@ -1,5 +1,5 @@
 /**
- * Logger 第二参数的可选类型。
+ * 插件 MCP Logger 第二参数的可选类型。
  * 调用方通过 util.format 追加详情，实践中多为 catch 到的异常对象。
  */
 export type LoggerDetail = Error | NodeJS.ErrnoException

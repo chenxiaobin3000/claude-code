@@ -37,18 +37,12 @@ section {
   background: #1e1d1b;
 }
 
-.row,
-.toggle {
+.row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   min-height: 28px;
-}
-
-.toggle {
-  justify-content: flex-start;
-  cursor: pointer;
 }
 
 .ok {
@@ -60,14 +54,9 @@ section {
 }
 
 .hint,
-.origin,
 .message {
   font-size: 12px;
   overflow-wrap: anywhere;
-}
-
-.origin {
-  margin-bottom: 8px;
 }
 
 button {

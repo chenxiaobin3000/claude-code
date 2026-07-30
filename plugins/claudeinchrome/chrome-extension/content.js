@@ -271,6 +271,9 @@ function runComputer(args) {
       new MouseEvent('contextmenu', { ...eventInit, button: 2 }),
     )
   } else {
+    if (typeof element.focus === 'function') {
+      element.focus({ preventScroll: true })
+    }
     const count =
       action === 'double_click' ? 2 : action === 'triple_click' ? 3 : 1
     for (let i = 0; i < count; i++) element.click()

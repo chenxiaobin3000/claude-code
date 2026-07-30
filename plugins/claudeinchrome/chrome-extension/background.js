@@ -1,5 +1,5 @@
 const NATIVE_HOST = 'com.anthropic.claude_code_browser_extension'
-const DEFAULT_SETTINGS = { allowAllSites: false, allowedOrigins: [] }
+const MAX_BRIDGE_MESSAGE_BYTES = 1024 * 1024
 
 let nativePort = null
 let reconnectTimer = null
@@ -84,7 +84,12 @@ function handleNativeMessage(message) {
     case 'tool_request':
       requestQueue = requestQueue
         .then(() => executeToolRequest(message))
-        .catch(error => sendToolResponse(failure(errorMessage(error))))
+        .catch(error =>
+          sendToolResponse(
+            message.request_id,
+            failure(errorMessage(error)),
+          ),
+        )
       break
     case 'error':
       console.error('Native host error:', message.error)
@@ -92,14 +97,39 @@ function handleNativeMessage(message) {
   }
 }
 
-function sendToolResponse(response) {
+function sendToolResponse(requestId, response) {
   if (!nativePort) return
-  nativePort.postMessage({ type: 'tool_response', ...response })
+  let message = {
+    type: 'tool_response',
+    request_id: requestId,
+    ...response,
+  }
+  if (
+    new TextEncoder().encode(JSON.stringify(message)).byteLength >
+    MAX_BRIDGE_MESSAGE_BYTES
+  ) {
+    message = {
+      type: 'tool_response',
+      request_id: requestId,
+      ...failure(
+        `Chrome tool result exceeds the ${MAX_BRIDGE_MESSAGE_BYTES}-byte bridge limit.`,
+      ),
+    }
+  }
+  nativePort.postMessage(message)
 }
 
 async function executeToolRequest(message) {
+  if (
+    typeof message.request_id !== 'string' ||
+    message.request_id.length === 0
+  ) {
+    console.error('Native tool request is missing request_id')
+    return
+  }
   if (message.method !== 'execute_tool') {
     sendToolResponse(
+      message.request_id,
       failure(`Unsupported native request method: ${message.method}`),
     )
     return
@@ -108,21 +138,14 @@ async function executeToolRequest(message) {
   const args = message.params?.args || {}
   try {
     const result = await executeTool(tool, args)
-    sendToolResponse(result)
+    sendToolResponse(message.request_id, result)
   } catch (error) {
-    sendToolResponse(failure(errorMessage(error)))
+    sendToolResponse(message.request_id, failure(errorMessage(error)))
   }
 }
 
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error)
-}
-
-async function getSettings() {
-  return {
-    ...DEFAULT_SETTINGS,
-    ...(await chrome.storage.local.get(DEFAULT_SETTINGS)),
-  }
 }
 
 function originForUrl(url) {
@@ -141,12 +164,6 @@ async function assertTabAllowed(tabId) {
   const origin = originForUrl(tab.url)
   if (!origin) {
     throw new Error(`Tab ${tabId} is not an accessible HTTP(S) page.`)
-  }
-  const settings = await getSettings()
-  if (!settings.allowAllSites && !settings.allowedOrigins.includes(origin)) {
-    throw new Error(
-      `Site access is not granted for ${origin}. Open the extension popup on that site and enable access.`,
-    )
   }
   return tab
 }
@@ -189,6 +206,42 @@ async function waitForTab(tabId, timeoutMs = 15000) {
   })
 }
 
+async function navigateHistory(tabId, direction) {
+  await assertTabAllowed(tabId)
+  try {
+    if (direction === 'back') await chrome.tabs.goBack(tabId)
+    else await chrome.tabs.goForward(tabId)
+    return
+  } catch (error) {
+    if (!errorMessage(error).includes('Cannot find a next page in history')) {
+      throw error
+    }
+  }
+
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    world: 'MAIN',
+    func: delta => {
+      const pageNavigation = globalThis.navigation
+      const canNavigate =
+        delta < 0
+          ? pageNavigation?.canGoBack
+          : pageNavigation?.canGoForward
+      if (canNavigate !== true) return false
+      history.go(delta)
+      return true
+    },
+    args: [direction === 'back' ? -1 : 1],
+  })
+  if (results[0]?.result !== true) {
+    throw new Error(
+      direction === 'back'
+        ? 'Cannot find a previous page in history.'
+        : 'Cannot find a next page in history.',
+    )
+  }
+}
+
 async function executeTool(tool, args) {
   switch (tool) {
     case 'tabs_context_mcp': {
@@ -198,8 +251,8 @@ async function executeTool(tool, args) {
       }
       return success({
         tabGroupId: null,
-        tabs: tabs.map(tab => ({
-          id: tab.id,
+        availableTabs: tabs.map(tab => ({
+          tabId: tab.id,
           title: tab.title || '',
           url: tab.url || '',
           active: Boolean(tab.active),
@@ -210,7 +263,7 @@ async function executeTool(tool, args) {
     case 'tabs_create_mcp': {
       const tab = await chrome.tabs.create({ url: 'about:blank', active: true })
       return success({
-        id: tab.id,
+        tabId: tab.id,
         title: tab.title || '',
         url: tab.url || '',
         windowId: tab.windowId,
@@ -219,22 +272,16 @@ async function executeTool(tool, args) {
     case 'navigate': {
       const tabId = Number(args.tabId)
       if (args.url === 'back') {
-        await assertTabAllowed(tabId)
-        await chrome.tabs.goBack(tabId)
+        await navigateHistory(tabId, 'back')
       } else if (args.url === 'forward') {
-        await assertTabAllowed(tabId)
-        await chrome.tabs.goForward(tabId)
+        await navigateHistory(tabId, 'forward')
       } else {
         let url = String(args.url || '')
         if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = `https://${url}`
         const origin = originForUrl(url)
-        const settings = await getSettings()
-        if (
-          !origin ||
-          (!settings.allowAllSites && !settings.allowedOrigins.includes(origin))
-        ) {
+        if (!origin) {
           throw new Error(
-            `Site access is not granted for ${origin || url}. Grant it from the extension popup first.`,
+            `URL ${url} is not an accessible HTTP(S) page.`,
           )
         }
         await chrome.tabs.update(tabId, { url })
@@ -292,26 +339,9 @@ async function executeTool(tool, args) {
     case 'computer':
       return await executeComputer(args)
     case 'update_plan': {
-      const settings = await getSettings()
       const requested = (args.domains || []).map(domain =>
         String(domain).toLowerCase(),
       )
-      const approved =
-        settings.allowAllSites ||
-        requested.every(domain =>
-          settings.allowedOrigins.some(origin => {
-            try {
-              return new URL(origin).hostname === domain
-            } catch {
-              return false
-            }
-          }),
-        )
-      if (!approved) {
-        return failure(
-          'The plan includes domains that are not approved. Open each domain and grant access in the extension popup, or enable all-sites access.',
-        )
-      }
       return success({
         approved: true,
         domains: requested,
@@ -335,6 +365,7 @@ async function executeComputer(args) {
     return success('Wait completed.')
   }
   if (action === 'screenshot') {
+    await chrome.tabs.update(tab.id, { active: true })
     const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
       format: 'jpeg',
       quality: 65,
@@ -350,9 +381,6 @@ async function executeComputer(args) {
         ],
       },
     }
-  }
-  if (action === 'zoom') {
-    return failure('Region zoom is not implemented. Use screenshot instead.')
   }
   return success(await sendPageMessage(args.tabId, 'computer', args))
 }

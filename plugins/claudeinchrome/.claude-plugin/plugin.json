@@ -2,9 +2,16 @@
   "name": "claudeinchrome",
   "version": "0.1.0",
   "apiVersion": "^1.0.0",
-  "description": "Local-only Chrome integration boundary. MCP, Skill, and Native Host components are pending migration and acceptance.",
+  "description": "Local-only Chrome integration through a standard Plugin MCP server, Skill, Native Host, and Chrome extension.",
   "author": {
     "name": "claude-code-best"
   },
-  "keywords": ["chrome", "browser", "native-messaging", "local"]
+  "keywords": ["chrome", "browser", "native-messaging", "local"],
+  "mcpServers": {
+    "claude-in-chrome": {
+      "type": "stdio",
+      "command": "bun",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/host/entry.ts", "mcp"]
+    }
+  }
 }
