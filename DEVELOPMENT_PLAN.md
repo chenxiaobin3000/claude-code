@@ -36,7 +36,7 @@
 - Agent、Coordinator、Team、Shell、Workflow、MCP Monitor 和本地后台 Session 使用统一生命周期，区分 `queued`、`running`、`waiting_permission`、`idle`、`completed`、`failed`、`stopped` 与 `cancelled`；终态不可被迟到事件、恢复或通知附加处理覆盖。
 - 普通 Agent 默认后台运行；显式前台、全局禁用后台和强制异步上下文按固定优先级决定执行方式。嵌套 Agent 默认最大深度 2、会话总数 50、并发 8、累计 Token 1,000,000，并支持通过已记录环境变量调整。
 - `/fork` 创建独立 Session、Transcript 和后台进程，可执行 `status`、`attach`、`detach`、`resume` 与 `kill`；`/subtask` 是继承当前上下文、通知和预算的后台 Agent，两者不共享任务身份或所有权。
-- Bash 与 PowerShell 共用后台化阈值并在迁移后保留原进程、Tool Use ID、磁盘输出、退出码和 Abort 链；MCP Monitor 使用相同任务生命周期。普通 MCP Tool 不会在可能已经产生副作用后自动重放。
+- Bash 与 PowerShell 共用后台化阈值并在迁移后保留原进程、Tool Use ID、磁盘输出、退出码和 Abort 链；MCP Monitor 使用相同任务生命周期。普通 MCP Tool 超阈值后进入同一后台任务体系，并保留进度、结果、取消和原始超时；不会在可能已经产生副作用后自动重放。
 - 交互式后台 Agent 的权限请求回到主会话并显示来源，超时只拒绝当前工具调用；headless/stream-json 不创建本地审批并安全拒绝。停止、取消、失败与恢复会回收预算、进程、句柄、cleanup、worktree 和陈旧 PID。
 - headless/stream-json 可按 partial messages 开关转发嵌套 Agent 文本与推理事件，事件携带稳定的父 Tool Use ID 和 Agent ID；队列反压优先丢弃可损失增量，不丢弃任务或会话生命周期事件。
 - Agent 最终报告和 Shell 交互提示尾部使用 `untrusted-content` 来源标记并转义，不能伪造任务终态、权限结果或运行时控制标签；原生 MCP、网页、仓库和普通工具输出保持结构化 `tool_result`。
@@ -52,6 +52,7 @@
 
 - 主题仅来自内置主题和 `~/.claude/themes/*.json`；重启读取，不提供编辑器、热更新或插件主题安装。
 - 插件仅支持本地已安装插件；不支持远端市场、自动下载、原生安装、CLI 自更新或插件自动更新。
+- 本地 Plugin Manifest 使用可选 `apiVersion` SemVer 范围协商声明式扩展 API；当前版本为 `1.0.0`，缺省按旧 v1 契约兼容。显式不兼容时整插件及其组件不可达，依赖降级继续按固定点传播；MCP 与 ACP 保持各自协议协商。
 - `/cd` 有意保持为本项目的临时 cwd 命令，不对齐官方的跨项目会话迁移：它只改变主会话后续工具使用的当前目录，不改变启动项目根、Session ID、Transcript/Resume 归属、权限根、Settings、CLAUDE.md、Hook、Skill、Plugin、MCP、Memory、Plan 或 Checkpoint 作用域。
 - `/cd` 不改变已运行子 Agent 的 cwd；新建 Agent 从稳定的会话/工作树根启动，不继承主会话的临时 `/cd`，子 Agent 的 cwd 变化也不得回写主会话。`/clear` 和进程重启恢复到启动项目目录；无参数只报告当前 cwd，失败不得改变现有 cwd。
 - 主程序不内置、不自动启用 Chrome 控制；`--chrome`/`--no-chrome`、`/chrome`、Chrome Settings/Onboarding/通知、隐藏 MCP/Native Host 进程入口、内置 Chrome Skill、MCP 保留名称和专用客户端渲染均已从主干入口移除。
@@ -76,32 +77,7 @@
 
 ## 未开发路线图
 
-### P0：Hook、Plugin、Skill 与 MCP
-
-- 当前进度（2026-07-30）：第一阶段 Hook、第二阶段 Plugin/Skill 与第三阶段 MCP 稳定性/安全均已完成。MCP 已具备有限启动重试、HTTP/SSE 断线退避、项目配置显式审批、headless OAuth、凭据清理、`roots/list` 与 cwd 通知、stdio 稳定 Session ID、CLI/日志脱敏、长工具调用后台化及启动错误可见性；`scripts/validation/mcp-lifecycle.ts` 固化对应边界。第四阶段只剩扩展 API 版本协商和计划收口。`bun run verify --ci` 已于 2026-07-30 全部通过（175.2 秒，含 17 个 workspace、全部专项边界、Node Bundle 与 Windows 独立 EXE）。
-- [x] 支持 Hook 直接调用 MCP Tool（2026-07-28）：仅允许 `PreToolUse` 通过 `type:"mcp"` 调用当前会话已加载的 MCP Tool；输入先过目标 Tool Schema，再进入原始 `canUseTool` 权限审批，不接受普通内置 Tool，也不递归触发目标 Tool Hook。配置的秒级超时沿用统一 AbortSignal，认证、权限拒绝、输入错误和执行错误均作为阻断结果回传。专项验证覆盖 Schema、来源隔离去重和拒绝不可绕过。
-- [x] 固化 Hook 输出契约（2026-07-28）：`continue:false` 会产生 `preventContinuation`，`systemMessage` 以可见系统消息传递，`additionalContext` 在各 Hook 结果中聚合注入；`continueOnBlock` 仍作为独立缺口保留。
-- [x] Hook command 支持显式 argv（2026-07-28）：配置 `args` 时以 `command` 作为可执行文件并保留参数边界，插件变量逐参数替换；未启用 Sandbox 时直接 `spawn`，POSIX Sandbox 下安全转义后进入 Sandbox 包装，Windows Sandbox 尚不能映射任意宿主可执行文件时明确失败，禁止回退宿主执行。旧字符串命令保持兼容。
-- [x] 已具备 `CwdChanged`、`FileChanged`、`InstructionsLoaded`、`ConfigChange` 生命周期 Hook（2026-07-28）：包含 Schema、运行入口与 watch path 更新；`DirectoryAdded`、`PostToolBatch`、`continueOnBlock` 及 SessionStart/分叉/恢复来源仍作为独立未完成缺口。
-- [x] 对齐 Hook `if` 匹配（2026-07-28）：工具与 MCP 标识符使用精确名称或显式列表；Bash 通过权威解析结果逐子命令匹配，无法安全解析时按安全侧触发；Read/Edit/Write 路径 Glob 统一 Windows/Unix 分隔符，Windows 下按文件系统语义忽略大小写并保留目录深度约束。专项验证覆盖复合命令、环境变量前缀、无关子命令和 Windows 路径。
-- [x] 收紧 Hook 事件 Matcher 的精确匹配（2026-07-28）：工具与 MCP 标识符支持精确名称、`|` 或逗号列表；保留正则兼容并在每次测试前复位 `lastIndex`，避免状态化正则造成偶发漏匹配。
-- [x] Hook 权限闭环（2026-07-28）：`deny`、`ask` 与 `continue:false` 均由 PreToolUse 结果进入 `resolveHookPermissionDecision` 和原始 `canUseTool` 审批链；拒绝、自动模式与失败路径不会直连执行。`scripts/validation/hook-protocol.ts` 覆盖阻断、停止原因和权限结果解析。
-- [x] 完善本地/内置 Plugin 依赖与动态重新加载（2026-07-30）：依赖声明保留对象形式和 SemVer 范围，加载时校验已启用依赖的实际版本；缺失、禁用或版本不满足会按固定点传递降级并产生类型化诊断。`/reload-plugins` 清空各组件缓存、裁剪已移除 Hook，并原子替换 Command、Agent、Hook、MCP、LSP 与 AppState；远端安装已移除，因此不实现远端自动依赖下载或孤儿安装目录清理。
-- [x] 支持 `disableBundledSkills`（2026-07-28）：设置中的 Skill 名称仅过滤编译内置 Skill，不影响项目、用户目录或本地 Plugin Skill；嵌套 `.claude/skills` 的命名、真实路径去重与优先级仍沿用既有本地加载器，后续与 Plugin/Skill 全局优先级一并验收。
-- [x] 对齐仅本地 Skill 的发现和调用语义（2026-07-30）：嵌套 `.claude/skills` 始终相对启动项目根解析，同名 Skill 以 `apps/web:deploy` 形式保留独立入口，根 Skill 会附带适用的嵌套变体提示；本地/用户/策略 Skill 优先于编译内置 Skill。支持一次展开最多 6 个连续的 inline、user-invocable Slash Skill，并把尾部参数传给每一个 Skill；fork Skill、`/loop` 和非 Skill 命令保持原参数边界。未引入 Marketplace、远端下载或自动更新。
-- [x] 兼容本地 `SKILL.md` 前置元数据（2026-07-28）：`allowed-tools`、`argument-hint`、`when_to_use`、`user-invocable`、`disable-model-invocation` 均接受 kebab/snake/camel 三种等价写法，标准键优先；缺失字段保留既有安全默认，解析失败会记录带路径的诊断且继续加载正文，不静默丢失 Skill 内容。
-- [x] 增加 MCP OAuth 凭据生命周期（2026-07-28）：`/mcp login <server>` 对指定 HTTP/SSE Server 启动真实 OAuth 流程、展示浏览器失败时的授权 URL，并在成功后重连；`/mcp logout <server>` 尽力执行 RFC 7009 撤销后删除本地 Token，取消待执行重连、抑制主动断开产生的 `onclose` 自动重连，并从 AppState 移除该 Server 的 Tool、Command 和 Resource，不触及应用 Provider 凭据或 Anthropic 账号。
-- [x] 完善 MCP 启动重试、审批、OAuth 凭据清理与断线重连（2026-07-30）：HTTP/SSE 初次连接只对 5xx、拒绝连接、网络与超时执行最多 3 次指数退避；401/403/404、无效配置与本地 spawn 错误不重试。运行期远程连接沿用最多 5 次退避重连；禁用、退出和卸载会取消计时器，OAuth 登录成功后显式重连，登出撤销并删除本地凭据。
-- [x] 固化 MCP 输出上限为本地策略（2026-07-28）：只读取 `MAX_MCP_OUTPUT_TOKENS` 或本地默认值，不再从 GrowthBook 等远程 Feature Flag 获取 MCP 截断阈值。
-- [x] 对齐 MCP Server 的不可信配置审批、认证缺失提示、headless OAuth 无浏览器流程、临时认证失败重连，以及 `list`/`get` 的 HTTP 状态和脱敏错误输出（2026-07-30）：非交互模式不再自动批准项目 `.mcp.json`，未批准 Server 保持不可达并输出启动诊断；结构化 OAuth 返回授权 URL 而不启动浏览器。`mcp list/get` 仅展示脱敏 URL、HTTP 状态、Header/环境变量名和隐藏后的参数数量。
-- [x] 支持 MCP `roots/list` 与工作目录变更通知；stdio Server 在恢复后获得稳定会话标识，并保证凭据、URL Secret 和环境变量不泄露到 CLI 输出或日志（2026-07-30）：根目录仍固定为唯一启动项目根，临时 `/cd` 只发送 `roots/list_changed` 以刷新 Server 缓存，不扩大根目录；stdio 子进程收到保留的 `CLAUDE_CODE_SESSION_ID`。远程 URL 的用户信息、查询值、Fragment、Header、环境值、stdio 参数、OAuth URL 和错误详情统一脱敏。
-- [x] 修正 MCP `roots/list` 的项目根 URI（2026-07-28）：仅返回启动项目根，并使用 `pathToFileURL` 生成标准 URI，兼容 Windows 盘符、空格和 Unicode；cwd 变更通知与 stdio 恢复语义仍保留在上方未完成项。
-- [x] 在 MCP 工具调用超阈值时安全转入后台并保留进度、结果、取消和超时语义；配置校验失败的 Server 必须在交互与 stream-json 启动阶段可见（2026-07-30）：默认 30 秒后把仍运行的调用登记到统一 MCP Task，返回 Task ID 和受控输出文件；结果异步落盘，`TaskOutput`/`Read` 可读取，`TaskStop` 使用独立 AbortController 取消，底层 MCP 超时继续生效且不会自动重放副作用。配置 Schema 错误和待审批项目 Server 分别进入交互 AppState 诊断与 headless stderr。
-- [ ] 为扩展 API 定义版本协商与向后兼容策略。
-
-完成条件：每项能力有配置 Schema、权限边界、失败提示和至少一个不依赖测试框架的验证脚本。
-
-### P1：性能与稳定性
+### P0：性能与稳定性
 
 - [ ] 优化流式渲染的 CPU 占用、缓存命中和长输出退化。
 - [ ] 控制长会话、工具结果、图片与 MCP 内容导致的内存增长。
@@ -111,7 +87,7 @@
 
 完成条件：有可重复的压力脚本、资源阈值与异常恢复验证，且不会把环境偶发错误误报为产品成功。
 
-### P2：可选产品能力
+### P1：可选产品能力
 
 - [ ] 支持 macOS 专用、默认关闭的 `sandbox.allowAppleEvents`，并确保该例外不会放宽文件系统、网络或其他平台的边界。
 - [ ] 将 `claude-in-chrome` MCP Server、Native Host 实现/清单安装和协议代码从主干迁入 `plugins/claudeinchrome`；插件使用标准本地 MCP 声明启动，主干不得恢复隐藏进程入口、保留 Server 名、自动注入或 in-process 特例。

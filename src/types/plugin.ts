@@ -278,6 +278,13 @@ export type PluginError =
       installedVersions: string[]
     }
   | {
+      type: 'extension-api-version-unsupported'
+      source: string
+      plugin: string
+      requiredRange: string
+      runtimeVersion: string
+    }
+  | {
       type: 'plugin-cache-miss'
       source: string
       plugin: string
@@ -372,6 +379,8 @@ export function getPluginErrorMessage(error: PluginError): string {
           : 'missing or invalid'
       return `Dependency "${error.dependency}" requires ${error.requiredRange}, installed version: ${installed}`
     }
+    case 'extension-api-version-unsupported':
+      return `Plugin "${error.plugin}" requires extension API ${error.requiredRange}, but this runtime provides ${error.runtimeVersion}`
     case 'plugin-cache-miss':
       return `Plugin "${error.plugin}" not cached at ${error.installPath} — run /plugins to refresh`
   }

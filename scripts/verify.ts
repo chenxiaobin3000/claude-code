@@ -25,6 +25,7 @@ const validationScripts = [
   'scripts/validation/artifact-boundary.ts',
   'scripts/validation/plugin-distribution-boundary.ts',
   'scripts/validation/plugin-skill-lifecycle.ts',
+  'scripts/validation/extension-api-compat.ts',
   'scripts/validation/mcp-lifecycle.ts',
   'scripts/validation/claudeinchrome-plugin-boundary.ts',
   'scripts/validation/product-surface-boundary.ts',

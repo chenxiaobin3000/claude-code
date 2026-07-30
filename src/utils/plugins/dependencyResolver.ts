@@ -17,6 +17,7 @@ import type { EditableSettingSource } from '../settings/constants.js'
 import { getSettingsForSource } from '../settings/settings.js'
 import { parsePluginIdentifier } from './pluginIdentifier.js'
 import type { PluginDependencyRef, PluginId } from './schemas.js'
+import { negotiateExtensionApiVersion } from './extensionApiVersion.js'
 
 /**
  * Synthetic marketplace sentinel for `--plugin-dir` plugins (pluginLoader.ts
@@ -211,6 +212,24 @@ export function verifyAndDemote(plugins: readonly LoadedPlugin[]): {
     plugins.map(p => parsePluginIdentifier(p.source).name),
   )
   const errors: PluginError[] = []
+
+  // Negotiate the declarative API before dependency closure. A plugin whose
+  // contract is incompatible must contribute no Hook, Skill, Agent, MCP, LSP,
+  // command or settings component; dependents are demoted by the fixed point
+  // below rather than observing a half-loaded plugin.
+  for (const plugin of plugins) {
+    if (!enabled.has(plugin.source)) continue
+    const negotiation = negotiateExtensionApiVersion(plugin.manifest.apiVersion)
+    if (negotiation.compatible) continue
+    enabled.delete(plugin.source)
+    errors.push({
+      type: 'extension-api-version-unsupported',
+      source: plugin.source,
+      plugin: plugin.name,
+      requiredRange: negotiation.requiredRange,
+      runtimeVersion: negotiation.runtimeVersion,
+    })
+  }
 
   let changed = true
   while (changed) {

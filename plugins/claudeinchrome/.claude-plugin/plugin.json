@@ -1,6 +1,7 @@
 {
   "name": "claudeinchrome",
   "version": "0.1.0",
+  "apiVersion": "^1.0.0",
   "description": "Local-only Chrome integration boundary. MCP, Skill, and Native Host components are pending migration and acceptance.",
   "author": {
     "name": "claude-code-best"

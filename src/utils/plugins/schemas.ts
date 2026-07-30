@@ -272,6 +272,16 @@ const PluginManifestMetadataSchema = lazySchema(() =>
       .describe(
         'Semantic version (e.g., 1.2.3) following semver.org specification',
       ),
+    apiVersion: z
+      .string()
+      .min(1, 'Plugin apiVersion cannot be empty')
+      .refine(value => validRange(value) !== null, {
+        message: 'Plugin apiVersion must be a valid SemVer range',
+      })
+      .optional()
+      .describe(
+        'SemVer range of the declarative Plugin API required by this plugin (for example, "^1.0.0"). Omitted manifests use the legacy v1 contract.',
+      ),
     description: z
       .string()
       .optional()

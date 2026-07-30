@@ -7,6 +7,10 @@ import { FRONTMATTER_REGEX } from '../frontmatterParser.js'
 import { jsonParse } from '../slowOperations.js'
 import { parseYaml } from '../yaml.js'
 import {
+  EXTENSION_API_VERSION,
+  negotiateExtensionApiVersion,
+} from './extensionApiVersion.js'
+import {
   PluginHooksSchema,
   PluginManifestSchema,
   PluginMarketplaceEntrySchema,
@@ -253,6 +257,23 @@ export async function validatePluginManifest(
   // Check for common issues and add warnings
   if (result.success) {
     const manifest = result.data
+    const apiNegotiation = negotiateExtensionApiVersion(manifest.apiVersion)
+    if (!apiNegotiation.compatible) {
+      errors.push({
+        path: 'apiVersion',
+        code: 'extension_api_version_unsupported',
+        message:
+          `Plugin requires extension API ${apiNegotiation.requiredRange}, ` +
+          `but this runtime provides ${apiNegotiation.runtimeVersion}`,
+      })
+    } else if (!manifest.apiVersion) {
+      warnings.push({
+        path: 'apiVersion',
+        message:
+          `No apiVersion specified. The legacy v1 contract is assumed; ` +
+          `new plugins should declare a compatible range such as "^${EXTENSION_API_VERSION}".`,
+      })
+    }
 
     // Warn if name isn't strict kebab-case. CC's schema only rejects spaces,
     // but the Claude.ai marketplace sync rejects non-kebab names. Surfacing
