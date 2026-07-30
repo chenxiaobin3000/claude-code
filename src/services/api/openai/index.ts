@@ -38,6 +38,10 @@ import {
   classifyOpenAIError,
   type OpenAIErrorPhase,
 } from './errorClassification.js'
+import {
+  incrementPerformanceCounter,
+  setPerformanceGauge,
+} from '../../../utils/performanceBaseline.js'
 
 /**
  * OpenAI-compatible query path. Converts Anthropic-format messages/tools to
@@ -147,6 +151,27 @@ export async function* queryModelOpenAI(
         costUSD,
         usage as unknown as BetaUsage,
         options.model,
+      )
+    }
+    incrementPerformanceCounter('model_requests_completed')
+    incrementPerformanceCounter('model_input_tokens', usage.input_tokens)
+    incrementPerformanceCounter('model_output_tokens', usage.output_tokens)
+    incrementPerformanceCounter(
+      'model_cache_read_tokens',
+      usage.cache_read_input_tokens,
+    )
+    incrementPerformanceCounter(
+      'model_cache_write_tokens',
+      usage.cache_creation_input_tokens,
+    )
+    const cacheDenominator =
+      usage.input_tokens +
+      usage.cache_read_input_tokens +
+      usage.cache_creation_input_tokens
+    if (cacheDenominator > 0) {
+      setPerformanceGauge(
+        'model_cache_hit_rate_percent',
+        (usage.cache_read_input_tokens / cacheDenominator) * 100,
       )
     }
 

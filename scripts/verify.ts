@@ -32,6 +32,7 @@ const validationScripts = [
   'scripts/validation/claudeinchrome-host.ts',
   'scripts/validation/product-surface-boundary.ts',
   'scripts/validation/observability-boundary.ts',
+  'scripts/validation/performance-baseline.ts',
   'scripts/validation/self-update-boundary.ts',
   'scripts/validation/dependency-boundary.ts',
   'scripts/validation/feature-flags.ts',

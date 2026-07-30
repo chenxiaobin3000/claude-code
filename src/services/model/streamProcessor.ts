@@ -16,6 +16,7 @@ import {
   createAssistantAPIErrorMessage,
   normalizeContentFromAPI,
 } from '../../utils/messages.js'
+import { incrementPerformanceCounter } from '../../utils/performanceBaseline.js'
 import { mergeUsage } from './usage.js'
 
 export type ModelStreamOutput =
@@ -100,6 +101,7 @@ export async function* processModelStream(params: {
   let firstTokenReceived = false
 
   for await (const event of params.events) {
+    incrementPerformanceCounter('stream_events')
     switch (event.type) {
       case 'message_start':
         partialMessage = event.message
@@ -133,10 +135,19 @@ export async function* processModelStream(params: {
         const delta = event.delta
         if (delta.type === 'text_delta') {
           block.text = `${(block.text as string | undefined) ?? ''}${delta.text}`
+          incrementPerformanceCounter('stream_text_chars', delta.text.length)
         } else if (delta.type === 'input_json_delta') {
           block.input = `${(block.input as string | undefined) ?? ''}${delta.partial_json}`
+          incrementPerformanceCounter(
+            'stream_tool_json_chars',
+            delta.partial_json.length,
+          )
         } else if (delta.type === 'thinking_delta') {
           block.thinking = `${(block.thinking as string | undefined) ?? ''}${delta.thinking}`
+          incrementPerformanceCounter(
+            'stream_thinking_chars',
+            delta.thinking.length,
+          )
         } else if (delta.type === 'signature_delta') {
           block.signature = delta.signature
         }
@@ -160,6 +171,9 @@ export async function* processModelStream(params: {
             maxOutputTokens: params.maxOutputTokens,
           })) {
             if (output.type === 'assistant') messages.push(output)
+            if (output.type === 'assistant') {
+              incrementPerformanceCounter('stream_assistant_messages')
+            }
             yield output
           }
           partialMessage = null
@@ -185,6 +199,9 @@ export async function* processModelStream(params: {
       maxOutputTokens: params.maxOutputTokens,
     })) {
       if (output.type === 'assistant') messages.push(output)
+      if (output.type === 'assistant') {
+        incrementPerformanceCounter('stream_assistant_messages')
+      }
       yield output
     }
   }

@@ -13,6 +13,7 @@ import {
   invalidateServerCaches,
   reconnectMcpServerImpl,
 } from './client.js'
+import { setPerformanceGauge } from '../../utils/performanceBaseline.js'
 import type {
   MCPServerConnection,
   ScopedMcpServerConfig,
@@ -282,6 +283,19 @@ export function useManageMCPConnections(
         }
       }
 
+      setPerformanceGauge('mcp_configured', mcp.clients.length)
+      setPerformanceGauge(
+        'mcp_connected',
+        mcp.clients.filter(client => client.type === 'connected').length,
+      )
+      setPerformanceGauge('mcp_tools', mcp.tools.length)
+      setPerformanceGauge(
+        'mcp_resources',
+        Object.values(mcp.resources).reduce(
+          (count, resources) => count + resources.length,
+          0,
+        ),
+      )
       return { ...prevState, mcp }
     })
   }, [setAppState])

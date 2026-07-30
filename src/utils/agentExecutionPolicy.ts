@@ -1,4 +1,5 @@
 import { isEnvTruthy } from './envUtils.js'
+import { setPerformanceGauge } from './performanceBaseline.js'
 
 export type AgentBackgroundDecision = {
   runInBackground: boolean
@@ -115,6 +116,20 @@ export type AgentBudgetLedger = {
 
 const sessionLedgers = new Map<string, AgentBudgetLedger>()
 
+function updateAgentPerformanceGauges(): void {
+  let activeAgents = 0
+  let spawnedAgents = 0
+  let usedTokens = 0
+  for (const ledger of sessionLedgers.values()) {
+    activeAgents += ledger.activeAgents
+    spawnedAgents += ledger.spawnedAgents
+    usedTokens += ledger.usedTokens
+  }
+  setPerformanceGauge('agent_active', activeAgents)
+  setPerformanceGauge('agent_spawned', spawnedAgents)
+  setPerformanceGauge('agent_used_tokens', usedTokens)
+}
+
 export function getAgentBudgetLedger(sessionId: string): AgentBudgetLedger {
   const existing = sessionLedgers.get(sessionId)
   if (existing) return existing
@@ -176,6 +191,7 @@ export function reserveAgentExecution({
 
   if (countAsNewAgent) ledger.spawnedAgents++
   ledger.activeAgents++
+  updateAgentPerformanceGauges()
   let released = false
 
   return {
@@ -188,6 +204,7 @@ export function reserveAgentExecution({
       if (Number.isFinite(tokensUsed) && tokensUsed > 0) {
         ledger.usedTokens += Math.floor(tokensUsed)
       }
+      updateAgentPerformanceGauges()
     },
   }
 }
@@ -199,4 +216,5 @@ export function resetAgentBudgetLedgersForValidation(): void {
     )
   }
   sessionLedgers.clear()
+  updateAgentPerformanceGauges()
 }

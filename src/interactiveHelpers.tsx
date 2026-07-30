@@ -33,6 +33,7 @@ import { checkHasTrustDialogAccepted, getGlobalConfig, saveGlobalConfig } from '
 import { updateDeepLinkTerminalPreference } from './utils/deepLink/terminalPreference.js';
 import { isEnvTruthy } from './utils/envUtils.js';
 import { type FpsMetrics, FpsTracker } from './utils/fpsTracker.js';
+import { startPerformanceBaselineSampling } from './utils/performanceBaseline.js';
 import { updateGithubRepoPathMapping } from './utils/githubRepoPathMapping.js';
 import { applyConfigEnvironmentVariables } from './utils/managedEnv.js';
 import type { PermissionMode } from './utils/permissions/PermissionMode.js';
@@ -276,6 +277,7 @@ export function getRenderContext(exitOnCtrlC: boolean): {
   const fpsTracker = new FpsTracker();
   const stats = createStatsStore();
   setStatsStore(stats);
+  startPerformanceBaselineSampling(stats);
 
   // Bench mode: when set, append per-frame phase timings as JSONL for
   // offline analysis by bench/repl-scroll.ts. Captures the full TUI
@@ -290,6 +292,19 @@ export function getRenderContext(exitOnCtrlC: boolean): {
       onFrame: event => {
         fpsTracker.record(event.durationMs);
         stats.observe('frame_duration_ms', event.durationMs);
+        if (event.phases) {
+          stats.observe('frame_renderer_ms', event.phases.renderer);
+          stats.observe('frame_diff_ms', event.phases.diff);
+          stats.observe('frame_optimize_ms', event.phases.optimize);
+          stats.observe('frame_write_ms', event.phases.write);
+          stats.observe('frame_yoga_ms', event.phases.yoga);
+          stats.observe('frame_commit_ms', event.phases.commit);
+          stats.observe('frame_patch_count', event.phases.patches);
+          stats.increment('frame_yoga_visited', event.phases.yogaVisited);
+          stats.increment('frame_yoga_measured', event.phases.yogaMeasured);
+          stats.increment('frame_yoga_cache_hits', event.phases.yogaCacheHits);
+          stats.set('frame_yoga_live', event.phases.yogaLive);
+        }
         if (frameTimingLogPath && event.phases) {
           // Bench-only env-var-gated path: sync write so no frames dropped
           // on abrupt exit. ~100 bytes at ≤60fps is negligible. rss/cpu are

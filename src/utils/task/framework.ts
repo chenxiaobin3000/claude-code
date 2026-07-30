@@ -20,6 +20,10 @@ import {
 } from '../../tasks/stateMachine.js'
 import { enqueuePendingNotification } from '../messageQueueManager.js'
 import { enqueueSdkEvent } from '../sdkEventQueue.js'
+import {
+  incrementPerformanceCounter,
+  setPerformanceGauge,
+} from '../performanceBaseline.js'
 import { getTaskOutputDelta, getTaskOutputPath } from './diskOutput.js'
 
 // Standard polling interval for all tasks
@@ -44,6 +48,24 @@ export type TaskAttachment = {
 
 type SetAppState = (updater: (prev: AppState) => AppState) => void
 
+function updateTaskPerformanceGauges(
+  tasks: Readonly<Record<string, TaskState>>,
+): void {
+  const values = Object.values(tasks)
+  let active = 0
+  let backgroundActive = 0
+  for (const task of values) {
+    if (task.status !== 'running' && task.status !== 'pending') continue
+    active++
+    if (!('isBackgrounded' in task) || task.isBackgrounded !== false) {
+      backgroundActive++
+    }
+  }
+  setPerformanceGauge('task_active', active)
+  setPerformanceGauge('task_background_active', backgroundActive)
+  setPerformanceGauge('task_retained', values.length)
+}
+
 /**
  * Update a task's state in AppState.
  * Helper function for task implementations.
@@ -66,12 +88,14 @@ export function updateTaskState<T extends TaskState>(
       // spread so s.tasks subscribers don't re-render on unchanged state.
       return prev
     }
+    const tasks = {
+      ...prev.tasks,
+      [taskId]: updated,
+    }
+    updateTaskPerformanceGauges(tasks)
     return {
       ...prev,
-      tasks: {
-        ...prev.tasks,
-        [taskId]: updated,
-      },
+      tasks,
     }
   })
 }
@@ -101,14 +125,18 @@ export function registerTask(task: TaskState, setAppState: SetAppState): void {
             pendingMessages: existing.pendingMessages,
           }
         : normalizedTask
+    const tasks = { ...prev.tasks, [normalizedTask.id]: merged }
+    updateTaskPerformanceGauges(tasks)
     return {
       ...prev,
-      tasks: { ...prev.tasks, [normalizedTask.id]: merged },
+      tasks,
     }
   })
 
   // Replacement (resume) — not a new start. Skip to avoid double-emit.
   if (isReplacement) return
+
+  incrementPerformanceCounter('task_started')
 
   enqueueSdkEvent({
     type: 'system',
@@ -151,6 +179,7 @@ export function evictTerminalTask(
       return prev
     }
     const { [taskId]: _, ...remainingTasks } = prev.tasks
+    updateTaskPerformanceGauges(remainingTasks)
     return { ...prev, tasks: remainingTasks }
   })
 }
