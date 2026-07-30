@@ -162,6 +162,8 @@ export type ToolUseContext = {
     mcpClients: MCPServerConnection[]
     mcpResources: Record<string, ServerResource[]>
     isNonInteractiveSession: boolean
+    /** Forward raw model stream events, including nested Agent deltas. */
+    includePartialMessages?: boolean
     agentDefinitions: AgentDefinitionsResult
     maxBudgetUsd?: number
     /** Custom system prompt that replaces the default system prompt */

@@ -3,6 +3,13 @@ import { randomUUID } from 'crypto'
 import { getIsNonInteractiveSession, getSessionId } from '../bootstrap/state.js'
 import type { SdkWorkflowProgress } from '../types/tools.js'
 
+type NestedAgentStreamEvent = {
+  type: 'stream_event'
+  event: Record<string, unknown>
+  parent_tool_use_id: string
+  agent_id: string
+}
+
 type TaskStartedEvent = {
   type: 'system'
   subtype: 'task_started'
@@ -70,6 +77,7 @@ export type SdkEvent =
   | TaskProgressEvent
   | TaskNotificationSdkEvent
   | SessionStateChangedEvent
+  | NestedAgentStreamEvent
 
 const MAX_QUEUE_SIZE = 1000
 const queue: SdkEvent[] = []
@@ -81,9 +89,31 @@ export function enqueueSdkEvent(event: SdkEvent): void {
     return
   }
   if (queue.length >= MAX_QUEUE_SIZE) {
-    queue.shift()
+    // Partial deltas are lossy under backpressure; lifecycle bookends are not.
+    const partialIndex = queue.findIndex(item => item.type === 'stream_event')
+    if (partialIndex >= 0) {
+      queue.splice(partialIndex, 1)
+    } else if (event.type === 'stream_event') {
+      return
+    } else {
+      queue.shift()
+    }
   }
   queue.push(event)
+}
+
+export function emitNestedAgentStreamEvent(params: {
+  event: Record<string, unknown>
+  parentToolUseId: string | undefined
+  agentId: string
+}): void {
+  if (!params.parentToolUseId) return
+  enqueueSdkEvent({
+    type: 'stream_event',
+    event: params.event,
+    parent_tool_use_id: params.parentToolUseId,
+    agent_id: params.agentId,
+  })
 }
 
 export function drainSdkEvents(): Array<

@@ -373,6 +373,7 @@ export class QueryEngine {
         mcpResources: {},
         ideInstallationStatus: null,
         isNonInteractiveSession: true,
+        includePartialMessages,
         customSystemPrompt,
         appendSystemPrompt,
         agentDefinitions: { activeAgents: agents, allAgents: [] },

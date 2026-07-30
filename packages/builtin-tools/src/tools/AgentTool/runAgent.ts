@@ -78,6 +78,7 @@ import {
   getAgentContext,
   isSubagentContext,
 } from 'src/utils/agentContext.js'
+import { emitNestedAgentStreamEvent } from 'src/utils/sdkEventQueue.js'
 import { resolveAgentTools } from './agentToolUtils.js'
 import { filterIncompleteToolCalls } from './filterIncompleteToolCalls.js'
 import { type AgentDefinition, isBuiltInAgent } from './loadAgentsDir.js'
@@ -678,6 +679,7 @@ export async function* runAgent({
       : isAsync
         ? true
         : (toolUseContext.options.isNonInteractiveSession ?? false),
+    includePartialMessages: toolUseContext.options.includePartialMessages,
     appendSystemPrompt: toolUseContext.options.appendSystemPrompt,
     tools: allTools,
     commands: [],
@@ -769,6 +771,17 @@ export async function* runAgent({
       maxTurns: maxTurns ?? agentDefinition.maxTurns,
     })) {
       onQueryProgress?.()
+      if (
+        message.type === 'stream_event' &&
+        toolUseContext.options.includePartialMessages
+      ) {
+        emitNestedAgentStreamEvent({
+          event: (message as unknown as { event: Record<string, unknown> })
+            .event,
+          parentToolUseId: toolUseContext.toolUseId,
+          agentId,
+        })
+      }
       // Forward subagent API request starts to parent's metrics display
       // so TTFT/OTPS update during subagent execution.
       if (

@@ -1495,6 +1495,7 @@ export const SDKPartialAssistantMessageSchema = lazySchema(() =>
     type: z.literal('stream_event'),
     event: RawMessageStreamEventPlaceholder(),
     parent_tool_use_id: z.string().nullable(),
+    agent_id: z.string().optional(),
     uuid: UUIDPlaceholder(),
     session_id: z.string(),
   }),
