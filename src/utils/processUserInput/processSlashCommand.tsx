@@ -69,7 +69,7 @@ import { parseToolListFromCLI } from '../permissions/permissionSetup.js';
 import { hasPermissionsToUseTool } from '../permissions/permissions.js';
 import { isOfficialMarketplaceName, parsePluginIdentifier } from '../plugins/pluginIdentifier.js';
 import { isRestrictedToPluginOnly, isSourceAdminTrusted } from '../settings/pluginOnlyPolicy.js';
-import { parseSlashCommand } from '../slashCommandParsing.js';
+import { parseSlashCommand, parseStackedSkills } from '../slashCommandParsing.js';
 import { sleep } from '../sleep.js';
 import { recordSkillUsage } from '../suggestions/skillUsageTracking.js';
 import { logOTelEvent, redactIfDisabled } from '../telemetry/events.js';
@@ -434,6 +434,41 @@ export async function processSlashCommand(
   canUseTool?: CanUseToolFn,
   autonomy?: QueuedCommand['autonomy'],
 ): Promise<ProcessUserInputBaseResult> {
+  const stackedSkills = parseStackedSkills(inputString, context.options.commands);
+  if (stackedSkills) {
+    const results: SlashCommandResult[] = [];
+    for (let index = 0; index < stackedSkills.commands.length; index++) {
+      const command = stackedSkills.commands[index]!;
+      const result = await getMessagesForSlashCommand(
+        command.name,
+        stackedSkills.args,
+        setToolJSX,
+        context,
+        index === 0 ? precedingInputBlocks : [],
+        index === 0 ? imageContentBlocks : [],
+        isAlreadyProcessing,
+        canUseTool,
+        index === 0 ? uuid : undefined,
+        autonomy,
+      );
+      results.push(result);
+      if (!result.shouldQuery) {
+        return result;
+      }
+    }
+
+    const allowedTools = [
+      ...new Set(results.flatMap(result => result.allowedTools ?? [])),
+    ];
+    return {
+      messages: results.flatMap(result => result.messages),
+      shouldQuery: true,
+      allowedTools,
+      model: results.findLast(result => result.model !== undefined)?.model,
+      effort: results.findLast(result => result.effort !== undefined)?.effort,
+    };
+  }
+
   const parsed = parseSlashCommand(inputString);
   if (!parsed) {
     logEvent('tengu_input_slash_missing', {});

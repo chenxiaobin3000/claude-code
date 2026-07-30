@@ -1,4 +1,5 @@
 import { z } from 'zod/v4'
+import { validRange } from 'semver'
 import { HooksSchema } from '../../schemas/hooks.js'
 import { McpServerConfigSchema } from '../../services/mcp/types.js'
 import { lazySchema } from '../lazySchema.js'
@@ -1330,21 +1331,39 @@ export const PluginIdSchema = lazySchema(() =>
 const DEP_REF_REGEX =
   /^[a-z0-9][-a-z0-9._]*(@[a-z0-9][-a-z0-9._]*)?(@\^[^@]*)?$/i
 
+export type PluginDependencyRef = {
+  name: string
+  marketplace?: string
+  version?: string
+}
+
+function parseStringDependencyRef(value: string): PluginDependencyRef {
+  const legacyVersionIndex = value.lastIndexOf('@^')
+  const reference =
+    legacyVersionIndex === -1 ? value : value.slice(0, legacyVersionIndex)
+  const version =
+    legacyVersionIndex === -1 ? undefined : value.slice(legacyVersionIndex + 1)
+  const separator = reference.indexOf('@')
+  return separator === -1
+    ? { name: reference, ...(version ? { version } : {}) }
+    : {
+        name: reference.slice(0, separator),
+        marketplace: reference.slice(separator + 1),
+        ...(version ? { version } : {}),
+      }
+}
+
 /**
  * Schema for entries in a plugin's `dependencies` array.
  *
- * Accepts three forms, all normalized to a plain "name" or "name@mkt" string
- * by the transform — downstream code (qualifyDependency, resolveDependencyClosure,
- * verifyAndDemote) never sees versions or objects:
+ * Accepts string and object forms and normalizes both to an object. Version
+ * constraints are retained so the local loader can enforce them without
+ * resolving or downloading anything remotely:
  *
  *   "plugin"                → bare, resolved against declaring plugin's marketplace
  *   "plugin@marketplace"    → qualified
- *   "plugin@mkt@^1.2"       → trailing @^version silently stripped (forwards-compat)
- *   {name, marketplace?, …} → object form, version etc. stripped (forwards-compat)
- *
- * The latter two are permitted-but-ignored so future clients adding version
- * constraints don't cause old clients to fail schema validation and reject
- * the whole plugin. See CC-993 for the eventual version-range design.
+ *   "plugin@mkt@^1.2"       → legacy constrained string
+ *   {name, marketplace?, version?} → current constrained form
  */
 export const DependencyRefSchema = lazySchema(() =>
   z.union([
@@ -1354,7 +1373,7 @@ export const DependencyRefSchema = lazySchema(() =>
         DEP_REF_REGEX,
         'Dependency must be a plugin name, optionally qualified with @marketplace',
       )
-      .transform(s => s.replace(/@\^[^@]*$/, '')),
+      .transform(parseStringDependencyRef),
     z
       .object({
         name: z
@@ -1366,9 +1385,15 @@ export const DependencyRefSchema = lazySchema(() =>
           .min(1)
           .regex(/^[a-z0-9][-a-z0-9._]*$/i)
           .optional(),
+        version: z
+          .string()
+          .min(1)
+          .refine(value => validRange(value) !== null, {
+            message: 'Dependency version must be a valid semver range',
+          })
+          .optional(),
       })
-      .loose()
-      .transform(o => (o.marketplace ? `${o.name}@${o.marketplace}` : o.name)),
+      .strict(),
   ]),
 )
 

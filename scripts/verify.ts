@@ -24,6 +24,7 @@ const validationScripts = [
   'scripts/validation/main-boundary.ts',
   'scripts/validation/artifact-boundary.ts',
   'scripts/validation/plugin-distribution-boundary.ts',
+  'scripts/validation/plugin-skill-lifecycle.ts',
   'scripts/validation/claudeinchrome-plugin-boundary.ts',
   'scripts/validation/product-surface-boundary.ts',
   'scripts/validation/observability-boundary.ts',

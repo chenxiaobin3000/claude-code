@@ -158,6 +158,7 @@ import { logForDebugging } from './utils/debug.js'
 import {
   getSkillDirCommands,
   clearSkillCaches,
+  addDynamicSkillVariantGuidance,
   getDynamicSkills,
 } from './skills/loadSkillsDir.js'
 import { getBundledSkills } from './skills/bundledSkills.js'
@@ -424,9 +425,9 @@ const loadAllCommands = memoize(async (cwd: string): Promise<Command[]> => {
   ])
 
   return [
+    ...skillDirCommands,
     ...bundledSkills,
     ...builtinPluginSkills,
-    ...skillDirCommands,
     ...(workflowCommands as Command[]),
     ...(pluginCommands as Command[]),
     ...pluginSkills,
@@ -446,8 +447,10 @@ export async function getCommands(cwd: string): Promise<Command[]> {
   const dynamicSkills = getDynamicSkills()
 
   // Build base commands without dynamic skills
-  const baseCommands = allCommands.filter(
-    _ => meetsAvailabilityRequirement(_) && isCommandEnabled(_),
+  const baseCommands = addDynamicSkillVariantGuidance(
+    allCommands.filter(
+      _ => meetsAvailabilityRequirement(_) && isCommandEnabled(_),
+    ),
   )
 
   if (dynamicSkills.length === 0) {

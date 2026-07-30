@@ -270,6 +270,14 @@ export type PluginError =
       reason: 'not-enabled' | 'not-found'
     }
   | {
+      type: 'dependency-version-unsatisfied'
+      source: string
+      plugin: string
+      dependency: string
+      requiredRange: string
+      installedVersions: string[]
+    }
+  | {
       type: 'plugin-cache-miss'
       source: string
       plugin: string
@@ -356,6 +364,13 @@ export function getPluginErrorMessage(error: PluginError): string {
           ? 'disabled — enable it or remove the dependency'
           : 'not found in any configured marketplace'
       return `Dependency "${error.dependency}" is ${hint}`
+    }
+    case 'dependency-version-unsatisfied': {
+      const installed =
+        error.installedVersions.length > 0
+          ? error.installedVersions.join(', ')
+          : 'missing or invalid'
+      return `Dependency "${error.dependency}" requires ${error.requiredRange}, installed version: ${installed}`
     }
     case 'plugin-cache-miss':
       return `Plugin "${error.plugin}" not cached at ${error.installPath} — run /plugins to refresh`

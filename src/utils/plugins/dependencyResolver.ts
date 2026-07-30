@@ -12,10 +12,11 @@
  */
 
 import type { LoadedPlugin, PluginError } from '../../types/plugin.js'
+import { satisfies, valid } from 'semver'
 import type { EditableSettingSource } from '../settings/constants.js'
 import { getSettingsForSource } from '../settings/settings.js'
 import { parsePluginIdentifier } from './pluginIdentifier.js'
-import type { PluginId } from './schemas.js'
+import type { PluginDependencyRef, PluginId } from './schemas.js'
 
 /**
  * Synthetic marketplace sentinel for `--plugin-dir` plugins (pluginLoader.ts
@@ -36,13 +37,35 @@ const INLINE_MARKETPLACE = 'inline'
  * verifyAndDemote handles bare deps via name-only matching.
  */
 export function qualifyDependency(
-  dep: string,
+  dep: PluginDependencyRef | string,
   declaringPluginId: string,
 ): string {
-  if (parsePluginIdentifier(dep).marketplace) return dep
+  const dependency = normalizeDependencyRef(dep)
+  if (dependency.marketplace) {
+    return `${dependency.name}@${dependency.marketplace}`
+  }
   const mkt = parsePluginIdentifier(declaringPluginId).marketplace
-  if (!mkt || mkt === INLINE_MARKETPLACE) return dep
-  return `${dep}@${mkt}`
+  if (!mkt || mkt === INLINE_MARKETPLACE) return dependency.name
+  return `${dependency.name}@${mkt}`
+}
+
+export function normalizeDependencyRef(
+  dep: PluginDependencyRef | string,
+): PluginDependencyRef {
+  if (typeof dep !== 'string') return dep
+  const legacyVersionIndex = dep.lastIndexOf('@^')
+  const reference =
+    legacyVersionIndex === -1 ? dep : dep.slice(0, legacyVersionIndex)
+  const version =
+    legacyVersionIndex === -1 ? undefined : dep.slice(legacyVersionIndex + 1)
+  const separator = reference.indexOf('@')
+  return separator === -1
+    ? { name: reference, ...(version ? { version } : {}) }
+    : {
+        name: reference.slice(0, separator),
+        marketplace: reference.slice(separator + 1),
+        ...(version ? { version } : {}),
+      }
 }
 
 /**
@@ -52,7 +75,7 @@ export function qualifyDependency(
  */
 export type DependencyLookupResult = {
   // Entries may be bare names; qualifyDependency normalizes them.
-  dependencies?: string[]
+  dependencies?: Array<PluginDependencyRef | string>
 }
 
 export type ResolutionResult =
@@ -187,11 +210,6 @@ export function verifyAndDemote(plugins: readonly LoadedPlugin[]): {
   const knownByName = new Set(
     plugins.map(p => parsePluginIdentifier(p.source).name),
   )
-  const enabledByName = new Map<string, number>()
-  for (const id of enabled) {
-    const n = parsePluginIdentifier(id).name
-    enabledByName.set(n, (enabledByName.get(n) ?? 0) + 1)
-  }
   const errors: PluginError[] = []
 
   let changed = true
@@ -200,17 +218,20 @@ export function verifyAndDemote(plugins: readonly LoadedPlugin[]): {
     for (const p of plugins) {
       if (!enabled.has(p.source)) continue
       for (const rawDep of p.manifest.dependencies ?? []) {
+        const dependency = normalizeDependencyRef(rawDep)
         const dep = qualifyDependency(rawDep, p.source)
-        // Bare dep ← @inline plugin: match by name only (see enabledByName)
+        // Bare dep ← @inline plugin: match every loaded candidate by name.
         const isBare = !parsePluginIdentifier(dep).marketplace
-        const satisfied = isBare
-          ? (enabledByName.get(dep) ?? 0) > 0
-          : enabled.has(dep)
-        if (!satisfied) {
+        const candidates = plugins.filter(candidate =>
+          isBare
+            ? parsePluginIdentifier(candidate.source).name === dep
+            : candidate.source === dep,
+        )
+        const enabledCandidates = candidates.filter(candidate =>
+          enabled.has(candidate.source),
+        )
+        if (enabledCandidates.length === 0) {
           enabled.delete(p.source)
-          const count = enabledByName.get(p.name) ?? 0
-          if (count <= 1) enabledByName.delete(p.name)
-          else enabledByName.set(p.name, count - 1)
           errors.push({
             type: 'dependency-unsatisfied',
             source: p.source,
@@ -222,6 +243,33 @@ export function verifyAndDemote(plugins: readonly LoadedPlugin[]): {
           })
           changed = true
           break
+        }
+        if (dependency.version) {
+          const matching = enabledCandidates.find(candidate => {
+            const installedVersion = candidate.manifest.version
+            return (
+              installedVersion !== undefined &&
+              valid(installedVersion) !== null &&
+              satisfies(installedVersion, dependency.version!, {
+                includePrerelease: false,
+              })
+            )
+          })
+          if (!matching) {
+            enabled.delete(p.source)
+            errors.push({
+              type: 'dependency-version-unsatisfied',
+              source: p.source,
+              plugin: p.name,
+              dependency: dep,
+              requiredRange: dependency.version,
+              installedVersions: enabledCandidates
+                .map(candidate => candidate.manifest.version)
+                .filter((version): version is string => version !== undefined),
+            })
+            changed = true
+            break
+          }
         }
       }
     }

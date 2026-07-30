@@ -11,6 +11,7 @@ import {
 } from 'path'
 import {
   getAdditionalDirectoriesForClaudeMd,
+  getOriginalCwd,
   getSessionId,
 } from '../bootstrap/state.js'
 import {
@@ -858,6 +859,30 @@ export { transformSkillFiles }
 // State for dynamically discovered skills
 const dynamicSkillDirs = new Set<string>()
 const dynamicSkills = new Map<string, Command>()
+export type DynamicSkillVariant = {
+  command: Command
+  baseName: string
+  directory: string
+}
+const dynamicSkillVariants = new Map<string, DynamicSkillVariant>()
+
+export function getNestedSkillQualifiedName(
+  skillDirectory: string,
+  skillName: string,
+  projectRoot: string,
+): { qualifiedName: string; directory: string } | null {
+  const owningDirectory = dirname(dirname(skillDirectory))
+  const relativeDirectory = relative(projectRoot, owningDirectory)
+  if (
+    !relativeDirectory ||
+    relativeDirectory.startsWith('..') ||
+    isAbsolute(relativeDirectory)
+  ) {
+    return null
+  }
+  const directory = relativeDirectory.split(pathSep).join('/')
+  return { qualifiedName: `${directory}:${skillName}`, directory }
+}
 
 // --- Conditional skills (path-filtered) ---
 
@@ -979,11 +1004,35 @@ export async function addSkillDirectories(dirs: string[]): Promise<void> {
     dirs.map(dir => loadSkillsFromSkillsDir(dir, 'projectSettings')),
   )
 
-  // Process in reverse order (shallower first) so deeper paths override
-  for (let i = loadedSkills.length - 1; i >= 0; i--) {
+  const projectRoot = getOriginalCwd()
+
+  // Nested skills remain independently addressable. Their command name is
+  // qualified by the directory that owns `.claude/skills`, relative to the
+  // immutable session root (for example `apps/web:deploy`).
+  for (let i = 0; i < loadedSkills.length; i++) {
+    const skillDirectory = dirs[i]
+    if (!skillDirectory) continue
     for (const { skill } of loadedSkills[i] ?? []) {
       if (skill.type === 'prompt') {
-        dynamicSkills.set(skill.name, skill)
+        const qualified = getNestedSkillQualifiedName(
+          skillDirectory,
+          skill.name,
+          projectRoot,
+        )
+        if (!qualified) continue
+        const { qualifiedName, directory: directoryName } = qualified
+        const qualifiedSkill: Command = {
+          ...skill,
+          name: qualifiedName,
+          description: `${skill.description} (applies to ${directoryName}/)`,
+          userFacingName: () => qualifiedName,
+        }
+        dynamicSkills.set(qualifiedName, qualifiedSkill)
+        dynamicSkillVariants.set(qualifiedName, {
+          command: qualifiedSkill,
+          baseName: skill.name,
+          directory: directoryName,
+        })
       }
     }
   }
@@ -1018,6 +1067,56 @@ export async function addSkillDirectories(dirs: string[]): Promise<void> {
  */
 export function getDynamicSkills(): Command[] {
   return Array.from(dynamicSkills.values())
+}
+
+/**
+ * Adds nested-variant guidance to an unqualified skill without mutating the
+ * memoized command. Explicit `/dir:skill` invocations continue to resolve to
+ * the qualified command itself.
+ */
+export function addDynamicSkillVariantGuidance(
+  commands: readonly Command[],
+  dynamicVariants: readonly DynamicSkillVariant[] = [
+    ...dynamicSkillVariants.values(),
+  ],
+): Command[] {
+  if (dynamicVariants.length === 0) return [...commands]
+
+  const variantsByBaseName = new Map<string, DynamicSkillVariant[]>()
+  for (const variant of dynamicVariants) {
+    const variants = variantsByBaseName.get(variant.baseName) ?? []
+    variants.push(variant)
+    variantsByBaseName.set(variant.baseName, variants)
+  }
+
+  return commands.map(command => {
+    if (command.type !== 'prompt' || command.name.includes(':')) return command
+    const variants = variantsByBaseName.get(command.name)
+    if (!variants || variants.length === 0) return command
+    const sorted = [...variants].sort((a, b) =>
+      a.command.name.localeCompare(b.command.name),
+    )
+    const originalGetPrompt = command.getPromptForCommand.bind(command)
+    return {
+      ...command,
+      async getPromptForCommand(args, context) {
+        const content = await originalGetPrompt(args, context)
+        const available = sorted
+          .map(
+            variant =>
+              `- /${variant.command.name} for files under ${variant.directory}/`,
+          )
+          .join('\n')
+        return [
+          ...content,
+          {
+            type: 'text',
+            text: `Nested variants of this skill are available:\n${available}\nInvoke every variant whose directory contains files involved in the task.`,
+          },
+        ]
+      },
+    } satisfies Command
+  })
 }
 
 /**
@@ -1101,6 +1200,7 @@ export function activateConditionalSkillsForPaths(
 export function clearDynamicSkills(): void {
   dynamicSkillDirs.clear()
   dynamicSkills.clear()
+  dynamicSkillVariants.clear()
   conditionalSkills.clear()
   activatedConditionalSkillNames.clear()
 }

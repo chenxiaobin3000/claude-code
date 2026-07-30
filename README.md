@@ -19,7 +19,7 @@
 - **插件与浏览器**：官方插件市场、远端安装/更新和插件自动重命名不提供。主程序不提供 Chrome 控制；Chrome 能力只能来自显式加载的本地 `claudeinchrome` 插件。该插件的 MCP、Skill 与 Native Host 尚未迁移和验收，当前不可用。
 - **Sandbox**：Windows 上启用 Sandbox 时，Shell 会在 Windows Sandbox VM 内执行，默认只映射启动工作区和只读 Shell 运行时，且固定断网、不传递用户主目录或凭据。`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands` 保持上层语义；Windows 不能精确落实域名白名单、代理和目录内文件 allow/deny 规则，配置这些规则时会 fail-closed，而不会回退宿主执行。
 - **会话路径**：官方 `/cd` 可迁移会话；本项目有意保持临时 cwd 语义，只改变主会话后续工具的当前目录，不迁移项目身份、会话存储、权限根、配置或扩展作用域。
-- **Agent、Hook、MCP 与 Skill**：本地 Agent 与后台任务行为已经按官方对照基线验收；`/cd` 的临时 cwd、OpenAI-compatible Provider、本地安全增强和不提供云端 Agent 产品仍是明确差异。部分生命周期 Hook、嵌套 Skill 加载和部分 Hook 输出语义仍以开发计划的未完成项为准。本地 `/mcp login`/`logout` 仅管理用户配置的 MCP OAuth 凭据。
+- **Agent、Hook、MCP 与 Skill**：本地 Agent、后台任务、Hook、Plugin 与 Skill 第二阶段已经按官方对照基线验收；嵌套 Skill 使用相对启动项目根的限定名，连续 inline Skill 可在同一条输入中组合。`/cd` 的临时 cwd、OpenAI-compatible Provider、本地安全增强和不提供云端 Agent 产品仍是明确差异；MCP 剩余生命周期缺口以开发计划为准。本地 `/mcp login`/`logout` 仅管理用户配置的 MCP OAuth 凭据。
 
 ## 运行时边界
 
@@ -123,7 +123,7 @@ Bash/PowerShell 命令中的 `cd` 属于 Shell cwd 持久化规则，不会触�
 
 主题只有两类来源：内置主题，以及 `~/.claude/themes/*.json`。主题文件在启动时读取；外部修改后重启生效。不提供交互编辑、热更新或插件主题安装。
 
-插件仅支持已安装的本地插件。没有远端市场、下载、原生安装、CLI 自更新或插件自动更新。
+插件仅支持已安装的本地插件。依赖的 SemVer 范围在加载时校验，缺失、禁用或版本不满足会安全降级；`/reload-plugins` 会重新加载并裁剪已移除的活动组件。没有远端市场、下载、原生安装、CLI 自更新或插件自动更新。
 
 ### 本地 Chrome 扩展
 

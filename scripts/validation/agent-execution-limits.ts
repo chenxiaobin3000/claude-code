@@ -172,8 +172,8 @@ const resumeAgentSource = await Bun.file(
   ),
 ).text()
 assert(
-  toolConstantsSource.includes(
-    'ASYNC_AGENT_ALLOWED_TOOLS = new Set([\n  AGENT_TOOL_NAME',
+  /ASYNC_AGENT_ALLOWED_TOOLS = new Set\(\[\r?\n\s+AGENT_TOOL_NAME/.test(
+    toolConstantsSource,
   ),
   'async Agent tool must support bounded nesting',
 )
