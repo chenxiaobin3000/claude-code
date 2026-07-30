@@ -19,7 +19,7 @@
 - **插件与浏览器**：官方插件市场、远端安装/更新和插件自动重命名不提供。主程序不提供 Chrome 控制；Chrome 能力只能来自显式加载的本地 `claudeinchrome` 插件。该插件的 MCP、Skill 与 Native Host 尚未迁移和验收，当前不可用。
 - **Sandbox**：Windows 上启用 Sandbox 时，Shell 会在 Windows Sandbox VM 内执行，默认只映射启动工作区和只读 Shell 运行时，且固定断网、不传递用户主目录或凭据。`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands` 保持上层语义；Windows 不能精确落实域名白名单、代理和目录内文件 allow/deny 规则，配置这些规则时会 fail-closed，而不会回退宿主执行。
 - **会话路径**：官方 `/cd` 可迁移会话；本项目有意保持临时 cwd 语义，只改变主会话后续工具的当前目录，不迁移项目身份、会话存储、权限根、配置或扩展作用域。
-- **Agent、Hook、MCP 与 Skill**：后台 Agent 默认值、受限嵌套、不可逆停止、生命周期通知、交互式权限回传、`/fork`/`/subtask` 职责、本地 Shell/MCP Monitor 资源回收及嵌套 stream-json 父子事件已经对齐；间接 Agent/Shell 内容不能伪造运行时控制或权限消息。部分生命周期 Hook、嵌套 Skill 加载和部分 Hook 输出语义仍以开发计划的未完成项为准。本地 `/mcp login`/`logout` 仅管理用户配置的 MCP OAuth 凭据。
+- **Agent、Hook、MCP 与 Skill**：本地 Agent 与后台任务行为已经按官方对照基线验收；`/cd` 的临时 cwd、OpenAI-compatible Provider、本地安全增强和不提供云端 Agent 产品仍是明确差异。部分生命周期 Hook、嵌套 Skill 加载和部分 Hook 输出语义仍以开发计划的未完成项为准。本地 `/mcp login`/`logout` 仅管理用户配置的 MCP OAuth 凭据。
 
 ## 运行时边界
 
@@ -106,6 +106,15 @@ Windows Sandbox 不能精确执行域名白名单、代理或映射目录内的 
 
 Bash/PowerShell 命令中的 `cd` 属于 Shell cwd 持久化规则，不会触发项目身份或会话迁移。
 
+### Agent 与本地后台任务
+
+- 普通 Agent 默认后台运行；需要立即消费结果时可显式前台运行。Agent、Team、Shell、Workflow、MCP Monitor 和本地后台 Session 使用统一生命周期，等待权限、空闲、完成、失败、停止和取消可区分，终态不可被恢复或迟到事件覆盖。
+- Agent cwd 与主会话隔离，worktree 使用独立目录。嵌套 Agent 默认最大深度 2、会话总数 50、并发 8、累计 Token 1,000,000；超限明确失败，取消向真实子树传播。
+- `/fork` 创建拥有独立 Session、Transcript 和进程的后台会话，可通过 `status`、`attach`、`detach`、`resume` 和 `kill` 管理；`/subtask` 继承当前上下文，结果、通知与预算仍归当前会话。
+- Shell 后台化会保留原进程、Tool Use ID、输出、退出码和取消链；MCP Monitor 使用同一任务契约。普通 MCP Tool 不会在可能已经产生副作用后自动重放。
+- 交互式后台 Agent 的权限请求返回主会话并标明来源；headless/stream-json 安全拒绝无法交互审批的请求。启用 partial messages 时，嵌套文本和推理事件携带父 Tool Use ID 与 Agent ID。
+- Agent 最终报告与 Shell 交互提示中的间接内容会标记为 `untrusted-content` 并转义，不能伪造运行时控制、任务终态或权限结果。
+
 文件工具针对本地模型的重复失败增加确定性保护：同一轮中同一文件工具、操作和规范化路径连续失败两次后，后续相同调用会被阻止并要求模型先读取错误、调整参数或改用其他操作，避免无限重试。创建后立即修改的流程会保留文件版本校验；遇到外部修改错误时应先重新读取文件。
 
 大文件写入支持自动分块与截断恢复。恢复块有确定的大小上限；模型没有按协议分块时，工具会使用确定性方案继续，而不是无限要求模型重发完整内容。
@@ -154,7 +163,6 @@ bun run verify
 ## 项目文档
 
 - [开发计划与差异基线](DEVELOPMENT_PLAN.md)
-- [P0 Agent 与后台任务行为矩阵](P0_AGENT_BEHAVIOR_MATRIX.md)
 - [环境变量](ENVIRONMENT_VARIABLES.md)
 - [Feature Flag 策略](FEATURE_FLAGS.md)
 - [依赖审计](DEPENDENCY_AUDIT.md)

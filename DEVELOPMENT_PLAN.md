@@ -30,6 +30,17 @@
 - Windows Shell 实现按优先级进行可用性探测；Bash 与 PowerShell 不通过写死顺序互相替代。
 - 文件写入支持分块与截断恢复。相同文件工具操作连续失败两次后，当前轮的第三次相同调用被确定性阻止，避免本地模型陷入重试循环。
 
+### Agent 与本地后台任务
+
+- 主会话 Bash 与 PowerShell 的 Shell 内部 `cd` 只在项目根或显式授权附加目录内跨调用保留；越界、目录失效、UNC、符号链接/Junction 和 Windows/Git Bash 路径转换均按统一策略处理。Agent 使用独立 cwd，上下文与 worktree 不继承或回写主会话的临时 `/cd`。
+- Agent、Coordinator、Team、Shell、Workflow、MCP Monitor 和本地后台 Session 使用统一生命周期，区分 `queued`、`running`、`waiting_permission`、`idle`、`completed`、`failed`、`stopped` 与 `cancelled`；终态不可被迟到事件、恢复或通知附加处理覆盖。
+- 普通 Agent 默认后台运行；显式前台、全局禁用后台和强制异步上下文按固定优先级决定执行方式。嵌套 Agent 默认最大深度 2、会话总数 50、并发 8、累计 Token 1,000,000，并支持通过已记录环境变量调整。
+- `/fork` 创建独立 Session、Transcript 和后台进程，可执行 `status`、`attach`、`detach`、`resume` 与 `kill`；`/subtask` 是继承当前上下文、通知和预算的后台 Agent，两者不共享任务身份或所有权。
+- Bash 与 PowerShell 共用后台化阈值并在迁移后保留原进程、Tool Use ID、磁盘输出、退出码和 Abort 链；MCP Monitor 使用相同任务生命周期。普通 MCP Tool 不会在可能已经产生副作用后自动重放。
+- 交互式后台 Agent 的权限请求回到主会话并显示来源，超时只拒绝当前工具调用；headless/stream-json 不创建本地审批并安全拒绝。停止、取消、失败与恢复会回收预算、进程、句柄、cleanup、worktree 和陈旧 PID。
+- headless/stream-json 可按 partial messages 开关转发嵌套 Agent 文本与推理事件，事件携带稳定的父 Tool Use ID 和 Agent ID；队列反压优先丢弃可损失增量，不丢弃任务或会话生命周期事件。
+- Agent 最终报告和 Shell 交互提示尾部使用 `untrusted-content` 来源标记并转义，不能伪造任务终态、权限结果或运行时控制标签；原生 MCP、网页、仓库和普通工具输出保持结构化 `tool_result`。
+
 ### Windows 原生 OS Sandbox
 
 - Windows 上 `sandbox.enabled: true` 时，受保护的 Bash 与 PowerShell 固定在同一个 Windows Sandbox VM 中执行；首次受保护命令才启动可见 VM，取消或正常退出 CLI 会关闭整个来宾会话，绝不回退宿主执行。
@@ -65,27 +76,7 @@
 
 ## 未开发路线图
 
-### P0：Agent 与后台任务模型
-
-P0 以 Claude Code `2.1.220` 为冻结对照版本；详细的官方行为、当前实现、目标、明确差异、源码入口和验证入口见 [P0 Agent 与后台任务行为矩阵](P0_AGENT_BEHAVIOR_MATRIX.md)。矩阵中的 `/cd`、OpenAI-compatible Provider、本地安全增强以及云端/远程产品缺失属于明确差异，不参与“与官方一致”的通过判定；Shell 内部 `cd`、Agent、本地后台任务、权限和生命周期仍须按矩阵验收。
-
-- [x] 对齐 Shell cwd 规则：主会话的 Bash 与 PowerShell `cd` 仅在项目根或 `--add-dir`、`/add-dir`、`additionalDirectories` 授权目录内跨命令保留；越界在提交持久 cwd 和触发 `CwdChanged` 前拒绝，复位到稳定根并在工具结果中说明；子代理的 Shell cwd 不跨调用保留。
-- [x] 固化 cwd 规范化与隔离：覆盖符号链接/Junction、Windows 盘符大小写、UNC 拒绝、Git Bash `/tmp` 原生路径转换、工作树、并发 Agent、目录失效恢复和 `CwdChanged` 顺序；新建及恢复 Agent 使用独立 AsyncLocalStorage cwd，不继承或回写主会话临时 `/cd`。
-- [x] 统一 Agent、Coordinator、Team 与 Background Session 状态模型：所有本地任务通过同一转换契约归一为 `queued`、`running`、`waiting_permission`、`idle`、`completed`、`failed`、`stopped`、`cancelled`；现有紧凑 `pending/running/completed/failed/killed` 字段只保留为持久化和协议兼容表示。Task Framework 在每次更新时同步权威状态并拒绝迟到回调覆盖终态；Team 的空闲和权限等待进入同一模型且在 UI 可区分。daemon 的 `running/stopped/stale` 仅表示本地守护进程健康状态，不作为任务执行态。
-- [x] 明确前台/后台默认值、`background` 覆盖规则与等待行为：普通 Agent 默认后台运行；全局禁用和不支持后台的上下文保持前台，Coordinator/fork 实验/Assistant 等强制异步上下文其次，调用参数再次，Agent 定义最后覆盖普通默认；显式前台只在调用方必须立即使用结果时等待。
-- [x] 定义嵌套子代理的最大深度、并发、Token 预算和取消传播：默认深度 2、会话 Agent 总数 50、并发 8、累计 Token 1,000,000，可通过已记录的环境变量收紧或放宽；超限明确失败，嵌套前台/后台 Agent 均连接父级取消信号，根后台 Agent 继续独立于主线程 ESC。
-- [x] 对齐后台优先的子代理生命周期：前台会话可继续工作并收到完成/需输入通知；Agent 的 `running/completed/failed/stopped` 写入独立持久状态，`stopped` 不可被 `SendMessage`、任务面板、任务淘汰或进程重启恢复；完成后的分类器、worktree 或通知附加处理失败不会反向改写终态或发送矛盾通知。
-- [x] 在 headless/stream-json 中可选择转发嵌套子代理文本和推理事件（2026-07-30）：仅在调用方启用 partial messages 时转发，事件携带稳定的父 `tool_use` 与 Agent ID；队列反压优先淘汰可损失增量，不淘汰任务和会话生命周期事件。会话级 Agent 总数、嵌套深度、并发和 Token 安全预算已经固化。
-- [x] 对齐 `/fork` 与 `/subtask` 的职责（2026-07-30）：`/fork` 复制主对话 Transcript 到新 Session ID 后，通过本地后台引擎启动可独立 `status`、`attach`、`resume`、`kill` 的 CLI 进程；`/subtask` 单独保留为继承当前上下文的后台 Agent，结果、通知和预算仍归当前会话。两个入口不再共享 Agent Task ID、Transcript 或工作树所有权。
-- [x] 对齐 Shell 与 MCP 后台任务契约（2026-07-30）：Bash 和 PowerShell 共用 2 秒进度阈值及 15 秒 Assistant 阻塞预算，迁入后台时复用原进程、Tool Use ID、磁盘输出、退出码和 Abort 链；MCP Monitor 使用同一任务生命周期并在完成、失败、停止和进程退出时注销 cleanup、传播 Abort。普通 MCP Tool 调用不会在已产生副作用后自动重放或擅自脱离原调用。
-- [x] 统一本地后台 Session 的 `attach`、`detach`、`resume`、`kill`、`status` 语义（2026-07-30）：注册表持久化 detached/tmux 引擎信息；attach/detach 不改变任务终态；运行中 Session 禁止 resume，停止或完成且 Transcript 存在时可带新 Prompt 后台恢复；kill 清理陈旧 PID 文件，不存在或不可恢复目标返回明确错误。
-- [x] 让后台 Agent 的权限请求可靠回到主会话：交互式本地 Agent 共用主会话审批队列，显示来源并进入 `waiting_permission`；默认 300,000 ms 未处理时只拒绝当前工具调用，headless/stream-json 保持安全拒绝。
-- [x] 在崩溃、取消和恢复时回收 Agent、Shell、MCP Monitor 与本地后台 Session 的进程内资源（2026-07-30）：Agent 释放预算、AbortController、cleanup handler、Transcript 输出句柄和 worktree；Shell 终止子进程并清理输出句柄；MCP Monitor 在所有终态和进程退出时 Abort 并注销 cleanup；本地后台 Session 通过 PID 注册表清扫崩溃残留，恢复前拒绝仍在运行的同一 Session。
-- [x] 为来自间接外部内容的提示注入建立明确隔离策略（2026-07-30）：后台 Agent 最终报告与 Shell 交互提示尾部使用 `untrusted-content` 来源标记并转义，不能伪造任务终态、权限结果或运行时控制标签；原生 MCP、网页、仓库和普通工具输出继续保留在结构化 `tool_result` 中，不被提升为应用控制消息。
-
-完成条件：Agent 状态转换和 Shell cwd 隔离可复现，取消与恢复不会遗留资源，权限与用户可见状态一致，跨目录不会泄漏配置或会话归属，并有独立轻量验证覆盖关键转换。
-
-### P1：Hook、Plugin、Skill 与 MCP
+### P0：Hook、Plugin、Skill 与 MCP
 
 - 当前进度（2026-07-28）：Hook 已具备 Schema、`additionalContext`、`CwdChanged`/`FileChanged`、命令/Prompt/Agent/HTTP/受控 MCP 执行和新 argv 模式；本地 Plugin/Skill 已具备目录发现、真实路径去重、嵌套命名、依赖解析与 Plugin Hook 原子热重载，以及 `SKILL.md` 元数据三种命名兼容；MCP 已具备本地 OAuth Token 缓存失效、登录/退出、请求超时、重连/重试、`roots/list`、敏感 Header/URL 脱敏与输出截断。本轮 `bun run verify --ci` 已于 2026-07-28 全部通过（159.0 秒，含 17 个 workspace、专项边界、Bun/Node Bundle 与 Windows 独立 EXE）；以下未勾选项仅保留真实缺口，不能因已有局部实现而提前关闭。
 - [x] 支持 Hook 直接调用 MCP Tool（2026-07-28）：仅允许 `PreToolUse` 通过 `type:"mcp"` 调用当前会话已加载的 MCP Tool；输入先过目标 Tool Schema，再进入原始 `canUseTool` 权限审批，不接受普通内置 Tool，也不递归触发目标 Tool Hook。配置的秒级超时沿用统一 AbortSignal，认证、权限拒绝、输入错误和执行错误均作为阻断结果回传。专项验证覆盖 Schema、来源隔离去重和拒绝不可绕过。
@@ -110,7 +101,7 @@ P0 以 Claude Code `2.1.220` 为冻结对照版本；详细的官方行为、当
 
 完成条件：每项能力有配置 Schema、权限边界、失败提示和至少一个不依赖测试框架的验证脚本。
 
-### P2：性能与稳定性
+### P1：性能与稳定性
 
 - [ ] 优化流式渲染的 CPU 占用、缓存命中和长输出退化。
 - [ ] 控制长会话、工具结果、图片与 MCP 内容导致的内存增长。
@@ -120,7 +111,7 @@ P0 以 Claude Code `2.1.220` 为冻结对照版本；详细的官方行为、当
 
 完成条件：有可重复的压力脚本、资源阈值与异常恢复验证，且不会把环境偶发错误误报为产品成功。
 
-### P3：可选产品能力
+### P2：可选产品能力
 
 - [ ] 支持 macOS 专用、默认关闭的 `sandbox.allowAppleEvents`，并确保该例外不会放宽文件系统、网络或其他平台的边界。
 - [ ] 将 `claude-in-chrome` MCP Server、Native Host 实现/清单安装和协议代码从主干迁入 `plugins/claudeinchrome`；插件使用标准本地 MCP 声明启动，主干不得恢复隐藏进程入口、保留 Server 名、自动注入或 in-process 特例。
