@@ -42,6 +42,7 @@
   "scripts": {
     "build": "bun run build.ts",
     "build:chrome-host": "bun run scripts/build-chrome-host.ts",
+    "build:production": "bun run build:exe && bun run build:chrome-host",
     "chrome:fixture": "bun run scripts/validation/claudeinchrome-browser-e2e.ts --serve-fixture",
     "chrome:verify": "bun run scripts/validation/claudeinchrome-browser-e2e.ts --connection",
     "chrome:verify:tools": "bun run scripts/validation/claudeinchrome-browser-e2e.ts --matrix",

@@ -66,6 +66,13 @@ export function buildPluginId(name: string, marketplace?: string): string {
   return marketplace ? `${name}@${marketplace}` : name
 }
 
+export function getPluginSourceLabel(source: string): string {
+  if (source.endsWith('@inline')) return `explicit --plugin-dir: ${source}`
+  if (source.endsWith('@local')) return `automatic: ${source}`
+  if (source.endsWith('@builtin')) return `built-in: ${source}`
+  return source
+}
+
 /**
  * Check if a marketplace name is an official (Anthropic-controlled) marketplace.
  * Used for telemetry redaction — official plugin identifiers are safe to log to

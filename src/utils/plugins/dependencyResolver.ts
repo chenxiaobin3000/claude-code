@@ -20,11 +20,10 @@ import type { PluginDependencyRef, PluginId } from './schemas.js'
 import { negotiateExtensionApiVersion } from './extensionApiVersion.js'
 
 /**
- * Synthetic marketplace sentinel for `--plugin-dir` plugins (pluginLoader.ts
- * sets `source = "{name}@inline"`). Not a real marketplace — bare deps from
- * these plugins cannot meaningfully inherit it.
+ * Synthetic source sentinels for directory plugins. They are not real
+ * marketplaces, so bare dependencies are resolved by plugin name.
  */
-const INLINE_MARKETPLACE = 'inline'
+const LOCAL_DIRECTORY_MARKETPLACES = new Set(['inline', 'local'])
 
 /**
  * Normalize a dependency reference to fully-qualified "name@marketplace" form.
@@ -32,10 +31,10 @@ const INLINE_MARKETPLACE = 'inline'
  * cross-marketplace deps are blocked anyway, so the @-suffix is boilerplate
  * in the common case.
  *
- * EXCEPTION: if the declaring plugin is @inline (loaded via --plugin-dir),
- * bare deps are returned unchanged. `inline` is a synthetic sentinel, not a
- * real marketplace — fabricating "dep@inline" would never match anything.
- * verifyAndDemote handles bare deps via name-only matching.
+ * EXCEPTION: if the declaring plugin is @inline (loaded via --plugin-dir) or
+ * @local (automatically discovered), bare deps are returned unchanged.
+ * verifyAndDemote handles these via name-only matching so an explicit plugin
+ * can satisfy a dependency declared by the automatic plugin it overrides.
  */
 export function qualifyDependency(
   dep: PluginDependencyRef | string,
@@ -46,7 +45,7 @@ export function qualifyDependency(
     return `${dependency.name}@${dependency.marketplace}`
   }
   const mkt = parsePluginIdentifier(declaringPluginId).marketplace
-  if (!mkt || mkt === INLINE_MARKETPLACE) return dependency.name
+  if (!mkt || LOCAL_DIRECTORY_MARKETPLACES.has(mkt)) return dependency.name
   return `${dependency.name}@${mkt}`
 }
 
@@ -204,7 +203,7 @@ export function verifyAndDemote(plugins: readonly LoadedPlugin[]): {
 } {
   const known = new Set(plugins.map(p => p.source))
   const enabled = new Set(plugins.filter(p => p.enabled).map(p => p.source))
-  // Name-only indexes for bare deps from --plugin-dir (@inline) plugins:
+  // Name-only indexes for bare deps from directory (@inline/@local) plugins:
   // the real marketplace is unknown, so match "B" against any enabled "B@*".
   // enabledByName is a multiset: if B@epic AND B@other are both enabled,
   // demoting one mustn't make "B" disappear from the index.
@@ -239,7 +238,7 @@ export function verifyAndDemote(plugins: readonly LoadedPlugin[]): {
       for (const rawDep of p.manifest.dependencies ?? []) {
         const dependency = normalizeDependencyRef(rawDep)
         const dep = qualifyDependency(rawDep, p.source)
-        // Bare dep ← @inline plugin: match every loaded candidate by name.
+        // Bare dep from a directory plugin: match loaded candidates by name.
         const isBare = !parsePluginIdentifier(dep).marketplace
         const candidates = plugins.filter(candidate =>
           isBare
@@ -320,7 +319,7 @@ export function findReverseDependents(
         p.source !== pluginId &&
         (p.manifest.dependencies ?? []).some(d => {
           const qualified = qualifyDependency(d, p.source)
-          // Bare dep (from @inline plugin): match by name only
+          // Bare dep from a directory plugin: match by name only
           return parsePluginIdentifier(qualified).marketplace
             ? qualified === pluginId
             : qualified === targetName

@@ -1,8 +1,9 @@
 # claudeinchrome
 
 `claudeinchrome` 是项目唯一的本地 Chrome 集成边界。Claude 主程序本身不实现
-Chrome 操作；只有显式加载并启用本插件后，才能通过插件提供的 MCP 与 Skill
-连接 Chrome 扩展并控制 Chrome。
+Chrome 操作；生产 standalone 从 `claude.exe` 同级 `plugins` 下的一级目录自动
+发现本插件，源码开发则通过 `--plugin-dir plugins/claudeinchrome` 显式加载。插件
+成功加载后，才能通过其 MCP 与 Skill 连接 Chrome 扩展并控制 Chrome。
 
 目标数据路径：
 
@@ -14,7 +15,8 @@ Chrome 操作；只有显式加载并启用本插件后，才能通过插件提�
   为 `dlpofjonbnceelbmpelkfblmnghclmkm`；已实现标签页、导航、页面读取与交互、
   截图和窗口缩放等浏览器端能力。
 - `.claude-plugin/plugin.json`：已声明标准本地 stdio MCP；源码目录可通过
-  `--plugin-dir plugins/claudeinchrome` 开发加载。
+  `--plugin-dir plugins/claudeinchrome` 开发加载；生产分发目录由 standalone 自动
+  发现，无需传该参数。
 - `protocol/`：已经固定扩展实际实现的 11 个工具、Native Host 名称、1 MiB
   消息上限、30 秒工具超时及必填 `request_id`；MCP 工具广告与扩展分发器由轻量
   验证保持一致。
@@ -45,6 +47,11 @@ bun run build:chrome-host
 注册和卸载必须由用户显式执行；插件不会从主程序启动流程自动修改 Native Host
 清单或 Windows 注册表。构建后的整个 `dist/plugins/claudeinchrome` 是分发单元；
 其 Manifest 直接启动独立 Host，目标机器不需要 Bun 或 Node.js。
+
+完整 Windows 生产产物可在仓库根目录执行 `bun run build:production` 生成。将整个
+`dist` 复制到固定目录后直接运行 `claude.exe`；它只扫描同级 `plugins` 的一级
+直接子目录。`--plugin-dir` 仍可用于显式覆盖。自动发现插件不会代替 Chrome 扩展
+加载或上述 `register`/`doctor` 操作。
 
 ## 真实 Chrome 验收
 

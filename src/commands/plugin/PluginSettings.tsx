@@ -5,6 +5,7 @@ import type { PluginSettingsProps } from './types.js'
 import { ValidatePlugin } from './ValidatePlugin.js'
 import { parsePluginArgs } from './parseArgs.js'
 import { loadAllPluginsCacheOnly } from '../../utils/plugins/pluginLoader.js'
+import { getPluginSourceLabel } from '../../utils/plugins/pluginIdentifier.js'
 
 /** Local-only plugin command surface. Remote marketplace distribution is not supported. */
 export function PluginSettings({ onComplete, args }: PluginSettingsProps): React.ReactNode {
@@ -28,7 +29,7 @@ function LocalPluginSummary({
     void loadAllPluginsCacheOnly().then(result => {
       const plugins = [...result.enabled, ...result.disabled]
       const lines = plugins.map(plugin =>
-        `  ${plugin.enabled ? '✓' : '○'} ${plugin.name} (${plugin.source})`,
+        `  ${plugin.enabled ? '✓' : '○'} ${plugin.name} (${getPluginSourceLabel(plugin.source)})`,
       )
       const header = showHelp
         ? [
@@ -36,13 +37,16 @@ function LocalPluginSummary({
             '  /plugin                 List loaded local and built-in plugins',
             '  /plugin validate <path> Validate a local plugin manifest or directory',
             '',
-            'Load a directory plugin with --plugin-dir <path>. Remote marketplaces, downloads, and updates are disabled.',
+            'Standalone builds automatically load direct plugin directories from the plugins folder beside claude.exe.',
+            'Use --plugin-dir <path> for an explicit session plugin; it overrides an automatic plugin with the same name.',
+            'Remote marketplaces, downloads, and updates are disabled.',
           ]
         : [
             'Loaded local and built-in plugins:',
             ...(lines.length > 0 ? lines : ['  No plugins loaded']),
             '',
-            'Use --plugin-dir <path> to load a local plugin, or /plugin validate <path> to validate one.',
+            'Standalone builds also scan one directory level under the plugins folder beside claude.exe.',
+            'Use --plugin-dir <path> to explicitly load or override a local plugin, or /plugin validate <path> to validate one.',
           ]
       onComplete(header.join('\n'))
     })

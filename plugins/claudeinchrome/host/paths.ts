@@ -8,6 +8,8 @@ import {
 
 export const NATIVE_HOST_MANIFEST_NAME = `${CHROME_NATIVE_HOST_NAME}.json`
 export const ALLOWED_EXTENSION_ORIGIN = `chrome-extension://${CLAUDEINCHROME_EXTENSION_ID}/`
+const VALIDATION_SOCKET_SUFFIX_ENV =
+  'CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX'
 
 function username(): string {
   let value = 'default'
@@ -19,15 +21,27 @@ function username(): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, '_')
 }
 
+function validationSocketSuffix(): string {
+  const value = process.env[VALIDATION_SOCKET_SUFFIX_ENV]?.trim()
+  if (!value) return ''
+  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(value)) {
+    throw new Error(
+      `${VALIDATION_SOCKET_SUFFIX_ENV} must contain only ASCII letters, numbers, underscores, or hyphens`,
+    )
+  }
+  return `-${value}`
+}
+
 export function getSocketDirectory(): string {
   return join(tmpdir(), `claudeinchrome-${username()}`)
 }
 
 export function getNativeSocketPath(): string {
+  const suffix = validationSocketSuffix()
   if (platform() === 'win32') {
-    return `\\\\.\\pipe\\claudeinchrome-${username()}`
+    return `\\\\.\\pipe\\claudeinchrome-${username()}${suffix}`
   }
-  return join(getSocketDirectory(), `${process.pid}.sock`)
+  return join(getSocketDirectory(), `${process.pid}${suffix}.sock`)
 }
 
 export function getAvailableSocketPaths(): string[] {

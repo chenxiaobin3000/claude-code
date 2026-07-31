@@ -3,6 +3,7 @@ import figures from 'figures'
 import { errorMessage } from '../../utils/errors.js'
 import { setUseCoworkPlugins } from '../../bootstrap/state.js'
 import { loadAllPlugins } from '../../utils/plugins/pluginLoader.js'
+import { getPluginSourceLabel } from '../../utils/plugins/pluginIdentifier.js'
 import {
   validateManifest,
   validatePluginContents,
@@ -58,6 +59,10 @@ export async function pluginListHandler(options: { json?: boolean; cowork?: bool
     process.exit(0)
   }
   console.log('Loaded local and built-in plugins:')
-  for (const plugin of plugins) console.log(`  ${plugin.enabled ? figures.tick : '○'} ${plugin.name} (${plugin.source})`)
+  for (const plugin of plugins) {
+    console.log(
+      `  ${plugin.enabled ? figures.tick : '○'} ${plugin.name} (${getPluginSourceLabel(plugin.source)})`,
+    )
+  }
   process.exit(0)
 }

@@ -16,7 +16,7 @@
 
 - **模型与登录**：官方的 Anthropic 登录、官方模型、组织默认/限制模型、Claude API Provider 与相关云端模型能力不适用。本项目只从 `models.json` 加载 OpenAI-compatible 模型；模型 Profile 静态声明，不做服务端模型发现或自动模型替换。
 - **云端与远程产品**：官方的 Web/Desktop/Mobile、Remote Control、GitHub App、Cloud Code Review、Routines、Channels、Artifacts、语音与账户/用量产品均不提供。本项目也不包含官方自动更新、安装器或远端遥测。
-- **插件与浏览器**：官方插件市场、远端安装/更新和插件自动重命名不提供。主程序本身不实现 Chrome 操作；Chrome 能力只能由显式加载的本地 `claudeinchrome` 插件提供。插件的标准 MCP、Skill、独立 Host、无运行时分发结构及真实 Chrome 工具矩阵已经验收。
+- **插件与浏览器**：官方插件市场、远端安装/更新和插件自动重命名不提供。主程序本身不实现 Chrome 操作；生产 standalone 自动发现同级 `plugins` 一级目录中的本地 `claudeinchrome`，源码开发通过 `--plugin-dir` 加载。插件的标准 MCP、Skill、独立 Host、免运行时分发结构及真实 Chrome 工具矩阵已经验收。
 - **Sandbox**：Windows 上启用 Sandbox 时，Shell 会在 Windows Sandbox VM 内执行，默认只映射启动工作区和只读 Shell 运行时，且固定断网、不传递用户主目录或凭据。`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands` 保持上层语义；Windows 不能精确落实域名白名单、代理和目录内文件 allow/deny 规则，配置这些规则时会 fail-closed，而不会回退宿主执行。
 - **会话路径**：官方 `/cd` 可迁移会话；本项目有意保持临时 cwd 语义，只改变主会话后续工具的当前目录，不迁移项目身份、会话存储、权限根、配置或扩展作用域。
 - **Agent、Hook、MCP 与 Skill**：本地 Agent、后台任务、Hook、Plugin、Skill 与 MCP 已完成当前 P0 基线验收；嵌套 Skill 使用相对启动项目根的限定名，连续 inline Skill 可在同一条输入中组合。`/cd` 的临时 cwd、OpenAI-compatible Provider、本地安全增强和不提供云端 Agent 产品仍是明确差异。本地 `/mcp login`/`logout` 仅管理用户配置的 MCP OAuth 凭据。
@@ -123,7 +123,7 @@ Bash/PowerShell 命令中的 `cd` 属于 Shell cwd 持久化规则，不会触�
 
 主题只有两类来源：内置主题，以及 `~/.claude/themes/*.json`。主题文件在启动时读取；外部修改后重启生效。不提供交互编辑、热更新或插件主题安装。
 
-插件仅支持已安装的本地插件。依赖的 SemVer 范围在加载时校验，缺失、禁用或版本不满足会安全降级；`/reload-plugins` 会重新加载并裁剪已移除的活动组件。没有远端市场、下载、原生安装、CLI 自更新或插件自动更新。
+插件仅支持本地插件。Windows standalone 自动扫描 `claude.exe` 同级 `plugins` 目录下包含 `.claude-plugin/plugin.json` 的一级直接子目录，不递归、不扫描 cwd 或 `~/.claude/plugins`；链接、Junction 和路径逃逸会安全拒绝。优先级为显式 `--plugin-dir`（`@inline`）> 自动发现（`@local`）> 内置（`@builtin`）；同级重名禁用歧义项，高优先级加载失败不回退同名低优先级插件。`--bare` 禁用自动发现但保留显式插件；`/reload-plugins` 会重新扫描并裁剪已移除的活动组件。没有远端市场、下载、原生安装、CLI 自更新或插件自动更新。
 
 本地 Plugin Manifest 可用 `apiVersion` 声明所需的扩展 API SemVer 范围，例如 `"apiVersion": "^1.0.0"`。当前扩展 API 为 `1.0.0`，并与 CLI 产品版本独立；同一主版本只允许新增可选字段或能力，删除、改名、默认行为变化等破坏性修改必须升级主版本。旧 Manifest 缺少该字段时按 v1 契约继续加载。显式范围不兼容时会禁用整个 Plugin，并连带收回其 Hook、Skill、Agent、Command、MCP、LSP 和 Settings，避免组件半加载；依赖该 Plugin 的其他 Plugin 也会按依赖闭包安全降级。MCP 和 ACP 仍使用各自协议的原生版本协商，不复用 Plugin API 版本。
 
@@ -133,6 +133,11 @@ Bash/PowerShell 命令中的 `cd` 属于 Shell cwd 持久化规则，不会触�
 [`plugins/claudeinchrome`](plugins/claudeinchrome)，连接链路为“主程序标准插件
 加载器 → 插件 MCP/Skill → 插件 Native Host → Chrome 扩展 → Chrome”。主程序
 不会自动注入 Chrome MCP，也不提供 `--chrome`、`/chrome` 或内置 Chrome Skill。
+
+生产构建把插件放在 `dist/plugins/claudeinchrome`，与 `dist/claude.exe` 的自动
+发现目录一致；复制整个 `dist` 到固定目录后可直接运行 `claude.exe`，无需再传
+`--plugin-dir`。源码/Bun 开发模式不会自动扫描仓库插件，仍使用
+`bun run dev -- --plugin-dir plugins/claudeinchrome`。
 
 Manifest V3 扩展源码位于
 [`plugins/claudeinchrome/chrome-extension`](plugins/claudeinchrome/chrome-extension)，
@@ -154,6 +159,15 @@ MCP 包及主程序兼容实现已经删除。真实 Chrome 的连接、授权�
 启动本地页面后，`bun run chrome:verify:tools` 覆盖页面读取、交互、截图、
 前进后退、刷新、Unicode URL 与超限结果恢复。
 
+生产机器仍须显式完成浏览器侧安装，CLI 自动发现插件不会修改 Chrome 或注册表：
+
+1. 在 `chrome://extensions` 启用开发者模式，加载
+   `plugins/claudeinchrome/chrome-extension`；扩展 ID 必须为
+   `dlpofjonbnceelbmpelkfblmnghclmkm`。
+2. 以实际运行 Chrome 的 Windows 用户执行
+   `plugins/claudeinchrome/claudeinchrome-host.exe register`，再执行 `doctor`。
+3. 保持分发目录路径稳定；移动 Host 后必须重新执行 `register`。
+
 ## 构建与验证
 
 ```powershell
@@ -164,6 +178,7 @@ bun run build
 bun run build:node
 bun run build:exe
 bun run build:chrome-host
+bun run build:production
 bun run verify
 ```
 
@@ -175,9 +190,15 @@ bun run verify
 - claudeinchrome Plugin：`dist/plugins/claudeinchrome` 是完整分发目录，其中
   Host 为独立 Native Messaging/MCP 单文件，目标机器无需 Bun 或 Node.js。
 
+`bun run build:production` 一次生成 `dist/claude.exe` 和
+`dist/plugins/claudeinchrome`。整个 `dist` 是 Windows 生产分发单元：standalone
+启动时只自动加载同级 `plugins` 下的一级插件目录；`--plugin-dir <path>` 仍可加载
+临时插件或覆盖同名自动插件。自动发现不会安装 Chrome 扩展、注册 Native Host、
+下载插件或更新任何产物。
+
 项目保持 TypeScript + Bun 实现，不以 Rust 或其他平台原生语言重写 CLI。`claude.exe` 是包含 Bun Runtime 的 standalone 产物；它的目标是免安装运行时分发，而不是追随官方的原生二进制实现或安装/自更新机制。
 
-`bun run verify` 是唯一的项目验证入口，覆盖依赖锁定、类型、Biome、适用构建、CLI `--version`/启动冒烟、源码级轻量验证，以及可用本地模型的单轮模型和工具调用。它不依赖付费云模型，也不引入第二套测试框架。
+`bun run verify` 是唯一的项目验证入口，覆盖依赖锁定、类型、Biome、适用构建、CLI `--version`/启动冒烟、源码级轻量验证，以及可用本地模型的单轮模型和工具调用。standalone 矩阵还验证自动插件发现、`--bare` 隔离、显式覆盖和插件目录移除后的不可达性。它不依赖付费云模型，也不引入第二套测试框架。
 
 ## 项目文档
 

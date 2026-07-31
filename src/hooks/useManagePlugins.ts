@@ -194,7 +194,13 @@ export function useManagePlugins({
         enabled_count: enabled.length,
         disabled_count: disabled.length,
         inline_count: count(enabled, p => p.source.endsWith('@inline')),
-        marketplace_count: count(enabled, p => !p.source.endsWith('@inline')),
+        marketplace_count: count(
+          enabled,
+          p =>
+            !p.source.endsWith('@inline') &&
+            !p.source.endsWith('@local') &&
+            !p.source.endsWith('@builtin'),
+        ),
         error_count: errors.length,
         skill_count: commands.length,
         agent_count: agents.length,

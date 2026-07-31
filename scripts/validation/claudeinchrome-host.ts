@@ -14,6 +14,7 @@ import {
   registerNativeHost,
   unregisterNativeHost,
 } from '../../plugins/claudeinchrome/host/registration.js'
+import { getNativeSocketPath } from '../../plugins/claudeinchrome/host/paths.js'
 import {
   CHROME_NATIVE_HOST_NAME,
   CLAUDEINCHROME_EXTENSION_ID,
@@ -27,6 +28,11 @@ const sources = await Promise.all(
   ),
 )
 const combinedSource = sources.join('\n')
+if (!sources[2]!.includes('listen({ path: this.socketPath! }')) {
+  throw new Error(
+    '[claudeinchrome-host] socket listener must use the explicit path overload',
+  )
+}
 for (const forbidden of [
   'sideQuery',
   'USER_TYPE',
@@ -85,6 +91,43 @@ const manifestPath = join(temporaryDirectory, 'native-host.json')
 const options = {
   manifestPath,
   updateSystemRegistration: false,
+}
+
+const originalValidationSuffix =
+  process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX
+delete process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX
+const productionSocketPath = getNativeSocketPath()
+process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX = 'verify_123'
+const validationSocketPath = getNativeSocketPath()
+if (
+  validationSocketPath === productionSocketPath ||
+  !validationSocketPath.includes('verify_123')
+) {
+  throw new Error(
+    '[claudeinchrome-host] validation socket suffix did not isolate the endpoint',
+  )
+}
+process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX = '../escape'
+try {
+  getNativeSocketPath()
+  throw new Error(
+    '[claudeinchrome-host] unsafe validation socket suffix was accepted',
+  )
+} catch (error) {
+  if (
+    error instanceof Error &&
+    error.message ===
+      '[claudeinchrome-host] unsafe validation socket suffix was accepted'
+  ) {
+    throw error
+  }
+} finally {
+  if (originalValidationSuffix === undefined) {
+    delete process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX
+  } else {
+    process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX =
+      originalValidationSuffix
+  }
 }
 
 try {

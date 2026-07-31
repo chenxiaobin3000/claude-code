@@ -24,6 +24,8 @@ const validationScripts = [
   'scripts/validation/main-boundary.ts',
   'scripts/validation/artifact-boundary.ts',
   'scripts/validation/plugin-distribution-boundary.ts',
+  'scripts/validation/automatic-plugin-directory.ts',
+  'scripts/validation/automatic-plugin-loading.ts',
   'scripts/validation/plugin-skill-lifecycle.ts',
   'scripts/validation/extension-api-compat.ts',
   'scripts/validation/mcp-lifecycle.ts',
@@ -385,6 +387,12 @@ async function main(): Promise<void> {
       'run',
       'scripts/validation/claudeinchrome-distribution.ts',
     ])
+    await runStep('standalone automatic Plugin lifecycle', [
+      bunExecutable,
+      'run',
+      'scripts/validation/automatic-plugin-standalone.ts',
+      resolve(projectRoot, 'dist', 'claude.exe'),
+    ])
     const chromeHost = resolve(
       projectRoot,
       'dist',
@@ -405,7 +413,13 @@ async function main(): Promise<void> {
     await runStep(
       'claudeinchrome Native Host EOF lifecycle',
       [chromeHost],
-      { capture: true, timeoutMs: 10_000 },
+      {
+        capture: true,
+        timeoutMs: 10_000,
+        env: {
+          CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX: `verify-${process.pid}`,
+        },
+      },
     )
     await runStep(
       'claudeinchrome MCP Host EOF lifecycle',

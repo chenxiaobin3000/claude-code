@@ -51,19 +51,21 @@
 ### 本地产品边界
 
 - 主题仅来自内置主题和 `~/.claude/themes/*.json`；重启读取，不提供编辑器、热更新或插件主题安装。
-- 插件仅支持本地已安装插件；不支持远端市场、自动下载、原生安装、CLI 自更新或插件自动更新。
+- 插件仅支持本地插件。Windows standalone 只扫描 `claude.exe` 同级 `plugins` 下含 `.claude-plugin/plugin.json` 的一级直接子目录，不递归、不扫描 cwd 或 `~/.claude/plugins`；目录缺失或为空时静默跳过，链接、Junction 和路径逃逸 fail-closed。源码/Bun 开发模式不自动扫描，继续使用 `--plugin-dir`。
+- 插件优先级固定为显式 `--plugin-dir`（`@inline`）> standalone 自动发现（`@local`）> 内置（`@builtin`）。同级重名禁用歧义项，高优先级插件失败时不回退同名低优先级实现；`--bare` 禁用自动发现但保留显式插件，`/reload-plugins` 会重新扫描并裁剪已移除的全部插件组件。
+- 不支持远端市场、自动下载、原生安装、CLI 自更新或插件自动更新；自动发现不会安装 Chrome 扩展、注册 Native Host 或修改注册表。
 - 本地 Plugin Manifest 使用可选 `apiVersion` SemVer 范围协商声明式扩展 API；当前版本为 `1.0.0`，缺省按旧 v1 契约兼容。显式不兼容时整插件及其组件不可达，依赖降级继续按固定点传播；MCP 与 ACP 保持各自协议协商。
 - `/cd` 有意保持为本项目的临时 cwd 命令，不对齐官方的跨项目会话迁移：它只改变主会话后续工具使用的当前目录，不改变启动项目根、Session ID、Transcript/Resume 归属、权限根、Settings、CLAUDE.md、Hook、Skill、Plugin、MCP、Memory、Plan 或 Checkpoint 作用域。
 - `/cd` 不改变已运行子 Agent 的 cwd；新建 Agent 从稳定的会话/工作树根启动，不继承主会话的临时 `/cd`，子 Agent 的 cwd 变化也不得回写主会话。`/clear` 和进程重启恢复到启动项目目录；无参数只报告当前 cwd，失败不得改变现有 cwd。
 - 主程序本身不实现、不自动启用 Chrome 操作；`--chrome`/`--no-chrome`、`/chrome`、Chrome Settings/Onboarding/通知、隐藏 MCP/Native Host 进程入口、内置 Chrome Skill、MCP 保留名称和专用客户端渲染均已从主干入口移除。
-- Chrome 能力只能由用户显式加载的本地 `claudeinchrome` 插件提供，目标链路固定为：主程序标准插件加载器 → 插件 MCP/Skill → 插件 Native Host → 插件 Chrome 扩展 → Chrome；主干禁止绕过插件直接连接。
+- Chrome 能力只能由本地 `claudeinchrome` 插件提供：生产 standalone 从同级 `plugins` 一级目录自动发现，源码开发使用 `--plugin-dir` 显式加载；目标链路固定为主程序标准插件加载器 → 插件 MCP/Skill → 插件 Native Host → 插件 Chrome 扩展 → Chrome，主干禁止绕过插件直接连接。
 - `plugins/claudeinchrome/chrome-extension` 已包含 Manifest V3 Chrome 扩展实现，固定扩展 ID 为 `dlpofjonbnceelbmpelkfblmnghclmkm`；标签页、导航、页面读取与交互、截图和窗口缩放等浏览器端能力已经实现。
 - Chrome 工具与桥接协议的权威定义位于 `plugins/claudeinchrome/protocol`。MCP 只允许广告扩展已实现的 11 个工具，`computer.zoom`、GIF、图片上传、Console/Network 和快捷方式不进入可用工具集合；协议固定 1 MiB 消息上限、30 秒工具超时和必填 `request_id`，Native Host 必须按请求归属精确回传，不得向其他 MCP 客户端广播工具结果。
 - `plugins/claudeinchrome/host` 已提供与主程序解耦的 MCP/Native Messaging Host 入口、路径、注册、卸载和 doctor，实现不依赖主程序 Settings、模型调用、Anthropic 账号或内部 `USER_TYPE` 分支。Windows 可构建独立 `claudeinchrome-host.exe`；默认无参数运行 Native Host，`mcp` 运行 stdio MCP，`register`/`unregister`/`doctor` 由用户显式执行。
 - MCP 引擎、Socket 生命周期和工具声明已经迁入 `plugins/claudeinchrome/mcp`；旧 `packages/@ant/claude-for-chrome-mcp` workspace 包和 `src/utils/claudeInChrome` 主程序兼容层已经删除，并由防回归验证阻止恢复。
 - 插件 Manifest 已通过标准本地 stdio MCP 声明启动 Host，`skills/claude-in-chrome/SKILL.md` 只随插件加载；插件未加载时，主程序的系统提示、Skill 和工具列表均不宣传 Chrome 能力。
-- `bun run build:chrome-host` 生成完整的 `dist/plugins/claudeinchrome` 分发目录，分发 Manifest 直接启动包含 Bun Runtime 的独立 Host，目标机器无需 Bun 或 Node.js；源码插件仍可用 Bun 进行开发加载。
-- 标准 Plugin Manifest、MCP 环境展开、名称作用域、Skill 发现、独立 Host EOF、分发目录生命周期和真实 Chrome 端到端矩阵均已验收。扩展固定声明 `<all_urls>`，不提供页面授权或本地站点白名单；所有 HTTP/HTTPS 页面均可操作，Chrome 内部页、扩展页、文件页和无效 Tab 继续拒绝。真实矩阵覆盖固定扩展 ID、Native Host 注册/doctor/自动重连、拒绝路径、页面刷新和错误恢复。
+- `bun run build:chrome-host` 生成完整的 `dist/plugins/claudeinchrome` 分发目录；`bun run build:production` 同时生成 `dist/claude.exe`，整个 `dist` 可作为固定路径的 Windows 生产分发单元。分发 Manifest 直接启动包含 Bun Runtime 的独立 Host，目标机器无需 Bun 或 Node.js。
+- 标准 Plugin Manifest、MCP 环境展开、名称作用域、Skill 发现、自动目录约束、三层优先级、`--bare`、重载裁剪、standalone 插件移除、独立 Host EOF、分发目录生命周期和真实 Chrome 端到端矩阵均已验收。扩展固定声明 `<all_urls>`，不提供页面授权或本地站点白名单；所有 HTTP/HTTPS 页面均可操作，Chrome 内部页、扩展页、文件页和无效 Tab 继续拒绝。真实矩阵覆盖固定扩展 ID、Native Host 注册/doctor/自动重连、拒绝路径、页面刷新和错误恢复。
 - 真实 Chrome 工具矩阵覆盖 11 个广告工具的连接与核心行为，包括标签页枚举/创建、导航及前进后退、页面读取、查找、表单输入、JavaScript、点击/滚动/键盘、截图、窗口缩放、Unicode URL、Chrome 内部页拒绝、非法/已失效 Tab ID 和 1 MiB 超限结果。超限结果必须返回结构化错误并保持桥接连接；点击必须保留浏览器聚焦语义。
 
 ### 工程与验证
@@ -95,7 +97,7 @@
 
 完成条件：阶段 2–7 全部完成，有可重复的压力脚本、基于同机基线的资源阈值与异常恢复验证，且不会把环境偶发错误、跳过项或外部服务不可用误报为产品成功。
 
-### P2：可选产品能力
+### P1：可选产品能力
 
 - [ ] 支持 macOS 专用、默认关闭的 `sandbox.allowAppleEvents`，并确保该例外不会放宽文件系统、网络或其他平台的边界。
 

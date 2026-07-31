@@ -156,7 +156,9 @@ class ChromeNativeHost {
     this.server = createServer(socket => this.handleMcpClient(socket))
 
     await new Promise<void>((resolve, reject) => {
-      this.server!.listen(this.socketPath!, () => {
+      // Keep the named-pipe/Unix-socket overload explicit and consistent
+      // across the Node and Bun runtimes used by source and standalone builds.
+      this.server!.listen({ path: this.socketPath! }, () => {
         log('Socket server listening for connections')
         this.running = true
         resolve()

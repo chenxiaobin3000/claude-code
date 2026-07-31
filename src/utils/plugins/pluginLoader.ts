@@ -12,6 +12,7 @@ import type {
   PluginManifest,
 } from '../../types/plugin.js'
 import { logForDebugging } from '../debug.js'
+import { isBareMode } from '../envUtils.js'
 import { errorMessage } from '../errors.js'
 import { pathExists } from '../file.js'
 import { jsonParse } from '../slowOperations.js'
@@ -22,6 +23,7 @@ import {
   setPluginSettingsBase,
 } from '../settings/settingsCache.js'
 import type { HooksSettings } from '../settings/types.js'
+import { discoverAutomaticPlugins } from './automaticPluginDiscovery.js'
 import { getPluginsDirectory } from './pluginDirectories.js'
 import { verifyAndDemote } from './dependencyResolver.js'
 import {
@@ -174,41 +176,185 @@ export async function createPluginFromPath(
   return { plugin, errors }
 }
 
-async function loadLocalDirectoryPlugins(): Promise<{ plugins: LoadedPlugin[]; errors: PluginError[] }> {
+type DirectoryPluginInput = {
+  path: string
+  fallbackName: string
+  sourceLabel: string
+}
+
+type DirectoryPluginTier = {
+  plugins: LoadedPlugin[]
+  errors: PluginError[]
+  claimedNames: Set<string>
+}
+
+async function readClaimedPluginName(
+  path: string,
+  fallbackName: string,
+): Promise<string> {
+  try {
+    const parsed = jsonParse(
+      await readFile(join(path, '.claude-plugin', 'plugin.json'), 'utf8'),
+    ) as unknown
+    if (parsed && typeof parsed === 'object' && 'name' in parsed) {
+      const name = (parsed as { name?: unknown }).name
+      if (typeof name === 'string' && name.trim()) return name.trim()
+    }
+  } catch {
+    // The regular manifest loader reports the actionable parsing/path error.
+  }
+  return fallbackName
+}
+
+export async function loadDirectoryPluginTier(
+  inputs: readonly DirectoryPluginInput[],
+  sourceKind: 'inline' | 'local',
+): Promise<DirectoryPluginTier> {
   const plugins: LoadedPlugin[] = []
   const errors: PluginError[] = []
-  for (const [index, inputPath] of getInlinePlugins().entries()) {
-    const path = resolve(inputPath)
+  const claims: string[] = []
+
+  for (const input of inputs) {
+    const path = resolve(input.path)
+    const claimedName = await readClaimedPluginName(path, input.fallbackName)
+    claims.push(claimedName)
     if (!(await pathExists(path))) {
-      errors.push({ type: 'path-not-found', source: `inline[${index}]`, path, component: 'commands' })
+      errors.push({
+        type: 'path-not-found',
+        source: input.sourceLabel,
+        path,
+        component: 'commands',
+      })
       continue
     }
     try {
-      const loaded = await createPluginFromPath(path, `${basename(path)}@inline`, true, basename(path))
-      loaded.plugin.source = `${loaded.plugin.name}@inline`
+      const loaded = await createPluginFromPath(
+        path,
+        `${input.fallbackName}@${sourceKind}`,
+        true,
+        input.fallbackName,
+      )
+      loaded.plugin.source = `${loaded.plugin.name}@${sourceKind}`
       loaded.plugin.repository = loaded.plugin.source
       plugins.push(loaded.plugin)
       errors.push(...loaded.errors)
     } catch (error) {
-      errors.push({ type: 'generic-error', source: `inline[${index}]`, error: errorMessage(error) })
+      errors.push({
+        type: 'generic-error',
+        source: input.sourceLabel,
+        plugin: claimedName,
+        error: errorMessage(error),
+      })
     }
   }
-  return { plugins, errors }
+
+  const claimCounts = new Map<string, number>()
+  for (const name of claims) {
+    claimCounts.set(name, (claimCounts.get(name) ?? 0) + 1)
+  }
+  const duplicateNames = new Set(
+    [...claimCounts]
+      .filter(([, count]) => count > 1)
+      .map(([name]) => name),
+  )
+  for (const name of [...duplicateNames].sort()) {
+    errors.push({
+      type: 'generic-error',
+      source: `${name}@${sourceKind}`,
+      plugin: name,
+      error: `Duplicate ${sourceKind} plugin name ${JSON.stringify(name)}; all same-priority candidates were disabled`,
+    })
+  }
+
+  return {
+    plugins: plugins.filter(plugin => !duplicateNames.has(plugin.name)),
+    errors,
+    claimedNames: new Set(claims),
+  }
+}
+
+async function loadInlineDirectoryPlugins(): Promise<DirectoryPluginTier> {
+  return loadDirectoryPluginTier(
+    getInlinePlugins().map((inputPath, index) => ({
+      path: inputPath,
+      fallbackName: basename(resolve(inputPath)),
+      sourceLabel: `inline[${index}]`,
+    })),
+    'inline',
+  )
+}
+
+export function isAutomaticPluginDiscoveryEnabled(): boolean {
+  return !isBareMode()
+}
+
+async function loadAutomaticDirectoryPlugins(): Promise<DirectoryPluginTier> {
+  if (!isAutomaticPluginDiscoveryEnabled()) {
+    return { plugins: [], errors: [], claimedNames: new Set() }
+  }
+  const discovery = await discoverAutomaticPlugins()
+  const loaded = await loadDirectoryPluginTier(
+    discovery.candidates.map(candidate => ({
+      path: candidate.pluginPath,
+      fallbackName: candidate.directoryName,
+      sourceLabel: `${candidate.directoryName}@local`,
+    })),
+    'local',
+  )
+  loaded.errors.unshift(
+    ...discovery.errors.map(
+      (error): PluginError => ({
+        type: 'generic-error',
+        source: 'automatic-plugin-discovery',
+        error: `${error.path}: ${error.error}`,
+      }),
+    ),
+  )
+  for (const error of discovery.errors) {
+    if (error.directoryName) loaded.claimedNames.add(error.directoryName)
+  }
+  return loaded
+}
+
+export function selectPluginsByPriority(
+  inline: DirectoryPluginTier,
+  automatic: DirectoryPluginTier,
+  builtin: { enabled: LoadedPlugin[]; disabled: LoadedPlugin[] },
+): { plugins: LoadedPlugin[]; errors: PluginError[] } {
+  const automaticPlugins = automatic.plugins.filter(
+    plugin => !inline.claimedNames.has(plugin.name),
+  )
+  const claimedLocalNames = new Set([
+    ...inline.claimedNames,
+    ...automatic.claimedNames,
+  ])
+  const builtinPlugins = [...builtin.enabled, ...builtin.disabled].filter(
+    plugin => !claimedLocalNames.has(plugin.name),
+  )
+  return {
+    plugins: [...inline.plugins, ...automaticPlugins, ...builtinPlugins],
+    errors: [...inline.errors, ...automatic.errors],
+  }
 }
 
 async function assemblePluginLoadResult(): Promise<PluginLoadResult> {
-  const local = await loadLocalDirectoryPlugins()
-  const builtin = getBuiltinPlugins()
-  const localNames = new Set(local.plugins.map(plugin => plugin.name))
-  const builtins = [...builtin.enabled, ...builtin.disabled].filter(plugin => !localNames.has(plugin.name))
-  const plugins = [...local.plugins, ...builtins]
+  const [inline, automatic] = await Promise.all([
+    loadInlineDirectoryPlugins(),
+    loadAutomaticDirectoryPlugins(),
+  ])
+  const selected = selectPluginsByPriority(
+    inline,
+    automatic,
+    getBuiltinPlugins(),
+  )
+  const plugins = selected.plugins
   const { demoted, errors } = verifyAndDemote(plugins)
   for (const plugin of plugins) if (demoted.has(plugin.source)) plugin.enabled = false
   cachePluginSettings(plugins.filter(plugin => plugin.enabled))
   return {
     enabled: plugins.filter(plugin => plugin.enabled),
     disabled: plugins.filter(plugin => !plugin.enabled),
-    errors: [...local.errors, ...errors],
+    errors: [...selected.errors, ...errors],
   }
 }
 
