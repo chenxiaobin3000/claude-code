@@ -241,7 +241,6 @@ export function formatReleaseNoteForDisplay(
 export function getLogoDisplayData(): {
   version: string
   cwd: string
-  billingType: string
   agentName: string | undefined
 } {
   const version = process.env.DEMO_VERSION ?? MACRO.VERSION
@@ -252,52 +251,12 @@ export function getLogoDisplayData(): {
   const cwd = serverUrl
     ? `${displayPath} in ${serverUrl.replace(/^https?:\/\//, '')}`
     : displayPath
-  const billingType = 'OpenAI-compatible API'
   const agentName = getInitialSettings().agent
 
   return {
     version,
     cwd,
-    billingType,
     agentName,
-  }
-}
-
-/**
- * Determines how to display model and billing information based on available width
- */
-export function formatModelAndBilling(
-  modelName: string,
-  billingType: string,
-  availableWidth: number,
-): {
-  shouldSplit: boolean
-  truncatedModel: string
-  truncatedBilling: string
-} {
-  const separator = ' · '
-  const combinedWidth =
-    stringWidth(modelName) + separator.length + stringWidth(billingType)
-  const shouldSplit = combinedWidth > availableWidth
-
-  if (shouldSplit) {
-    return {
-      shouldSplit: true,
-      truncatedModel: truncate(modelName, availableWidth),
-      truncatedBilling: truncate(billingType, availableWidth),
-    }
-  }
-
-  return {
-    shouldSplit: false,
-    truncatedModel: truncate(
-      modelName,
-      Math.max(
-        availableWidth - stringWidth(billingType) - separator.length,
-        10,
-      ),
-    ),
-    truncatedBilling: billingType,
   }
 }
 

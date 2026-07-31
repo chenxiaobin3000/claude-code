@@ -6,7 +6,7 @@ import { useAppState } from '../../state/AppState.js';
 import { getEffortSuffix } from '../../utils/effort.js';
 import { truncate } from '../../utils/format.js';
 import { isFullscreenEnvEnabled } from '../../utils/fullscreen.js';
-import { formatModelAndBilling, getLogoDisplayData, truncatePath } from '../../utils/logoV2Utils.js';
+import { getLogoDisplayData, truncatePath } from '../../utils/logoV2Utils.js';
 import { renderModelSetting } from '../../utils/model/model.js';
 import { OffscreenFreeze } from '../OffscreenFreeze.js';
 import { AnimatedClawd } from './AnimatedClawd.js';
@@ -18,7 +18,7 @@ export function CondensedLogo(): ReactNode {
   const effortValue = useAppState(s => s.effortValue);
   const model = useMainLoopModel();
   const modelDisplayName = renderModelSetting(model);
-  const { version, cwd, billingType, agentName: agentNameFromSettings } = getLogoDisplayData();
+  const { version, cwd, agentName: agentNameFromSettings } = getLogoDisplayData();
 
   // Prefer AppState.agent (set from --agent CLI flag) over settings
   const agentName = agent ?? agentNameFromSettings;
@@ -31,11 +31,7 @@ export function CondensedLogo(): ReactNode {
   const truncatedVersion = truncate(version, Math.max(textWidth - versionPrefix.length, 6));
 
   const effortSuffix = getEffortSuffix(model, effortValue);
-  const { shouldSplit, truncatedModel, truncatedBilling } = formatModelAndBilling(
-    modelDisplayName + effortSuffix,
-    billingType,
-    textWidth,
-  );
+  const truncatedModel = truncate(modelDisplayName + effortSuffix, textWidth);
 
   // Truncate path, accounting for agent name if present
   const separator = ' · ';
@@ -59,16 +55,7 @@ export function CondensedLogo(): ReactNode {
           <Text>
             <Text bold>Claude Code</Text> <Text dimColor>v{truncatedVersion}</Text>
           </Text>
-          {shouldSplit ? (
-            <>
-              <Text dimColor>{truncatedModel}</Text>
-              <Text dimColor>{truncatedBilling}</Text>
-            </>
-          ) : (
-            <Text dimColor>
-              {truncatedModel} · {truncatedBilling}
-            </Text>
-          )}
+          <Text dimColor>{truncatedModel}</Text>
           <Text dimColor>{agentName ? `@${agentName} · ${truncatedCwd}` : truncatedCwd}</Text>
         </Box>
       </Box>

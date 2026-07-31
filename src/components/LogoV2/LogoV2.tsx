@@ -108,7 +108,7 @@ export function LogoV2(): React.ReactNode {
 
   const model = useMainLoopModel();
   const fullModelDisplayName = renderModelSetting(model);
-  const { version, cwd, billingType, agentName: agentNameFromSettings } = getLogoDisplayData();
+  const { version, cwd, agentName: agentNameFromSettings } = getLogoDisplayData();
   // Prefer AppState.agent (set from --agent CLI flag) over settings
   const agentName = agent ?? agentNameFromSettings;
   // -20 to account for the max length of subscription name " · Claude Enterprise".
@@ -213,7 +213,6 @@ export function LogoV2(): React.ReactNode {
               <Clawd />
             </Box>
             <Text dimColor>{modelDisplayName}</Text>
-            <Text dimColor>{billingType}</Text>
             <Text dimColor>{agentName ? `@${agentName} · ${truncatedCwd}` : truncatedCwd}</Text>
           </Box>
         </OffscreenFreeze>
@@ -231,7 +230,7 @@ export function LogoV2(): React.ReactNode {
   }
 
   const welcomeMessage = formatWelcomeMessage(username);
-  const modelLine = `${modelDisplayName} · ${billingType}`;
+  const modelLine = modelDisplayName;
   // Calculate cwd width accounting for agent name if present
   const cwdSeparator = ' · ';
   const cwdAtPrefix = '@';

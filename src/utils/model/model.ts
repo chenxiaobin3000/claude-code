@@ -20,8 +20,10 @@ import { getAPIProvider, isFirstPartyAnthropicBaseUrl } from './providers.js'
 import { LIGHTNING_BOLT } from '../../constants/figures.js'
 import { isModelAllowed } from './modelAllowlist.js'
 import { type ModelAlias, isModelAlias } from './aliases.js'
-import { capitalize } from '../stringUtils.js'
-import { getDefaultConfiguredModel } from './modelRegistry.js'
+import {
+  findConfiguredModel,
+  getDefaultConfiguredModel,
+} from './modelRegistry.js'
 
 export type ModelShortName = string
 export type ModelName = string
@@ -318,13 +320,8 @@ export function isOpus1mMergeEnabled(): boolean {
 }
 
 export function renderModelSetting(setting: ModelName | ModelAlias): string {
-  if (setting === 'opusplan') {
-    return 'Opus Plan'
-  }
-  if (isModelAlias(setting)) {
-    return capitalize(setting)
-  }
-  return renderModelName(setting)
+  const resolvedModel = parseUserSpecifiedModel(setting)
+  return findConfiguredModel(resolvedModel)?.displayName ?? resolvedModel
 }
 
 // @[MODEL LAUNCH]: Add display name cases for the new model (base + [1m] variant if applicable).
@@ -550,10 +547,11 @@ export function modelDisplayString(model: ModelSetting): string {
     if (process.env.USER_TYPE === 'ant') {
       return `Default for Ants (${renderDefaultModelSetting(getDefaultMainLoopModelSetting())})`
     }
-    return `Default (${getDefaultMainLoopModel()})`
+    const defaultModel = getDefaultMainLoopModel()
+    return `Default (${findConfiguredModel(defaultModel)?.displayName ?? defaultModel})`
   }
   const resolvedModel = parseUserSpecifiedModel(model)
-  return model === resolvedModel ? resolvedModel : `${model} (${resolvedModel})`
+  return findConfiguredModel(resolvedModel)?.displayName ?? resolvedModel
 }
 
 // @[MODEL LAUNCH]: Add a marketing name mapping for the new model below.
