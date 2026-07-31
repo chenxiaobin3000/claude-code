@@ -18,7 +18,10 @@ import { logForDebugging } from 'src/utils/debug.js'
 import { countLinesChanged, getPatchForDisplay } from 'src/utils/diff.js'
 import { isEnvTruthy } from 'src/utils/envUtils.js'
 import { isENOENT } from 'src/utils/errors.js'
-import { getFileModificationTime, writeTextContent } from 'src/utils/file.js'
+import {
+  getFileModificationTime,
+  writeTextContentWithRetry,
+} from 'src/utils/file.js'
 import {
   fileHistoryEnabled,
   fileHistoryTrackEdit,
@@ -373,7 +376,13 @@ export const FileWriteTool = buildTool({
     // the old file's line endings (or sampled the repo via ripgrep for new
     // files), which silently corrupted e.g. bash scripts with \r on Linux when
     // overwriting a CRLF file or when binaries in cwd poisoned the repo sample.
-    writeTextContent(fullFilePath, content, enc, 'LF', true)
+    await writeTextContentWithRetry(
+      fullFilePath,
+      content,
+      enc,
+      'LF',
+      oldContent,
+    )
     if (recoveryIdToComplete) {
       completeWriteRecovery(recoveryIdToComplete)
     }

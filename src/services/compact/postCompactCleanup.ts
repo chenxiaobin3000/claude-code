@@ -7,6 +7,7 @@ import { clearClassifierApprovals } from '../../utils/classifierApprovals.js'
 import { resetGetMemoryFilesCache } from '../../utils/claudemd.js'
 import { logError } from '../../utils/log.js'
 import { clearSessionMessagesCache } from '../../utils/sessionStorage.js'
+import { setPerformanceGauge } from '../../utils/performanceBaseline.js'
 import { resetMicrocompactState } from './microCompact.js'
 
 /**
@@ -14,10 +15,25 @@ import { resetMicrocompactState } from './microCompact.js'
  * components. Called during runPostCompactCleanup() so instance-scoped state
  * (e.g. contentReplacementState) is freed alongside module-level caches.
  */
-const compactCleanupCallbacks: Array<() => void> = []
+const compactCleanupCallbacks = new Set<() => void>()
 
-export function registerCompactCleanup(callback: () => void): void {
-  compactCleanupCallbacks.push(callback)
+export function registerCompactCleanup(callback: () => void): () => void {
+  compactCleanupCallbacks.add(callback)
+  setPerformanceGauge(
+    'retained_compact_cleanup_callbacks',
+    compactCleanupCallbacks.size,
+  )
+  return () => {
+    compactCleanupCallbacks.delete(callback)
+    setPerformanceGauge(
+      'retained_compact_cleanup_callbacks',
+      compactCleanupCallbacks.size,
+    )
+  }
+}
+
+export function getCompactCleanupCallbackCount(): number {
+  return compactCleanupCallbacks.size
 }
 
 /**
@@ -104,4 +120,8 @@ export function runPostCompactCleanup(querySource?: QuerySource): void {
       logError(error)
     }
   }
+  setPerformanceGauge(
+    'retained_compact_cleanup_callbacks',
+    compactCleanupCallbacks.size,
+  )
 }

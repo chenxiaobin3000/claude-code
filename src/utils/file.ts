@@ -1,5 +1,13 @@
 import { chmodSync, writeFileSync as fsWriteFileSync } from 'fs'
-import { realpath, stat } from 'fs/promises'
+import {
+  chmod,
+  open,
+  readlink,
+  realpath,
+  rename,
+  stat,
+  unlink,
+} from 'fs/promises'
 import { homedir } from 'os'
 import {
   basename,
@@ -20,6 +28,7 @@ import { isENOENT, isFsInaccessible } from './errors.js'
 import {
   detectEncodingForResolvedPath,
   detectLineEndingsForString,
+  readFileSyncWithMetadata,
   type LineEndingType,
 } from './fileRead.js'
 import { fileReadCache } from './fileReadCache.js'
@@ -27,6 +36,7 @@ import { getFsImplementation, safeResolvePath } from './fsOperations.js'
 import { logError } from './log.js'
 import { expandPath } from './path.js'
 import { getPlatform } from './platform.js'
+import { withWindowsFileRetry } from './windowsFileRetry.js'
 
 export type File = {
   filename: string
@@ -99,6 +109,91 @@ export function writeTextContent(
     encoding,
     requireAtomic,
   })
+}
+
+/**
+ * Atomic text write with bounded Windows sharing-conflict recovery. The
+ * expected normalized content is checked before every retry so an editor or
+ * sync client cannot be silently overwritten while the destination is busy.
+ */
+export async function writeTextContentWithRetry(
+  filePath: string,
+  content: string,
+  encoding: BufferEncoding,
+  endings: LineEndingType,
+  expectedContent: string | null,
+): Promise<void> {
+  let toWrite = content
+  if (endings === 'CRLF') {
+    toWrite = content.replaceAll('\r\n', '\n').split('\n').join('\r\n')
+  }
+
+  let targetPath = filePath
+  try {
+    const linkTarget = await readlink(filePath)
+    targetPath = isAbsolute(linkTarget)
+      ? linkTarget
+      : resolve(dirname(filePath), linkTarget)
+  } catch (error) {
+    if (!isENOENT(error) && (error as NodeJS.ErrnoException).code !== 'EINVAL') {
+      throw error
+    }
+  }
+
+  let targetMode: number | undefined
+  try {
+    targetMode = (await stat(targetPath)).mode
+  } catch (error) {
+    if (!isENOENT(error)) throw error
+  }
+
+  await withWindowsFileRetry(
+    async attempt => {
+      const tempPath = `${targetPath}.tmp.${process.pid}.${Date.now()}.${attempt}`
+      let committed = false
+      try {
+        const handle = await open(
+          tempPath,
+          'wx',
+          targetMode === undefined ? undefined : targetMode,
+        )
+        try {
+          await handle.writeFile(toWrite, { encoding })
+          await handle.sync()
+        } finally {
+          await handle.close()
+        }
+        if (targetMode !== undefined) await chmod(tempPath, targetMode)
+
+        verifyExpectedFileContent(filePath, expectedContent)
+        await rename(tempPath, targetPath)
+        committed = true
+      } finally {
+        if (!committed) await unlink(tempPath).catch(() => {})
+      }
+    },
+    {
+      beforeRetry: () => verifyExpectedFileContent(filePath, expectedContent),
+    },
+  )
+}
+
+function verifyExpectedFileContent(
+  filePath: string,
+  expectedContent: string | null,
+): void {
+  let currentContent: string | null
+  try {
+    currentContent = readFileSyncWithMetadata(filePath).content
+  } catch (error) {
+    if (!isENOENT(error)) throw error
+    currentContent = null
+  }
+  if (currentContent !== expectedContent) {
+    throw new Error(
+      'File has been unexpectedly modified. Read it again before attempting to write it.',
+    )
+  }
 }
 
 export function detectFileEncoding(filePath: string): BufferEncoding {

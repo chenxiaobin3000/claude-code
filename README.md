@@ -19,7 +19,7 @@
 - **插件与浏览器**：官方插件市场、远端安装/更新和插件自动重命名不提供。主程序本身不实现 Chrome 操作；生产 standalone 自动发现同级 `plugins` 一级目录中的本地 `claudeinchrome`，源码开发通过 `--plugin-dir` 加载。插件的标准 MCP、Skill、独立 Host、免运行时分发结构及真实 Chrome 工具矩阵已经验收。
 - **Sandbox**：Windows 上启用 Sandbox 时，Shell 会在 Windows Sandbox VM 内执行，默认只映射启动工作区和只读 Shell 运行时，且固定断网、不传递用户主目录或凭据。`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands` 保持上层语义；Windows 不能精确落实域名白名单、代理和目录内文件 allow/deny 规则，配置这些规则时会 fail-closed，而不会回退宿主执行。
 - **会话路径**：官方 `/cd` 可迁移会话；本项目有意保持临时 cwd 语义，只改变主会话后续工具的当前目录，不迁移项目身份、会话存储、权限根、配置或扩展作用域。
-- **Agent、Hook、MCP 与 Skill**：本地 Agent、后台任务、Hook、Plugin、Skill 与 MCP 已完成当前 P0 基线验收；嵌套 Skill 使用相对启动项目根的限定名，连续 inline Skill 可在同一条输入中组合。`/cd` 的临时 cwd、OpenAI-compatible Provider、本地安全增强和不提供云端 Agent 产品仍是明确差异。本地 `/mcp login`/`logout` 仅管理用户配置的 MCP OAuth 凭据。
+- **Agent、Hook、MCP 与 Skill**：本地 Agent、后台任务、Hook、Plugin、Skill 与 MCP 已固化为当前基线；嵌套 Skill 使用相对启动项目根的限定名，连续 inline Skill 可在同一条输入中组合。`/cd` 的临时 cwd、OpenAI-compatible Provider、本地安全增强和不提供云端 Agent 产品仍是明确差异。本地 `/mcp login`/`logout` 仅管理用户配置的 MCP OAuth 凭据。
 
 ## 运行时边界
 
@@ -199,6 +199,16 @@ bun run verify
 项目保持 TypeScript + Bun 实现，不以 Rust 或其他平台原生语言重写 CLI。`claude.exe` 是包含 Bun Runtime 的 standalone 产物；它的目标是免安装运行时分发，而不是追随官方的原生二进制实现或安装/自更新机制。
 
 `bun run verify` 是唯一的项目验证入口，覆盖依赖锁定、类型、Biome、适用构建、CLI `--version`/启动冒烟、源码级轻量验证，以及可用本地模型的单轮模型和工具调用。standalone 矩阵还验证自动插件发现、`--bare` 隔离、显式覆盖和插件目录移除后的不可达性。它不依赖付费云模型，也不引入第二套测试框架。
+
+### 性能与稳定性
+
+性能采样默认关闭；启用 `CLAUDE_CODE_PERF_DIAGNOSTICS=1` 后记录版本化数值指标，但不记录 Prompt、工具结果、路径、模型、Endpoint、Session ID 或凭据。
+
+交互式流文本首 Delta 立即显示，后续 Ink 刷新按 33 ms 窗口合并；这不改变 `stream-json`、SDK、ACP 或 headless 的逐事件契约。Compact、Clear、Rewind、Resume/Fork 与组件卸载会回收会话级回调和 Tool Result 替换状态。
+
+FileWrite/FileEdit 使用异步临时文件、flush、版本复核和原子替换；Windows 共享锁采用 25/50/100/200/400 ms 有界退避，外部内容变化仍要求重新 Read，正文不会因清理或重试被提交两次。远端 MCP 等可重建基础设施使用 250 ms 起步、10 秒封顶、5 次熔断的 Supervisor；Agent、Workflow、Shell 和可能已有副作用的 MCP Tool 不会自动重放。
+
+`bun run verify` 固定执行五窗口、5,000 Delta 的稳定性矩阵，UI flush 比上限为 0.1；当前验收实测为 0.0020。矩阵同时覆盖资源回落、Windows 真实文件锁、后台熔断、Agent/MCP/模型协议和会话生命周期，本地模型可用时再补充真实模型与工具调用。详细阈值和平台边界见 [开发计划与差异基线](DEVELOPMENT_PLAN.md)。
 
 ## 项目文档
 

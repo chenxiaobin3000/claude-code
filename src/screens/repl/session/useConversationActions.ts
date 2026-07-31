@@ -13,6 +13,10 @@ import type { InternalPermissionMode } from '../../../types/permissions.js'
 import { logEvent } from '../../../services/analytics/index.js'
 import { resetMicrocompactState } from '../../../services/compact/microCompact.js'
 import { textForResubmit } from '../../../utils/messages.js'
+import {
+  createContentReplacementState,
+  type ContentReplacementState,
+} from '../../../utils/toolResultStorage.js'
 
 type SetAppState = ReturnType<typeof useSetAppState>
 
@@ -25,6 +29,7 @@ export function useConversationActions({
   setInputMode,
   setPastedContents,
   restoreMessageSyncRef,
+  contentReplacementStateRef,
 }: {
   messagesRef: React.MutableRefObject<MessageType[]>
   setMessages: React.Dispatch<React.SetStateAction<MessageType[]>>
@@ -36,6 +41,9 @@ export function useConversationActions({
     React.SetStateAction<Record<number, PastedContent>>
   >
   restoreMessageSyncRef: React.MutableRefObject<(message: UserMessage) => void>
+  contentReplacementStateRef: React.MutableRefObject<
+    ContentReplacementState | undefined
+  >
 }) {
   const rewindConversationTo = useCallback(
     (message: UserMessage) => {
@@ -50,6 +58,7 @@ export function useConversationActions({
       })
       setMessages(previous.slice(0, messageIndex))
       setConversationId(randomUUID())
+      contentReplacementStateRef.current = createContentReplacementState()
       resetMicrocompactState()
       if (feature('CONTEXT_COLLAPSE')) {
         ;(
@@ -74,7 +83,13 @@ export function useConversationActions({
         },
       }))
     },
-    [messagesRef, setMessages, setConversationId, setAppState],
+    [
+      messagesRef,
+      setMessages,
+      setConversationId,
+      setAppState,
+      contentReplacementStateRef,
+    ],
   )
 
   const restoreMessageSync = useCallback(

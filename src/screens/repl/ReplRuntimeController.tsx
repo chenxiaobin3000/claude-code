@@ -1153,9 +1153,13 @@ export function REPL({
   const [contentReplacementStateRef] = useState(() => ({
     current: provisionContentReplacementState(initialMessages, initialContentReplacements),
   }));
-  registerCompactCleanup(() => {
-    contentReplacementStateRef.current = createContentReplacementState();
-  });
+  useEffect(
+    () =>
+      registerCompactCleanup(() => {
+        contentReplacementStateRef.current = createContentReplacementState();
+      }),
+    [contentReplacementStateRef],
+  );
 
   const [haveShownCostDialog, setHaveShownCostDialog] = useState(getGlobalConfig().hasAcknowledgedCostThreshold);
   const [vimMode, setVimMode] = useState<VimMode>('INSERT');
@@ -2306,6 +2310,7 @@ export function REPL({
     setInputMode,
     setPastedContents,
     restoreMessageSyncRef,
+    contentReplacementStateRef,
   });
   // Not memoized — hook stores caps via ref, reads latest closure at dispatch.
   // 24-char prefix: deriveUUID preserves first 24, renderable uuid prefix-matches raw source.

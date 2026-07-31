@@ -1,7 +1,7 @@
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'
 import { feature } from 'bun:bundle'
 import { randomUUID, type UUID } from 'crypto'
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { SpinnerMode } from '../../../components/Spinner.js'
 import type { useNotifications } from '../../../context/notifications.js'
 import type { Message as MessageType } from '../../../types/message.js'
@@ -20,6 +20,7 @@ import {
   removeTranscriptMessage,
 } from '../../../utils/sessionStorage.js'
 import type { ApiMetric } from './useQueryMetrics.js'
+import { createStreamRenderBackpressure } from '../../../utils/messages/streamRenderBackpressure.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const proactiveModule =
@@ -59,8 +60,35 @@ export function useQueryEvents({
   apiMetricsRef: React.MutableRefObject<ApiMetric[]>
   onStreamingText: (update: (current: string | null) => string | null) => void
 }) {
+  const onStreamingTextRef = useRef(onStreamingText)
+  onStreamingTextRef.current = onStreamingText
+  const streamRenderRef = useRef<
+    ReturnType<typeof createStreamRenderBackpressure> | undefined
+  >(undefined)
+  if (!streamRenderRef.current) {
+    streamRenderRef.current = createStreamRenderBackpressure({
+      commit: update => onStreamingTextRef.current(update),
+    })
+  }
+  useEffect(
+    () => () => {
+      streamRenderRef.current?.dispose()
+    },
+    [],
+  )
+
   return useCallback(
     (event: Parameters<typeof handleMessageFromStream>[0]) => {
+      const streamEvent = event as {
+        type: string
+        event?: { type?: string; delta?: { type?: string } }
+      }
+      const isStreamingTextDelta =
+        streamEvent.type === 'stream_event' &&
+        streamEvent.event?.type === 'content_block_delta' &&
+        streamEvent.event.delta?.type === 'text_delta'
+      if (!isStreamingTextDelta) streamRenderRef.current?.flush(true)
+
       handleMessageFromStream(
         event,
         newMessage => {
@@ -210,7 +238,9 @@ export function useQueryEvents({
             endResponseLength: baseline,
           })
         },
-        onStreamingText,
+        isStreamingTextDelta
+          ? update => streamRenderRef.current?.enqueue(update)
+          : update => onStreamingTextRef.current(update),
       )
     },
     [
@@ -225,7 +255,6 @@ export function useQueryEvents({
       setStreamingThinking,
       responseLengthRef,
       apiMetricsRef,
-      onStreamingText,
     ],
   )
 }

@@ -23,7 +23,7 @@ import {
   findSimilarFile,
   getFileModificationTime,
   suggestPathUnderCwd,
-  writeTextContent,
+  writeTextContentWithRetry,
 } from 'src/utils/file.js'
 import {
   fileHistoryEnabled,
@@ -448,12 +448,12 @@ export const FileEditTool = buildTool({
     })
 
     // 5. Write to disk
-    writeTextContent(
+    await writeTextContentWithRetry(
       absoluteFilePath,
       updatedFile,
       encoding,
       endings,
-      true,
+      originalFileContents,
     )
 
     // Notify LSP servers about file modification (didChange) and save (didSave)

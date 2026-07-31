@@ -45,7 +45,10 @@ import {
   saveWorktreeState,
 } from '../../../utils/sessionStorage.js'
 import type { ContentReplacementState } from '../../../utils/toolResultStorage.js'
-import { reconstructContentReplacementState } from '../../../utils/toolResultStorage.js'
+import {
+  createContentReplacementState,
+  reconstructContentReplacementState,
+} from '../../../utils/toolResultStorage.js'
 import { updateSessionName } from '../../../utils/concurrentSessions.js'
 import { getCurrentWorktreeSession } from '../../../utils/worktree.js'
 import type {
@@ -217,12 +220,14 @@ export function useConversationResume({
           saveMode(isCoordinatorMode() ? 'coordinator' : 'normal')
         }
         if (targetCosts) setCostStateForRestore(targetCosts)
-        if (contentReplacementStateRef.current && entrypoint !== 'fork') {
+        if (contentReplacementStateRef.current) {
           contentReplacementStateRef.current =
-            reconstructContentReplacementState(
-              messages,
-              log.contentReplacements ?? [],
-            )
+            entrypoint === 'fork'
+              ? createContentReplacementState()
+              : reconstructContentReplacementState(
+                  messages,
+                  log.contentReplacements ?? [],
+                )
         }
         setMessages(() => messages)
         setToolJSX(null)

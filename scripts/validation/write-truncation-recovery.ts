@@ -529,10 +529,9 @@ const fileWriteSource = await Bun.file(
   'packages/builtin-tools/src/tools/FileWriteTool/FileWriteTool.ts',
 ).text()
 assert(
-  fileWriteSource.includes(
-    "writeTextContent(fullFilePath, content, enc, 'LF', true)",
-  ),
-  'Write no longer requires strict atomic replacement',
+  fileWriteSource.includes('await writeTextContentWithRetry(') &&
+    fileWriteSource.includes('oldContent,'),
+  'Write no longer requires version-checked atomic replacement recovery',
 )
 
 console.log('[write-truncation-recovery] PASS')

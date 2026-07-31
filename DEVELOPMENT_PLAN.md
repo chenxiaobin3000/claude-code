@@ -75,6 +75,16 @@
 - `bun run verify` 是唯一验证入口：依赖锁定、TypeScript、Biome、构建、CLI 启动、源码轻量验证与本地模型可用时的单轮模型/工具调用均在其中执行。
 - 模型请求诊断日志必须脱敏，禁止记录 API Key、OAuth Token 和完整敏感 Prompt。
 
+### 性能与稳定性
+
+- `CLAUDE_CODE_PERF_DIAGNOSTICS=1` 可启用版本化脱敏性能采样，覆盖内存、CPU、事件循环、Handle/Request、模型流、Usage/缓存、Agent/MCP/后台任务和 Ink/Yoga 指标；默认关闭，不记录 Prompt、工具结果、图片、路径、模型、Endpoint、Session ID 或密钥。
+- 交互式文本流首 Delta 立即显示，后续 Ink 状态刷新以 33 ms 窗口合并；Tool Use/JSON 边界、终态、错误、取消和断流同步排空。`stream-json`、SDK、ACP 和 headless 仍逐事件传递，不受 UI 背压影响。
+- Compact、`/clear`、`/rewind`、Resume/Fork 和组件卸载具有幂等资源清理；Compact 回调可注销并计数，Tool Result 替换状态不会跨错误会话保留，避免渲染导致长期回调增长。
+- FileWrite/FileEdit 使用异步同目录临时文件、flush、版本复核和原子替换。Windows 仅对 `EBUSY`/`EPERM`/`EACCES` 共享冲突按 25/50/100/200/400 ms 加抖动重试；外部内容变化立即要求重新 Read，现有文件不会静默降级为非原子覆盖，正文最多提交一次。
+- 可重建的远端 MCP 等后台基础设施使用统一 Supervisor：250 ms 起步、全抖动指数退避、10 s 封顶、连续失败 5 次熔断，并以 Generation 和 Abort 隔离迟到结果。禁用、登出、配置变化、手动重连和退出会停止恢复；Agent、Workflow、后台 Shell 及可能已有副作用的 MCP Tool 不自动重放。
+- 稳定性阈值以版本化常量固化：默认压力矩阵为 5 个窗口、每窗口 1,000 个流 Delta，UI flush 比上限 0.1、Heap 增长容差 64 MiB、活动 Handle 漂移容差 2、后台重启上限 5、Windows 文件提交尝试上限 6、退避总量上限 775 ms。阈值调整必须说明原因，不能用放宽门槛掩盖回归。
+- `bun run verify` 中的确定性矩阵同时覆盖模型流、模型 Profile、MCP、Agent 生命周期/权限/资源、会话 Clear/Resume/Rewind、Windows 真实持锁和后台恢复；核心 Fixture 不允许跳过，本地模型可用时再执行真实模型与工具调用。
+
 ## 明确不做
 
 - Anthropic 官方账号、网络 Provider、原生安装器和任何 CLI 自更新能力。
@@ -85,19 +95,7 @@
 
 ## 未开发路线图
 
-### P0：性能与稳定性
-
-- [x] 阶段 1：建立默认关闭、可显式启用的脱敏性能基线采样。`CLAUDE_CODE_PERF_DIAGNOSTICS=1` 时按固定间隔向调试日志写入版本化数值快照，覆盖 RSS/Heap/外部 Buffer、CPU、事件循环延迟、活动 Handle/Request、模型流事件与字符量、Usage/缓存、Agent 预算账本、活动/保留后台任务、MCP 连接/工具/资源数量，以及 Ink 帧阶段、Yoga 缓存和存活节点；不记录 Prompt、工具结果、图片、路径、模型 ID、Endpoint、Session ID 或密钥。采样间隔可用 `CLAUDE_CODE_PERF_SAMPLE_INTERVAL_MS` 在 250–60,000 ms 范围内调整；默认关闭时不累计或输出诊断数据。独立验证已并入 `bun run verify`，三类构建均已通过本地 Qwen 单轮请求和真实 Read 工具调用。
-- [ ] 阶段 2：优化流式渲染。合并短时间内连续到达的文本增量，将模型流处理与终端刷新解耦并限制最大刷新频率；只有可见内容变化才触发 Ink 更新，避免每个 Delta 复制完整消息数组或 Assistant 内容，并在结束、取消和断流后清理刷新定时器及性能记录。优化不得改变流事件顺序、Tool Use JSON 拼接、首 Token 显示、中断/断线恢复和 headless/stream-json 逐事件契约。验收对比阶段 1 指标，要求长输出渲染次数显著低于 Delta 数量且最终消息完全一致。
-- [ ] 阶段 3：控制长会话内存。Compact、`/clear`、`/rewind` 和 Session 切换后释放被替换的消息、内容替换状态与流缓存；大工具结果继续落盘，内存只保留摘要、引用和必要尾部，禁止同时长期保留 Buffer/Base64/字符串副本；图片编码、缩放和请求结束后释放中间 Buffer并按内容摘要去重；MCP 资源、Schema 和 Client 缓存按 Server 生命周期替换或清理。验收采用多轮稳定区间的内存斜率和回收后增量，不用单一机器的偶发峰值作为成功或失败依据。
-- [ ] 阶段 4：处理 Windows 文件竞争。区分短暂 `EBUSY`/`EPERM`/共享冲突与路径无效、明确拒绝、内容版本冲突；同目录临时文件加原子 rename 采用有上限的退避和抖动，重试前重新核对文件身份、mtime、大小和内容摘要。外部修改仍必须重新 Read，成功写入后的清理失败不得重复写正文；覆盖 UNC、云同步目录、Unicode、长路径和编辑器/杀毒软件持锁，且任何重试不得导致 Edit、Write 或其他副作用执行两次。
-- [ ] 阶段 5：处理后台服务恢复。为 MCP、插件 Host、Agent、Workflow 和后台 Shell 统一异常退出后的 `backoff`/`restarting`/`failed` 状态，采用指数退避、抖动、连续失败上限和稳定运行后复位；用户主动停止、CLI 退出和权限拒绝不触发重启，可能已经产生副作用的 MCP Tool 不自动重放。重启和退出必须回收旧进程、Socket、AbortController、定时器及确认归属本项目的临时/PID 文件；无法确认归属的文件只报告不删除，达到熔断条件后明确失败而非无限循环。
-- [ ] 阶段 6：建立压力冒烟场景。继续只使用 `bun run verify`，在 `scripts/validation` 增加可参数化的流式长输出、长会话、多 Agent、不同模型 ID 路由、多本地 MCP、文件持锁和资源清理场景；默认使用固定 OpenAI/MCP Fixture，不消耗付费模型额度或依赖互联网，本地模型可用时继续执行现有真实单轮请求与工具调用。场景必须覆盖正常结束、中断、断流、权限等待、取消、异常退出和恢复，并将不支持的环境明确报告为 `skipped`/`unavailable`，不得伪装为成功。
-- [ ] 阶段 7：完成 P0 验收并固化基线。冻结由阶段 1 实测形成的相对阈值和固定容差，验证相同流输入产生相同最终消息、渲染次数受控、稳定运行内存不持续线性增长、Agent/MCP/子进程/Handle 和临时文件在终态后回落、文件锁重试有次数与时间上限、外部修改不被静默覆盖、后台服务不会快速无限重启、可能有副作用的调用不自动重放。`bun run verify`、三类构建、CLI 启动以及本地模型可用时的模型/工具调用全部通过后，将稳定结论并入基线并删除整个 P0 路线图。
-
-完成条件：阶段 2–7 全部完成，有可重复的压力脚本、基于同机基线的资源阈值与异常恢复验证，且不会把环境偶发错误、跳过项或外部服务不可用误报为产品成功。
-
-### P1：可选产品能力
+### P0：可选产品能力
 
 - [ ] 支持 macOS 专用、默认关闭的 `sandbox.allowAppleEvents`，并确保该例外不会放宽文件系统、网络或其他平台的边界。
 
