@@ -137,7 +137,10 @@ function parseModelRegistry(value: unknown): ModelRegistry {
       throw new Error(`duplicate model: ${entry.model}`)
     }
     seen.add(entry.model)
-    const profileWarning = getDefaultModelProfileWarning(entry.model)
+    const profileWarning = getDefaultModelProfileWarning(
+      entry.model,
+      entry.profile,
+    )
     if (profileWarning) {
       console.warn(
         entry.profile === undefined

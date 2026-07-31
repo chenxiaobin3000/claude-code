@@ -285,9 +285,68 @@ export function usesDefaultModelProfile(model: string): boolean {
   return findModelProfile(model) === undefined
 }
 
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.hasOwn(value, key)
+}
+
+/**
+ * Returns whether an external profile explicitly defines every behavioral
+ * capability. Pricing is metadata and is intentionally optional.
+ *
+ * The override has already been validated by createEffectiveModelProfile when
+ * this is used while loading models.json, so this function only determines
+ * whether any capability still inherits from the default profile.
+ */
+export function isCompleteModelCapabilityProfile(override: unknown): boolean {
+  if (!isRecord(override)) return false
+  if (
+    !hasOwn(override, 'contextWindowTokens') ||
+    !hasOwn(override, 'defaultOutputTokens') ||
+    !hasOwn(override, 'maxOutputTokens') ||
+    !isRecord(override.reasoning) ||
+    !isRecord(override.chatCompletions) ||
+    !isRecord(override.promptCache)
+  ) {
+    return false
+  }
+
+  const reasoning = override.reasoning
+  const reasoningComplete =
+    reasoning.type === 'none' ||
+    (reasoning.type === 'deepseek' && hasOwn(reasoning, 'enabledByDefault')) ||
+    (reasoning.type === 'openai' &&
+      hasOwn(reasoning, 'defaultEffort') &&
+      hasOwn(reasoning, 'supportedEfforts'))
+  if (!reasoningComplete) return false
+
+  const chatCompletions = override.chatCompletions
+  if (
+    !hasOwn(chatCompletions, 'outputTokenField') ||
+    !hasOwn(chatCompletions, 'toolChoice') ||
+    !hasOwn(chatCompletions, 'parallelToolCalls') ||
+    !hasOwn(chatCompletions, 'strictToolSchemas') ||
+    !hasOwn(chatCompletions, 'temperature')
+  ) {
+    return false
+  }
+
+  const promptCache = override.promptCache
+  return (
+    promptCache.type === 'none' ||
+    (promptCache.type === 'providerManaged' &&
+      hasOwn(promptCache, 'reportsCachedTokens'))
+  )
+}
+
 export function getDefaultModelProfileWarning(
   model: string,
+  override?: unknown,
 ): string | undefined {
-  if (!usesDefaultModelProfile(model)) return undefined
+  if (
+    !usesDefaultModelProfile(model) ||
+    isCompleteModelCapabilityProfile(override)
+  ) {
+    return undefined
+  }
   return `Warning: model ${JSON.stringify(model)} has no dedicated capability profile; using the default Qwen profile (65,536 context tokens, 4,096 maximum output tokens, no reasoning or prompt cache, zero local pricing). Add a dedicated entry to src/utils/model/modelProfiles.ts for accurate behavior.`
 }

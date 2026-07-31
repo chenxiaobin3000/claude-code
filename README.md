@@ -76,7 +76,7 @@ Hook command 的 `args` 会保持 argv 参数边界。启用 Sandbox 时不会�
 
 - 已知模型使用代码中的显式 Profile。
 - 未知模型使用 Qwen 派生的默认 Profile，并提示建议补充专用配置。
-- `models.json` 中的 `profile` 可覆盖默认 Profile，例如关闭 DeepSeek 的默认推理模式。
+- `models.json` 中的 `profile` 可覆盖默认 Profile，例如关闭 DeepSeek 的默认推理模式；未知模型完整提供 Token、推理、Chat Completions 与 Prompt Cache 能力后不再警告，`pricing` 可省略。
 - llama.cpp 等端点若不接受对象形式的 `tool_choice`，会按其显式兼容配置发送字符串形式；不增加供应商专用协议分支。
 
 模型请求失败时，诊断日志仅记录脱敏后的端点、模型、请求字段摘要、状态码和重试信息，不记录 API Key、OAuth Token 或完整 Prompt。

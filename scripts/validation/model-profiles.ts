@@ -22,6 +22,7 @@ import {
   createEffectiveModelProfile,
   getDefaultModelProfileWarning,
   getModelProfile,
+  isCompleteModelCapabilityProfile,
   setEffectiveModelProfiles,
   usesDefaultModelProfile,
   type ModelProfile,
@@ -95,6 +96,40 @@ assertEqual(
   getDefaultModelProfileWarning('Qwen3.5-9B-Q6_K'),
   undefined,
   'dedicated profile warning',
+)
+
+const completeExternalCapabilityProfile = {
+  contextWindowTokens: 32_768,
+  defaultOutputTokens: 4_096,
+  maxOutputTokens: 4_096,
+  reasoning: { type: 'none' },
+  chatCompletions: {
+    outputTokenField: 'max_tokens',
+    toolChoice: 'strings_only',
+    parallelToolCalls: false,
+    strictToolSchemas: false,
+    temperature: 'supported',
+  },
+  promptCache: { type: 'none' },
+}
+assertEqual(
+  isCompleteModelCapabilityProfile(completeExternalCapabilityProfile),
+  true,
+  'complete external capability profile without pricing',
+)
+assertEqual(
+  getDefaultModelProfileWarning(
+    'Qwen3VL-8B-Instruct-Q4_K_M',
+    completeExternalCapabilityProfile,
+  ),
+  undefined,
+  'complete external capability profile warning',
+)
+assert(
+  getDefaultModelProfileWarning('partial-external-model', {
+    contextWindowTokens: 32_768,
+  })?.includes('using the default Qwen profile'),
+  'partial external capability profile warning',
 )
 
 assertEqual(
