@@ -1,6 +1,6 @@
 {
   "name": "claude-code",
-  "version": "2.1.116",
+  "version": "2.1.220",
   "description": "Claude Code CLI — interactive AI coding assistant in the terminal",
   "type": "module",
   "author": "claude-code-best <claude-code-best@proton.me>",
