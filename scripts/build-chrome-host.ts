@@ -20,10 +20,7 @@ const hostFilename =
   process.platform === 'win32'
     ? 'claudeinchrome-host.exe'
     : 'claudeinchrome-host'
-const outfile = join(
-  outputDirectory,
-  hostFilename,
-)
+const outfile = join(outputDirectory, hostFilename)
 
 await rm(outputDirectory, { recursive: true, force: true })
 await mkdir(outputDirectory, { recursive: true })
@@ -58,23 +55,21 @@ if (!result.success) {
 const output = await stat(outfile)
 
 await Promise.all([
-  cp(join(pluginRoot, 'chrome-extension'), join(outputDirectory, 'chrome-extension'), {
-    recursive: true,
-  }),
+  cp(
+    join(pluginRoot, 'chrome-extension'),
+    join(outputDirectory, 'chrome-extension'),
+    {
+      recursive: true,
+    },
+  ),
   cp(join(pluginRoot, 'skills'), join(outputDirectory, 'skills'), {
     recursive: true,
   }),
   cp(join(pluginRoot, 'README.md'), join(outputDirectory, 'README.md')),
-  cp(join(pluginRoot, 'native-host'), join(outputDirectory, 'native-host'), {
-    recursive: true,
-  }),
 ])
 
 const sourceManifest = JSON.parse(
-  await readFile(
-    join(pluginRoot, '.claude-plugin', 'plugin.json'),
-    'utf8',
-  ),
+  await readFile(join(pluginRoot, '.claude-plugin', 'plugin.json'), 'utf8'),
 ) as Record<string, unknown>
 sourceManifest.mcpServers = {
   'claude-in-chrome': {

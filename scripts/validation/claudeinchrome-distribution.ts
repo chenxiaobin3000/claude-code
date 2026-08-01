@@ -25,7 +25,6 @@ for (const path of [
   join(pluginRoot, 'README.md'),
   join(pluginRoot, 'chrome-extension', 'manifest.json'),
   join(pluginRoot, 'skills', 'claude-in-chrome', 'SKILL.md'),
-  join(pluginRoot, 'native-host', 'README.md'),
 ]) {
   await access(path)
 }

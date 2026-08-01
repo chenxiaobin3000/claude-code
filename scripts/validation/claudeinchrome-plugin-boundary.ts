@@ -32,7 +32,6 @@ for (const path of [
   join(pluginRoot, 'README.md'),
   join(pluginRoot, 'mcp', 'README.md'),
   join(pluginRoot, 'skills', 'claude-in-chrome', 'SKILL.md'),
-  join(pluginRoot, 'native-host', 'README.md'),
   join(pluginRoot, 'protocol', 'index.ts'),
   join(pluginRoot, 'host', 'entry.ts'),
   join(pluginRoot, 'host', 'mcpServer.ts'),
