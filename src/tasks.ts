@@ -4,19 +4,12 @@ import { DreamTask } from './tasks/DreamTask/DreamTask.js'
 import { LocalAgentTask } from './tasks/LocalAgentTask/LocalAgentTask.js'
 import { LocalShellTask } from './tasks/LocalShellTask/LocalShellTask.js'
 
-/* eslint-disable @typescript-eslint/no-require-imports */
-const LocalWorkflowTask: Task | null = feature('WORKFLOW_SCRIPTS')
-  ? require('./tasks/LocalWorkflowTask/LocalWorkflowTask.js').LocalWorkflowTask
-  : null
-const MonitorMcpTask: Task | null = feature('MONITOR_TOOL')
-  ? require('./tasks/MonitorMcpTask/MonitorMcpTask.js').MonitorMcpTask
-  : null
-/* eslint-enable @typescript-eslint/no-require-imports */
-
 /**
  * Get all tasks.
  * Mirrors the pattern from tools.ts
- * Note: Returns array inline to avoid circular dependency issues with top-level const
+ * Feature-gated tasks are loaded here instead of at module initialization so
+ * their dependency graph cannot re-enter this module while its bindings are
+ * still in the temporal dead zone in source/dev mode.
  */
 export function getAllTasks(): Task[] {
   const tasks: Task[] = [
@@ -24,8 +17,20 @@ export function getAllTasks(): Task[] {
     LocalAgentTask,
     DreamTask,
   ]
-  if (LocalWorkflowTask) tasks.push(LocalWorkflowTask)
-  if (MonitorMcpTask) tasks.push(MonitorMcpTask)
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  if (feature('WORKFLOW_SCRIPTS')) {
+    const { LocalWorkflowTask } = require(
+      './tasks/LocalWorkflowTask/LocalWorkflowTask.js'
+    ) as typeof import('./tasks/LocalWorkflowTask/LocalWorkflowTask.js')
+    tasks.push(LocalWorkflowTask)
+  }
+  if (feature('MONITOR_TOOL')) {
+    const { MonitorMcpTask } = require(
+      './tasks/MonitorMcpTask/MonitorMcpTask.js'
+    ) as typeof import('./tasks/MonitorMcpTask/MonitorMcpTask.js')
+    tasks.push(MonitorMcpTask)
+  }
+  /* eslint-enable @typescript-eslint/no-require-imports */
   return tasks
 }
 
