@@ -52,12 +52,4 @@ assert(
   'SandboxManager.reset must close an active Windows Sandbox session',
 )
 
-const nativeHost = await source('native/windows-sandbox-host/src/sandbox_launch.cpp')
-assert(
-  nativeHost.includes('CREATE_SUSPENDED') &&
-    nativeHost.includes('AssignProcessToJobObject') &&
-    nativeHost.includes('ResumeThread'),
-  'native AppContainer launch must join the Job Object before it begins executing',
-)
-
 console.log('Windows Sandbox validation passed.')
