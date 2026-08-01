@@ -19,7 +19,7 @@ import type { ClaudeForChromeContext, SocketClient } from './types.js'
 export function createChromeSocketClient(
   context: ClaudeForChromeContext,
 ): SocketClient {
-  return context.getSocketPaths
+  return context.getEndpoints
     ? createMcpSocketPool(context)
     : createMcpSocketClient(context)
 }

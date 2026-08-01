@@ -154,7 +154,10 @@ MCP 包及主程序兼容实现已经删除。真实 Chrome 的连接、授权�
 [`plugins/claudeinchrome/protocol`](plugins/claudeinchrome/protocol)。MCP 只能
 广告扩展已经实现的 11 个工具；GIF、图片上传、Console/Network、快捷方式和
 `computer.zoom` 不属于当前能力。工具请求使用必填 `request_id` 精确匹配响应，
-消息上限为 1 MiB，工具超时为 30 秒。
+消息上限为 1 MiB，工具超时为 30 秒。Windows、Linux 和 macOS 的 Host 与 MCP
+统一使用仅绑定 `127.0.0.1` 的动态 TCP socket；每个 Chrome 扩展实例拥有独立
+Host 端点，MCP 自动发现并汇总在线实例。端点使用随机令牌认证，令牌不写入日志，
+不使用 Windows 命名管道或 Unix Domain Socket。
 
 扩展固定访问所有普通 HTTP/HTTPS 页面，不提供页面授权或站点白名单；Chrome
 内部页、扩展页、文件页和无效 Tab 仍拒绝。真实浏览器验收使用

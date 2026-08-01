@@ -18,12 +18,12 @@ Chrome 操作；生产 standalone 从 `claude.exe` 同级 `plugins` 下的一级
   `--plugin-dir plugins/claudeinchrome` 开发加载；生产分发目录由 standalone 自动
   发现，无需传该参数。
 - `protocol/`：已经固定扩展实际实现的 11 个工具、Native Host 名称、1 MiB
-  消息上限、30 秒工具超时及必填 `request_id`；MCP 工具广告与扩展分发器由轻量
-  验证保持一致。
+  消息上限、30 秒工具超时、必填 `request_id` 及本地 TCP 端点契约；MCP 工具广告
+  与扩展分发器由轻量验证保持一致。
 - `host/`：已经提供独立 Native Messaging/MCP Host、注册、卸载和 doctor；
   Windows 分发产物位于 `dist/plugins/claudeinchrome`。
-- `mcp/`：MCP 引擎、11 个工具声明和 Socket 生命周期均已归入插件，不依赖旧
-  workspace 包或主程序 Chrome 实现。
+- `mcp/`：MCP 引擎、11 个工具声明、TCP Socket 生命周期和多实例端点池均已归入
+  插件，不依赖旧 workspace 包或主程序 Chrome 实现。
 - `skills/claude-in-chrome/`：标准 Plugin Skill 已建立，仅随插件加载。
 
 标准 Plugin MCP/Skill 生命周期、独立分发结构、真实 Chrome 连接、授权、Host
@@ -32,6 +32,11 @@ Chrome 操作；生产 standalone 从 `claude.exe` 同级 `plugins` 下的一级
 
 GIF、图片上传、Console/Network、快捷方式和 `computer.zoom` 未实现，也不会由
 MCP 或 Skill 对外宣传。
+
+Windows、Linux 和 macOS 使用相同的本机传输：每个 Chrome 扩展实例启动一个只
+监听 `127.0.0.1` 动态端口的 Native Host，MCP 从用户临时目录发现所有在线端点。
+端点以随机令牌认证，令牌不会记录到日志；不使用 Windows 命名管道或 Unix
+Domain Socket。这个结构允许多个 Chrome 个人资料分别启动 Host 并同时连接。
 
 后续迁移及验收范围以根目录 `DEVELOPMENT_PLAN.md` 为准。
 

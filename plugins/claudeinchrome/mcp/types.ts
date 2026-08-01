@@ -1,3 +1,5 @@
+import type { ChromeSocketEndpoint } from '../protocol/index.js'
+
 /**
  * 插件 MCP Logger 第二参数的可选类型。
  * 调用方通过 util.format 追加详情，实践中多为 catch 到的异常对象。
@@ -26,13 +28,9 @@ export type PermissionMode =
 export interface ClaudeForChromeContext {
   serverName: string
   logger: Logger
-  socketPath: string
-  // Optional dynamic resolver for socket path. When provided, called on each
-  // connection attempt to handle runtime conditions (e.g., TMPDIR mismatch).
-  getSocketPath?: () => string
-  // Optional resolver returning all available socket paths (for multi-profile support).
-  // When provided, a socket pool connects to all sockets and routes by tab ID.
-  getSocketPaths?: () => string[]
+  endpoint?: ChromeSocketEndpoint
+  // A pool connects to every discovered Native Host instance and routes by tab ID.
+  getEndpoints?: () => ChromeSocketEndpoint[]
   clientTypeId: string // "desktop" | "claude-code"
   onToolCallDisconnected: () => string
   onAuthenticationError: () => void

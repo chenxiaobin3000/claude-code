@@ -1,6 +1,7 @@
-import { readdirSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { homedir, platform, tmpdir, userInfo } from 'node:os'
 import { join } from 'node:path'
+import type { ChromeSocketEndpoint } from '../protocol/index.js'
 import {
   CHROME_NATIVE_HOST_NAME,
   CLAUDEINCHROME_EXTENSION_ID,
@@ -8,8 +9,8 @@ import {
 
 export const NATIVE_HOST_MANIFEST_NAME = `${CHROME_NATIVE_HOST_NAME}.json`
 export const ALLOWED_EXTENSION_ORIGIN = `chrome-extension://${CLAUDEINCHROME_EXTENSION_ID}/`
-const VALIDATION_SOCKET_SUFFIX_ENV =
-  'CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX'
+export const CHROME_SOCKET_HOST = '127.0.0.1' as const
+const VALIDATION_SOCKET_SUFFIX_ENV = 'CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX'
 
 function username(): string {
   let value = 'default'
@@ -32,30 +33,59 @@ function validationSocketSuffix(): string {
   return `-${value}`
 }
 
+/** Per-user discovery directory shared by all local Chrome profile instances. */
 export function getSocketDirectory(): string {
-  return join(tmpdir(), `claudeinchrome-${username()}`)
+  return join(
+    tmpdir(),
+    `claudeinchrome-${username()}${validationSocketSuffix()}`,
+  )
 }
 
-export function getNativeSocketPath(): string {
-  const suffix = validationSocketSuffix()
-  if (platform() === 'win32') {
-    return `\\\\.\\pipe\\claudeinchrome-${username()}${suffix}`
+export function getEndpointDescriptorPath(instanceId: string): string {
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(instanceId)) {
+    throw new Error('Invalid claudeinchrome instance ID')
   }
-  return join(getSocketDirectory(), `${process.pid}${suffix}.sock`)
+  return join(getSocketDirectory(), `${instanceId}.json`)
 }
 
-export function getAvailableSocketPaths(): string[] {
-  if (platform() === 'win32') return [getNativeSocketPath()]
+export function isChromeSocketEndpoint(
+  value: unknown,
+): value is ChromeSocketEndpoint {
+  if (!value || typeof value !== 'object') return false
+  const endpoint = value as Partial<ChromeSocketEndpoint>
+  return (
+    typeof endpoint.id === 'string' &&
+    /^[a-zA-Z0-9_-]{1,128}$/.test(endpoint.id) &&
+    endpoint.host === CHROME_SOCKET_HOST &&
+    Number.isInteger(endpoint.port) &&
+    Number(endpoint.port) >= 1 &&
+    Number(endpoint.port) <= 65535 &&
+    typeof endpoint.token === 'string' &&
+    /^[a-f0-9]{64}$/.test(endpoint.token) &&
+    Number.isInteger(endpoint.pid) &&
+    Number(endpoint.pid) > 0
+  )
+}
 
-  const paths: string[] = []
+/** Discover every live-profile Native Host endpoint without exposing secrets in logs. */
+export function getAvailableSocketEndpoints(): ChromeSocketEndpoint[] {
+  const endpoints: ChromeSocketEndpoint[] = []
   try {
     for (const file of readdirSync(getSocketDirectory())) {
-      if (file.endsWith('.sock')) paths.push(join(getSocketDirectory(), file))
+      if (!file.endsWith('.json')) continue
+      try {
+        const value: unknown = JSON.parse(
+          readFileSync(join(getSocketDirectory(), file), 'utf8'),
+        )
+        if (isChromeSocketEndpoint(value)) endpoints.push(value)
+      } catch {
+        // Ignore incomplete or stale discovery records. The owning Host cleans them.
+      }
     }
   } catch {
-    // Native Host has not created its socket directory yet.
+    // No Native Host has published an endpoint yet.
   }
-  return paths
+  return endpoints
 }
 
 export function getManifestPath(): string {

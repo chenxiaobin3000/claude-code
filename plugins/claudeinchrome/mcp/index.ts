@@ -8,9 +8,11 @@ export {
   MAX_CHROME_BRIDGE_MESSAGE_BYTES,
 } from '../protocol/index.js'
 export type {
+  AuthenticatedChromeBridgeToolRequest,
   ChromeBridgeToolRequest,
   ChromeBridgeToolResponse,
   ChromeNativeMessage,
+  ChromeSocketEndpoint,
   ImplementedChromeToolName,
   NativeBridgeStatusMessage,
   NativeToolRequestMessage,

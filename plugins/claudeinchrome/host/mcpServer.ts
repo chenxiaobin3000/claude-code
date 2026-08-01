@@ -5,10 +5,7 @@ import {
 } from '../mcp/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { format } from 'node:util'
-import {
-  getAvailableSocketPaths,
-  getNativeSocketPath,
-} from './paths.js'
+import { getAvailableSocketEndpoints } from './paths.js'
 
 class StderrLogger implements Logger {
   silly(message: string, detail?: LoggerDetail): void {
@@ -46,8 +43,7 @@ export async function runClaudeInChromeMcpServer(): Promise<void> {
   const server = createClaudeForChromeMcpServer({
     serverName: 'claude-in-chrome',
     logger,
-    socketPath: getNativeSocketPath(),
-    getSocketPaths: getAvailableSocketPaths,
+    getEndpoints: getAvailableSocketEndpoints,
     clientTypeId: 'claude-code-best',
     onAuthenticationError: () => {
       logger.warn('Unexpected authentication error from local Chrome bridge')

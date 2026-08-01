@@ -1,9 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { promises as fsPromises } from 'fs'
 import { createConnection } from 'net'
 import type { Socket } from 'net'
-import { platform } from 'os'
-import { dirname } from 'path'
 
 import type {
   ClaudeForChromeContext,
@@ -15,6 +12,7 @@ import {
   CHROME_TOOL_TIMEOUT_MS,
   isImplementedChromeToolName,
   MAX_CHROME_BRIDGE_MESSAGE_BYTES,
+  type AuthenticatedChromeBridgeToolRequest,
   type ChromeBridgeToolRequest,
   type ChromeBridgeToolResponse,
 } from '../protocol/index.js'
@@ -89,23 +87,18 @@ class McpSocketClient {
     this.closeSocket()
     this.connecting = true
 
-    const socketPath = this.context.getSocketPath?.() ?? this.context.socketPath
-    logger.info(`[${serverName}] Attempting to connect to: ${socketPath}`)
-
-    try {
-      await this.validateSocketSecurity(socketPath)
-    } catch (error) {
+    const endpoint = this.context.endpoint
+    if (!endpoint) {
       this.connecting = false
-      logger.info(
-        `[${serverName}] Security validation failed:`,
-        toLoggerDetail(error),
+      throw new SocketConnectionError(
+        `[${serverName}] No local Chrome TCP endpoint is available`,
       )
-      // Don't retry on security failures (wrong perms/owner) - those won't
-      // self-resolve. Only the error handler retries on transient errors.
-      return
     }
+    logger.info(
+      `[${serverName}] Attempting to connect to Chrome endpoint ${endpoint.id} at ${endpoint.host}:${endpoint.port}`,
+    )
 
-    this.socket = createConnection(socketPath)
+    this.socket = createConnection({ host: endpoint.host, port: endpoint.port })
 
     // Timeout the initial connection attempt - if socket file exists but native
     // host is dead, the connect can hang indefinitely
@@ -321,8 +314,9 @@ class McpSocketClient {
 
     const socket = this.socket
 
-    const request: ChromeBridgeToolRequest = {
+    const request: AuthenticatedChromeBridgeToolRequest = {
       request_id: randomUUID(),
+      auth_token: this.context.endpoint?.token ?? '',
       ...requestWithoutId,
     }
     const requestJson = JSON.stringify(request)
@@ -459,82 +453,6 @@ class McpSocketClient {
 
   public disconnect(): void {
     this.cleanup()
-  }
-
-  private async validateSocketSecurity(socketPath: string): Promise<void> {
-    const { serverName, logger } = this.context
-    if (platform() === 'win32') {
-      return
-    }
-    try {
-      // Validate the parent directory permissions if it's the socket directory
-      // (not /tmp itself, which has mode 1777 for legacy single-socket paths)
-      const dirPath = dirname(socketPath)
-      const dirBasename = dirPath.split('/').pop() || ''
-      const isSocketDir = dirBasename.startsWith('claude-mcp-browser-bridge-')
-      if (isSocketDir) {
-        try {
-          const dirStats = await fsPromises.stat(dirPath)
-          if (dirStats.isDirectory()) {
-            const dirMode = dirStats.mode & 0o777
-            if (dirMode !== 0o700) {
-              throw new Error(
-                `[${serverName}] Insecure socket directory permissions: ${dirMode.toString(
-                  8,
-                )} (expected 0700). Directory may have been tampered with.`,
-              )
-            }
-            const currentUid = process.getuid?.()
-            if (currentUid !== undefined && dirStats.uid !== currentUid) {
-              throw new Error(
-                `Socket directory not owned by current user (uid: ${currentUid}, dir uid: ${dirStats.uid}). ` +
-                  `Potential security risk.`,
-              )
-            }
-          }
-        } catch (dirError) {
-          if ((dirError as NodeJS.ErrnoException).code !== 'ENOENT') {
-            throw dirError
-          }
-          // Directory doesn't exist yet - native host will create it
-        }
-      }
-
-      const stats = await fsPromises.stat(socketPath)
-
-      if (!stats.isSocket()) {
-        throw new Error(
-          `[${serverName}] Path exists but it's not a socket: ${socketPath}`,
-        )
-      }
-
-      const mode = stats.mode & 0o777
-      if (mode !== 0o600) {
-        throw new Error(
-          `[${serverName}] Insecure socket permissions: ${mode.toString(
-            8,
-          )} (expected 0600). Socket may have been tampered with.`,
-        )
-      }
-
-      const currentUid = process.getuid?.()
-      if (currentUid !== undefined && stats.uid !== currentUid) {
-        throw new Error(
-          `Socket not owned by current user (uid: ${currentUid}, socket uid: ${stats.uid}). ` +
-            `Potential security risk.`,
-        )
-      }
-
-      logger.info(`[${serverName}] Socket security validation passed`)
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        logger.info(
-          `[${serverName}] Socket not found, will be created by server`,
-        )
-        return
-      }
-      throw error
-    }
   }
 }
 

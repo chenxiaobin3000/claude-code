@@ -2,6 +2,7 @@
 
 import {
   access,
+  mkdir,
   mkdtemp,
   readFile,
   rm,
@@ -14,7 +15,13 @@ import {
   registerNativeHost,
   unregisterNativeHost,
 } from '../../plugins/claudeinchrome/host/registration.js'
-import { getNativeSocketPath } from '../../plugins/claudeinchrome/host/paths.js'
+import {
+  CHROME_SOCKET_HOST,
+  getAvailableSocketEndpoints,
+  getEndpointDescriptorPath,
+  getSocketDirectory,
+} from '../../plugins/claudeinchrome/host/paths.js'
+import { ChromeNativeHost } from '../../plugins/claudeinchrome/host/nativeHost.js'
 import {
   CHROME_NATIVE_HOST_NAME,
   CLAUDEINCHROME_EXTENSION_ID,
@@ -23,15 +30,30 @@ import {
 const root = resolve(import.meta.dir, '../..')
 const hostRoot = join(root, 'plugins', 'claudeinchrome', 'host')
 const sources = await Promise.all(
-  ['entry.ts', 'mcpServer.ts', 'nativeHost.ts', 'paths.ts', 'registration.ts'].map(
-    file => readFile(join(hostRoot, file), 'utf8'),
-  ),
+  [
+    'entry.ts',
+    'mcpServer.ts',
+    'nativeHost.ts',
+    'paths.ts',
+    'registration.ts',
+  ].map(file => readFile(join(hostRoot, file), 'utf8')),
 )
 const combinedSource = sources.join('\n')
-if (!sources[2]!.includes('listen({ path: this.socketPath! }')) {
+if (!sources[2]!.includes('listen({ host: CHROME_SOCKET_HOST, port: 0 }')) {
   throw new Error(
-    '[claudeinchrome-host] socket listener must use the explicit path overload',
+    '[claudeinchrome-host] Native Host must use a dynamic loopback TCP socket',
   )
+}
+for (const forbiddenTransport of [
+  '\\\\.\\pipe\\',
+  '.sock`',
+  'listen({ path:',
+]) {
+  if (combinedSource.includes(forbiddenTransport)) {
+    throw new Error(
+      `[claudeinchrome-host] platform-specific transport remains: ${forbiddenTransport}`,
+    )
+  }
 }
 for (const forbidden of [
   'sideQuery',
@@ -66,6 +88,7 @@ for (const marker of [
 for (const marker of [
   'if (this.mcpClients.size === 0)',
   'Dropping oversized Chrome notification',
+  'request.auth_token !== this.endpoint?.token',
   'Chrome tool request exceeds the $' +
     '{MAX_CHROME_BRIDGE_MESSAGE_BYTES}-byte bridge limit.',
 ]) {
@@ -96,38 +119,95 @@ const options = {
 const originalValidationSuffix =
   process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX
 delete process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX
-const productionSocketPath = getNativeSocketPath()
-process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX = 'verify_123'
-const validationSocketPath = getNativeSocketPath()
+const productionSocketDirectory = getSocketDirectory()
+process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX = `verify_${process.pid}`
+const validationSocketDirectory = getSocketDirectory()
 if (
-  validationSocketPath === productionSocketPath ||
-  !validationSocketPath.includes('verify_123')
+  validationSocketDirectory === productionSocketDirectory ||
+  !validationSocketDirectory.includes(`verify_${process.pid}`)
 ) {
   throw new Error(
     '[claudeinchrome-host] validation socket suffix did not isolate the endpoint',
   )
 }
 process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX = '../escape'
+let rejectedUnsafeSuffix = false
 try {
-  getNativeSocketPath()
+  getSocketDirectory()
+} catch {
+  rejectedUnsafeSuffix = true
+}
+if (!rejectedUnsafeSuffix) {
   throw new Error(
     '[claudeinchrome-host] unsafe validation socket suffix was accepted',
   )
-} catch (error) {
+}
+
+process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX = `verify_${process.pid}`
+try {
+  await mkdir(getSocketDirectory(), { recursive: true })
+  const endpoint = {
+    id: `validation_${process.pid}`,
+    host: CHROME_SOCKET_HOST,
+    port: 43123,
+    token: 'a'.repeat(64),
+    pid: process.pid,
+  } as const
+  await writeFile(
+    getEndpointDescriptorPath(endpoint.id),
+    JSON.stringify(endpoint),
+    'utf8',
+  )
+  const discovered = getAvailableSocketEndpoints()
   if (
-    error instanceof Error &&
-    error.message ===
-      '[claudeinchrome-host] unsafe validation socket suffix was accepted'
+    discovered.length !== 1 ||
+    discovered[0]?.id !== endpoint.id ||
+    discovered[0]?.token !== endpoint.token
   ) {
-    throw error
+    throw new Error(
+      '[claudeinchrome-host] loopback TCP endpoint discovery failed',
+    )
   }
 } finally {
+  await rm(getSocketDirectory(), { recursive: true, force: true })
   if (originalValidationSuffix === undefined) {
     delete process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX
   } else {
     process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX =
       originalValidationSuffix
   }
+}
+
+process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX = `runtime_${process.pid}`
+const runtimeHost = new ChromeNativeHost()
+let stoppedEndpointCount = -1
+try {
+  await runtimeHost.start()
+  const runtimeEndpoints = getAvailableSocketEndpoints()
+  if (
+    runtimeEndpoints.length !== 1 ||
+    runtimeEndpoints[0]?.host !== CHROME_SOCKET_HOST ||
+    runtimeEndpoints[0]?.pid !== process.pid
+  ) {
+    throw new Error(
+      '[claudeinchrome-host] live loopback TCP endpoint was not published',
+    )
+  }
+} finally {
+  await runtimeHost.stop()
+  stoppedEndpointCount = getAvailableSocketEndpoints().length
+  await rm(getSocketDirectory(), { recursive: true, force: true })
+  if (originalValidationSuffix === undefined) {
+    delete process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX
+  } else {
+    process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX =
+      originalValidationSuffix
+  }
+}
+if (stoppedEndpointCount !== 0) {
+  throw new Error(
+    '[claudeinchrome-host] stopped Host left a TCP endpoint record',
+  )
 }
 
 try {

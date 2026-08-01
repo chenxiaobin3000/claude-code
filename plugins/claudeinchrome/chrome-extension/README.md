@@ -3,10 +3,12 @@
 这是 `claudeinchrome` 本地插件的 Manifest V3 Chrome 扩展，用 Native
 Messaging 连接插件提供的 `claude-in-chrome` MCP。数据路径是：
 
-`Claude Code CLI <-> 本地 MCP 管道 <-> Native Host <-> Chrome 扩展`
+`Claude Code CLI <-> 本地回环 TCP <-> Native Host <-> Chrome 扩展`
 
 不经过 Anthropic 账号、OAuth 或云端浏览器服务。
 Chrome 操作由本扩展实现，Claude Code 主程序不直接实现或连接这些浏览器能力。
+三端统一使用仅绑定 `127.0.0.1` 的动态 TCP 端点；每个扩展实例对应独立 Host，
+通过随机令牌认证，MCP 可自动发现多个同时在线的 Chrome 个人资料实例。
 
 ## 当前安装状态
 

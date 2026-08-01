@@ -1,7 +1,6 @@
 export const CHROME_NATIVE_HOST_NAME =
   'com.anthropic.claude_code_browser_extension'
-export const CLAUDEINCHROME_EXTENSION_ID =
-  'dlpofjonbnceelbmpelkfblmnghclmkm'
+export const CLAUDEINCHROME_EXTENSION_ID = 'dlpofjonbnceelbmpelkfblmnghclmkm'
 
 export const MAX_CHROME_BRIDGE_MESSAGE_BYTES = 1024 * 1024
 export const CHROME_TOOL_TIMEOUT_MS = 30_000
@@ -41,6 +40,19 @@ export type ChromeBridgeToolRequest = {
     tool: ImplementedChromeToolName
     args: Record<string, unknown>
   }
+}
+
+/** TCP-only request envelope; the Host removes auth_token before forwarding. */
+export type AuthenticatedChromeBridgeToolRequest = ChromeBridgeToolRequest & {
+  auth_token: string
+}
+
+export type ChromeSocketEndpoint = {
+  id: string
+  host: '127.0.0.1'
+  port: number
+  token: string
+  pid: number
 }
 
 export type ChromeBridgeToolResponse = {

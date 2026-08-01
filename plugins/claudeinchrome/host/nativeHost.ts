@@ -6,17 +6,32 @@
  * previously implemented as a Rust NAPI binding but now in pure TypeScript.
  */
 
-import { chmod, mkdir, readdir, rmdir, stat, unlink } from 'node:fs/promises'
+import { randomBytes, randomUUID } from 'node:crypto'
+import {
+  chmod,
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  rmdir,
+  unlink,
+  writeFile,
+} from 'node:fs/promises'
 import { createServer, type Server, type Socket } from 'node:net'
-import { platform } from 'node:os'
 import { join } from 'node:path'
 import {
   isImplementedChromeToolName,
   MAX_CHROME_BRIDGE_MESSAGE_BYTES,
-  type ChromeBridgeToolRequest,
+  type AuthenticatedChromeBridgeToolRequest,
 } from '../mcp/index.js'
 import { z } from 'zod'
-import { getNativeSocketPath, getSocketDirectory } from './paths.js'
+import type { ChromeSocketEndpoint } from '../protocol/index.js'
+import {
+  CHROME_SOCKET_HOST,
+  getEndpointDescriptorPath,
+  getSocketDirectory,
+  isChromeSocketEndpoint,
+} from './paths.js'
 
 const VERSION = '1.0.0'
 
@@ -88,78 +103,59 @@ type McpClient = {
   buffer: Buffer
 }
 
-class ChromeNativeHost {
+export class ChromeNativeHost {
   private mcpClients = new Map<number, McpClient>()
   private requestOwners = new Map<string, number>()
   private nextClientId = 1
   private server: Server | null = null
   private running = false
-  private socketPath: string | null = null
+  private endpoint: ChromeSocketEndpoint | null = null
+  private descriptorPath: string | null = null
 
   async start(): Promise<void> {
     if (this.running) {
       return
     }
 
-    this.socketPath = getNativeSocketPath()
+    const socketDir = getSocketDirectory()
+    await mkdir(socketDir, { recursive: true, mode: 0o700 })
+    await chmod(socketDir, 0o700).catch(() => {
+      // Windows does not implement POSIX modes; the token still authenticates clients.
+    })
 
-    if (platform() !== 'win32') {
-      const socketDir = getSocketDirectory()
-
-      // Migrate legacy socket: if socket dir path exists as a file/socket, remove it
-      try {
-        const dirStats = await stat(socketDir)
-        if (!dirStats.isDirectory()) {
-          await unlink(socketDir)
-        }
-      } catch {
-        // Doesn't exist, that's fine
-      }
-
-      // Create socket directory with secure permissions
-      await mkdir(socketDir, { recursive: true, mode: 0o700 })
-
-      // Fix perms if directory already existed
-      await chmod(socketDir, 0o700).catch(() => {
-        // Ignore
-      })
-
-      // Clean up stale sockets
-      try {
-        const files = await readdir(socketDir)
-        for (const file of files) {
-          if (!file.endsWith('.sock')) {
-            continue
-          }
-          const pid = parseInt(file.replace('.sock', ''), 10)
-          if (isNaN(pid)) {
+    // Remove discovery records whose owning Native Host process no longer exists.
+    try {
+      for (const file of await readdir(socketDir)) {
+        if (!file.endsWith('.json')) continue
+        const path = join(socketDir, file)
+        try {
+          const candidate: unknown = JSON.parse(await readFile(path, 'utf8'))
+          if (!isChromeSocketEndpoint(candidate)) {
+            await unlink(path)
             continue
           }
           try {
-            process.kill(pid, 0)
-            // Process is alive, leave it
-          } catch {
-            // Process is dead, remove stale socket
-            await unlink(join(socketDir, file)).catch(() => {
-              // Ignore
-            })
-            log(`Removed stale socket for PID ${pid}`)
+            process.kill(candidate.pid, 0)
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'EPERM') {
+              await unlink(path).catch(() => {})
+              log(`Removed stale endpoint for PID ${candidate.pid}`)
+            }
           }
+        } catch {
+          await unlink(path).catch(() => {})
         }
-      } catch {
-        // Ignore errors scanning directory
       }
+    } catch {
+      // Ignore discovery cleanup errors; publishing this instance may still work.
     }
 
-    log(`Creating socket listener: ${this.socketPath}`)
+    log(`Creating TCP listener on ${CHROME_SOCKET_HOST}`)
 
     this.server = createServer(socket => this.handleMcpClient(socket))
 
     await new Promise<void>((resolve, reject) => {
-      // Keep the named-pipe/Unix-socket overload explicit and consistent
-      // across the Node and Bun runtimes used by source and standalone builds.
-      this.server!.listen({ path: this.socketPath! }, () => {
-        log('Socket server listening for connections')
+      this.server!.listen({ host: CHROME_SOCKET_HOST, port: 0 }, () => {
         this.running = true
         resolve()
       })
@@ -170,15 +166,42 @@ class ChromeNativeHost {
       })
     })
 
-    // Set permissions on Unix (after listen resolves so socket file exists)
-    if (platform() !== 'win32') {
-      try {
-        await chmod(this.socketPath!, 0o600)
-        log('Socket permissions set to 0600')
-      } catch (e) {
-        log('Failed to set socket permissions:', e)
-      }
+    const address = this.server.address()
+    if (!address || typeof address === 'string') {
+      throw new Error('TCP listener did not return a numeric loopback port')
     }
+    const id = `${process.pid}-${randomUUID().replaceAll('-', '')}`
+    this.endpoint = {
+      id,
+      host: CHROME_SOCKET_HOST,
+      port: address.port,
+      token: randomBytes(32).toString('hex'),
+      pid: process.pid,
+    }
+    this.descriptorPath = getEndpointDescriptorPath(id)
+    const temporaryDescriptorPath = `${this.descriptorPath}.tmp`
+    try {
+      await writeFile(
+        temporaryDescriptorPath,
+        `${JSON.stringify(this.endpoint)}\n`,
+        {
+          encoding: 'utf8',
+          mode: 0o600,
+          flag: 'wx',
+        },
+      )
+      await rename(temporaryDescriptorPath, this.descriptorPath)
+    } catch (error) {
+      await unlink(temporaryDescriptorPath).catch(() => {})
+      await new Promise<void>(resolve => this.server!.close(() => resolve()))
+      this.server = null
+      this.running = false
+      this.endpoint = null
+      this.descriptorPath = null
+      throw error
+    }
+    await chmod(this.descriptorPath, 0o600).catch(() => {})
+    log(`TCP server listening on ${CHROME_SOCKET_HOST}:${address.port}`)
   }
 
   async stop(): Promise<void> {
@@ -201,28 +224,20 @@ class ChromeNativeHost {
       this.server = null
     }
 
-    // Cleanup socket file
-    if (platform() !== 'win32' && this.socketPath) {
-      try {
-        await unlink(this.socketPath)
-        log('Cleaned up socket file')
-      } catch {
-        // ENOENT is fine, ignore
-      }
-
-      // Remove directory if empty
-      try {
-        const socketDir = getSocketDirectory()
-        const remaining = await readdir(socketDir)
-        if (remaining.length === 0) {
-          await rmdir(socketDir)
-          log('Removed empty socket directory')
-        }
-      } catch {
-        // Ignore
-      }
+    if (this.descriptorPath) {
+      await unlink(this.descriptorPath).catch(() => {})
+      log('Cleaned up TCP endpoint record')
+    }
+    try {
+      const socketDir = getSocketDirectory()
+      const remaining = await readdir(socketDir)
+      if (remaining.length === 0) await rmdir(socketDir)
+    } catch {
+      // Ignore
     }
 
+    this.endpoint = null
+    this.descriptorPath = null
     this.running = false
   }
 
@@ -382,10 +397,7 @@ class ChromeNativeHost {
       while (client.buffer.length >= 4) {
         const length = client.buffer.readUInt32LE(0)
 
-        if (
-          length === 0 ||
-          length > MAX_CHROME_BRIDGE_MESSAGE_BYTES
-        ) {
+        if (length === 0 || length > MAX_CHROME_BRIDGE_MESSAGE_BYTES) {
           log(`Invalid message length from MCP client ${clientId}: ${length}`)
           socket.destroy()
           return
@@ -399,12 +411,13 @@ class ChromeNativeHost {
         client.buffer = client.buffer.slice(4 + length)
 
         try {
-          const request = jsonParse(messageBytes.toString('utf-8')) as Partial<
-            ChromeBridgeToolRequest
-          >
+          const request = jsonParse(
+            messageBytes.toString('utf-8'),
+          ) as Partial<AuthenticatedChromeBridgeToolRequest>
           if (
             typeof request.request_id !== 'string' ||
             request.request_id.length === 0 ||
+            request.auth_token !== this.endpoint?.token ||
             request.method !== 'execute_tool' ||
             !request.params ||
             typeof request.params.tool !== 'string' ||
@@ -540,10 +553,7 @@ class ChromeMessageReader {
 
     const length = this.buffer.readUInt32LE(0)
 
-    if (
-      length === 0 ||
-      length > MAX_CHROME_BRIDGE_MESSAGE_BYTES
-    ) {
+    if (length === 0 || length > MAX_CHROME_BRIDGE_MESSAGE_BYTES) {
       log(`Invalid message length: ${length}`)
       this.pendingResolve(null)
       this.pendingResolve = null

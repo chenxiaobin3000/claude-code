@@ -3,6 +3,7 @@ import {
   SocketConnectionError,
 } from './mcpSocketClient.js'
 import type { McpSocketClient } from './mcpSocketClient.js'
+import type { ChromeSocketEndpoint } from '../protocol/index.js'
 import type {
   ClaudeForChromeContext,
   PermissionMode,
@@ -90,9 +91,9 @@ export class McpSocketPool {
     // Route by tabId if present
     const tabId = args.tabId as number | undefined
     if (tabId !== undefined) {
-      const socketPath = this.tabRoutes.get(tabId)
-      if (socketPath) {
-        const client = this.clients.get(socketPath)
+      const endpointId = this.tabRoutes.get(tabId)
+      if (endpointId) {
+        const client = this.clients.get(endpointId)
         if (client?.isConnected()) {
           return client.callTool(name, args)
         }
@@ -155,7 +156,7 @@ export class McpSocketPool {
     // If only one client, skip merging overhead
     if (connected.length === 1) {
       const result = await connected[0]!.callTool('tabs_context_mcp', args)
-      this.updateTabRoutes(result, this.getSocketPathForClient(connected[0]!))
+      this.updateTabRoutes(result, this.getEndpointIdForClient(connected[0]!))
       return result
     }
 
@@ -163,8 +164,8 @@ export class McpSocketPool {
     const results = await Promise.allSettled(
       connected.map(async client => {
         const result = await client.callTool('tabs_context_mcp', args)
-        const socketPath = this.getSocketPathForClient(client)
-        return { result, socketPath }
+        const endpointId = this.getEndpointIdForClient(client)
+        return { result, endpointId }
       }),
     )
 
@@ -180,8 +181,8 @@ export class McpSocketPool {
         continue
       }
 
-      const { result, socketPath } = settledResult.value
-      this.updateTabRoutes(result, socketPath)
+      const { result, endpointId } = settledResult.value
+      this.updateTabRoutes(result, endpointId)
 
       const tabs = this.extractTabs(result)
       if (tabs) {
@@ -229,14 +230,14 @@ export class McpSocketPool {
   /**
    * Extract tab objects from a tool response to update routing table.
    */
-  private updateTabRoutes(result: unknown, socketPath: string): void {
+  private updateTabRoutes(result: unknown, endpointId: string): void {
     const tabs = this.extractTabs(result)
     if (!tabs) return
 
     for (const tab of tabs) {
       if (typeof tab === 'object' && tab !== null && 'tabId' in tab) {
         const tabId = (tab as { tabId: number }).tabId
-        this.tabRoutes.set(tabId, socketPath)
+        this.tabRoutes.set(tabId, endpointId)
       }
     }
   }
@@ -268,9 +269,9 @@ export class McpSocketPool {
     return null
   }
 
-  private getSocketPathForClient(client: McpSocketClient): string {
-    for (const [path, c] of this.clients.entries()) {
-      if (c === client) return path
+  private getEndpointIdForClient(client: McpSocketClient): string {
+    for (const [endpointId, candidate] of this.clients.entries()) {
+      if (candidate === client) return endpointId
     }
     return ''
   }
@@ -279,36 +280,40 @@ export class McpSocketPool {
    * Scan for available sockets and create/remove clients as needed.
    */
   private refreshClients(): void {
-    const socketPaths = this.getAvailableSocketPaths()
+    const endpoints = this.getAvailableEndpoints()
+    const endpointIds = new Set(endpoints.map(endpoint => endpoint.id))
     const { logger, serverName } = this.context
 
     // Add new clients for newly discovered sockets
-    for (const path of socketPaths) {
-      if (!this.clients.has(path)) {
-        logger.info(`[${serverName}] Adding socket to pool: ${path}`)
+    for (const endpoint of endpoints) {
+      if (!this.clients.has(endpoint.id)) {
+        logger.info(
+          `[${serverName}] Adding Chrome TCP endpoint to pool: ${endpoint.id}`,
+        )
         const clientContext: ClaudeForChromeContext = {
           ...this.context,
-          socketPath: path,
-          getSocketPath: undefined,
-          getSocketPaths: undefined,
+          endpoint,
+          getEndpoints: undefined,
         }
         const client = createMcpSocketClient(clientContext)
         client.disableAutoReconnect = true
         if (this.notificationHandler) {
           client.setNotificationHandler(this.notificationHandler)
         }
-        this.clients.set(path, client)
+        this.clients.set(endpoint.id, client)
       }
     }
 
     // Remove clients for sockets that no longer exist
-    for (const [path, client] of this.clients.entries()) {
-      if (!socketPaths.includes(path)) {
-        logger.info(`[${serverName}] Removing stale socket from pool: ${path}`)
+    for (const [endpointId, client] of this.clients.entries()) {
+      if (!endpointIds.has(endpointId)) {
+        logger.info(
+          `[${serverName}] Removing stale Chrome TCP endpoint: ${endpointId}`,
+        )
         client.disconnect()
-        this.clients.delete(path)
-        for (const [tabId, socketPath] of this.tabRoutes.entries()) {
-          if (socketPath === path) {
+        this.clients.delete(endpointId)
+        for (const [tabId, routeEndpointId] of this.tabRoutes.entries()) {
+          if (routeEndpointId === endpointId) {
             this.tabRoutes.delete(tabId)
           }
         }
@@ -316,8 +321,8 @@ export class McpSocketPool {
     }
   }
 
-  private getAvailableSocketPaths(): string[] {
-    return this.context.getSocketPaths?.() ?? []
+  private getAvailableEndpoints(): ChromeSocketEndpoint[] {
+    return this.context.getEndpoints?.() ?? []
   }
 }
 
