@@ -63,7 +63,16 @@ export function isChromeSocketEndpoint(
     typeof endpoint.token === 'string' &&
     /^[a-f0-9]{64}$/.test(endpoint.token) &&
     Number.isInteger(endpoint.pid) &&
-    Number(endpoint.pid) > 0
+    Number(endpoint.pid) > 0 &&
+    typeof endpoint.profileId === 'string' &&
+    /^[a-f0-9-]{36}$/.test(endpoint.profileId) &&
+    typeof endpoint.profileName === 'string' &&
+    endpoint.profileName.length >= 1 &&
+    endpoint.profileName.length <= 64 &&
+    ![...endpoint.profileName].some(character => {
+      const code = character.charCodeAt(0)
+      return code <= 31 || code === 127
+    })
   )
 }
 

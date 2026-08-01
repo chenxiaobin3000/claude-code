@@ -1,13 +1,54 @@
 const NATIVE_HOST = 'com.anthropic.claude_code_browser_extension'
 const MAX_BRIDGE_MESSAGE_BYTES = 1024 * 1024
+const PROFILE_STORAGE_KEY = 'claudeinchromeProfile'
 
 let nativePort = null
+let nativeConnecting = false
 let reconnectTimer = null
 let reconnectDelay = 1000
 let nativeConnected = false
 let mcpConnected = false
 let nativeHostVersion = null
 let requestQueue = Promise.resolve()
+let profileIdentity = null
+
+function validProfileName(value) {
+  const name = typeof value === 'string' ? value.trim() : ''
+  return name.length >= 1 &&
+    name.length <= 64 &&
+    ![...name].some(character => {
+      const code = character.charCodeAt(0)
+      return code <= 31 || code === 127
+    })
+    ? name
+    : null
+}
+
+async function getProfileIdentity() {
+  if (profileIdentity) return profileIdentity
+  const stored = await chrome.storage.local.get(PROFILE_STORAGE_KEY)
+  const candidate = stored?.[PROFILE_STORAGE_KEY]
+  const profileId =
+    typeof candidate?.profileId === 'string' &&
+    /^[a-f0-9-]{36}$/.test(candidate.profileId)
+      ? candidate.profileId
+      : crypto.randomUUID()
+  const profileName =
+    validProfileName(candidate?.profileName) ||
+    `Profile ${profileId.slice(0, 8)}`
+  profileIdentity = { profileId, profileName }
+  await chrome.storage.local.set({ [PROFILE_STORAGE_KEY]: profileIdentity })
+  return profileIdentity
+}
+
+function sendProfileHello() {
+  if (!nativePort || !profileIdentity) return
+  nativePort.postMessage({
+    type: 'profile_hello',
+    profile_id: profileIdentity.profileId,
+    profile_name: profileIdentity.profileName,
+  })
+}
 
 function textContent(value) {
   return [
@@ -30,15 +71,24 @@ function broadcastStatus() {
   chrome.runtime
     .sendMessage({
       type: 'bridge_status',
-      status: { nativeConnected, mcpConnected, nativeHostVersion },
+      status: {
+        nativeConnected,
+        mcpConnected,
+        nativeHostVersion,
+        profileId: profileIdentity?.profileId || null,
+        profileName: profileIdentity?.profileName || null,
+      },
     })
     .catch(() => {})
 }
 
-function connectNative() {
-  if (nativePort) return
+async function connectNative() {
+  if (nativePort || nativeConnecting) return
+  nativeConnecting = true
   clearTimeout(reconnectTimer)
   try {
+    await getProfileIdentity()
+    if (nativePort) return
     const port = chrome.runtime.connectNative(NATIVE_HOST)
     nativePort = port
     nativeConnected = true
@@ -52,17 +102,20 @@ function connectNative() {
       nativeHostVersion = null
       broadcastStatus()
       console.warn('Native host disconnected:', error || 'unknown reason')
-      reconnectTimer = setTimeout(connectNative, reconnectDelay)
+      reconnectTimer = setTimeout(() => void connectNative(), reconnectDelay)
       reconnectDelay = Math.min(reconnectDelay * 2, 30000)
     })
+    sendProfileHello()
     port.postMessage({ type: 'get_status' })
     broadcastStatus()
   } catch (error) {
     nativePort = null
     nativeConnected = false
     broadcastStatus()
-    reconnectTimer = setTimeout(connectNative, reconnectDelay)
+    reconnectTimer = setTimeout(() => void connectNative(), reconnectDelay)
     reconnectDelay = Math.min(reconnectDelay * 2, 30000)
+  } finally {
+    nativeConnecting = false
   }
 }
 
@@ -85,10 +138,7 @@ function handleNativeMessage(message) {
       requestQueue = requestQueue
         .then(() => executeToolRequest(message))
         .catch(error =>
-          sendToolResponse(
-            message.request_id,
-            failure(errorMessage(error)),
-          ),
+          sendToolResponse(message.request_id, failure(errorMessage(error))),
         )
       break
     case 'error':
@@ -224,9 +274,7 @@ async function navigateHistory(tabId, direction) {
     func: delta => {
       const pageNavigation = globalThis.navigation
       const canNavigate =
-        delta < 0
-          ? pageNavigation?.canGoBack
-          : pageNavigation?.canGoForward
+        delta < 0 ? pageNavigation?.canGoBack : pageNavigation?.canGoForward
       if (canNavigate !== true) return false
       history.go(delta)
       return true
@@ -280,9 +328,7 @@ async function executeTool(tool, args) {
         if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = `https://${url}`
         const origin = originForUrl(url)
         if (!origin) {
-          throw new Error(
-            `URL ${url} is not an accessible HTTP(S) page.`,
-          )
+          throw new Error(`URL ${url} is not an accessible HTTP(S) page.`)
         }
         await chrome.tabs.update(tabId, { url })
       }
@@ -387,18 +433,39 @@ async function executeComputer(args) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'get_bridge_status') {
-    sendResponse({ nativeConnected, mcpConnected, nativeHostVersion })
+    sendResponse({
+      nativeConnected,
+      mcpConnected,
+      nativeHostVersion,
+      profileId: profileIdentity?.profileId || null,
+      profileName: profileIdentity?.profileName || null,
+    })
     return
   }
   if (message?.type === 'reconnect_native') {
     nativePort?.disconnect()
     nativePort = null
-    connectNative()
+    void connectNative()
     sendResponse({ ok: true })
     return
   }
+  if (message?.type === 'set_profile_name') {
+    const profileName = validProfileName(message.profileName)
+    if (!profileName) {
+      sendResponse({ ok: false, error: '名称必须为 1 到 64 个可见字符。' })
+      return
+    }
+    void getProfileIdentity().then(async identity => {
+      profileIdentity = { ...identity, profileName }
+      await chrome.storage.local.set({ [PROFILE_STORAGE_KEY]: profileIdentity })
+      sendProfileHello()
+      broadcastStatus()
+      sendResponse({ ok: true, ...profileIdentity })
+    })
+    return true
+  }
 })
 
-chrome.runtime.onInstalled.addListener(connectNative)
-chrome.runtime.onStartup.addListener(connectNative)
-connectNative()
+chrome.runtime.onInstalled.addListener(() => void connectNative())
+chrome.runtime.onStartup.addListener(() => void connectNative())
+void connectNative()

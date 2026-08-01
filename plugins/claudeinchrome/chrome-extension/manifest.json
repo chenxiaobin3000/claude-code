@@ -6,6 +6,7 @@
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyN7b2uiGmOB46baq5vbGKMDPV0t5K+91G165zpnWmYW/T1/vOJcG6E/DvuRWUNDd8mPPJrtCaMrYhT9t6n+x+HhzoMHPYVVr5JO+VxhO6oxnFz+l6o8CArPzFwoRP0zlG9p0jWibr3zXUnjt9znma5kCh4wVlTh1jfQby3CTdKruMPX0hd9erKWYU9y6RpriaSJbDz+eWzt3U9hxE6ukQrJ10huDfX9TI20+eVxuVztSh31RjVKBI+GePHaE2rOSzcPfpv+FCIQEiccB+z7QM/ORgK6wpoQr7B+b7S8lXoQraVUzhwo+KrhwgcX46vUAVIsy5AZKX/LQWzG81kRsEwIDAQAB",
   "permissions": [
     "nativeMessaging",
+    "storage",
     "tabs",
     "scripting",
     "windows"

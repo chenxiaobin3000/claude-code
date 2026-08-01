@@ -31,6 +31,7 @@ const validationScripts = [
   'scripts/validation/mcp-lifecycle.ts',
   'scripts/validation/claudeinchrome-plugin-boundary.ts',
   'scripts/validation/claudeinchrome-protocol.ts',
+  'scripts/validation/claudeinchrome-profiles.ts',
   'scripts/validation/claudeinchrome-host.ts',
   'scripts/validation/product-surface-boundary.ts',
   'scripts/validation/observability-boundary.ts',
@@ -422,17 +423,13 @@ async function main(): Promise<void> {
         `claudeinchrome Host version mismatch: ${chromeHostVersion.stdout.trim()}`,
       )
     }
-    await runStep(
-      'claudeinchrome Native Host EOF lifecycle',
-      [chromeHost],
-      {
-        capture: true,
-        timeoutMs: 10_000,
-        env: {
-          CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX: `verify-${process.pid}`,
-        },
+    await runStep('claudeinchrome Native Host EOF lifecycle', [chromeHost], {
+      capture: true,
+      timeoutMs: 10_000,
+      env: {
+        CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX: `verify-${process.pid}`,
       },
-    )
+    })
     await runStep(
       'claudeinchrome MCP Host EOF lifecycle',
       [chromeHost, 'mcp'],

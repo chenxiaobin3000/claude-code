@@ -521,9 +521,24 @@ const BROWSER_TOOL_DEFINITIONS = [
 
 const implementedToolNames = new Set<string>(IMPLEMENTED_CHROME_TOOL_NAMES)
 
+const PROFILE_ID_PROPERTY = {
+  type: 'string',
+  description:
+    'Stable Chrome profile ID returned by tabs_context_mcp. Required whenever multiple Chrome profiles are connected; never guess or substitute another profile.',
+}
+
 export const BROWSER_TOOLS = BROWSER_TOOL_DEFINITIONS.filter(tool =>
   implementedToolNames.has(tool.name),
-)
+).map(tool => ({
+  ...tool,
+  inputSchema: {
+    ...tool.inputSchema,
+    properties: {
+      ...tool.inputSchema.properties,
+      profileId: PROFILE_ID_PROPERTY,
+    },
+  },
+}))
 
 const advertisedToolNames = new Set(BROWSER_TOOLS.map(tool => tool.name))
 for (const name of IMPLEMENTED_CHROME_TOOL_NAMES) {

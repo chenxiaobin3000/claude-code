@@ -12,6 +12,7 @@ export type {
   ChromeBridgeToolRequest,
   ChromeBridgeToolResponse,
   ChromeNativeMessage,
+  ChromeProfileHelloMessage,
   ChromeSocketEndpoint,
   ImplementedChromeToolName,
   NativeBridgeStatusMessage,

@@ -64,6 +64,7 @@
 - `plugins/claudeinchrome/chrome-extension` 已包含 Manifest V3 Chrome 扩展实现，固定扩展 ID 为 `dlpofjonbnceelbmpelkfblmnghclmkm`；标签页、导航、页面读取与交互、截图和窗口缩放等浏览器端能力已经实现。
 - Chrome 工具与桥接协议的权威定义位于 `plugins/claudeinchrome/protocol`。MCP 只允许广告扩展已实现的 11 个工具，`computer.zoom`、GIF、图片上传、Console/Network 和快捷方式不进入可用工具集合；协议固定 1 MiB 消息上限、30 秒工具超时和必填 `request_id`，Native Host 必须按请求归属精确回传，不得向其他 MCP 客户端广播工具结果。
 - Windows、Linux 和 macOS 的插件 Host 统一使用仅绑定 `127.0.0.1` 的动态 TCP socket，不使用 Windows 命名管道或 Unix Domain Socket。每个 Chrome 扩展实例启动独立 Host 并发布带进程号的端点记录，MCP 自动发现多个在线实例；请求必须携带端点随机令牌，日志禁止输出令牌，Host 退出或发现失效进程时清理端点记录。
+- 每个 Chrome 个人资料通过扩展自己的 `chrome.storage.local` 保存永久 `profileId` 和用户别名 `profileName`，不猜测 Chrome 内部 Profile 名称。`tabs_context_mcp` 汇总在线 Profile 并为标签页附加 Profile 身份；多 Profile 下的工具调用必须显式路由，缺少目标、断线、重复 Profile ID 或跨 Profile Tab ID 冲突均 fail-closed，禁止自动选择或回退到其他账户。
 - `plugins/claudeinchrome/host` 已提供与主程序解耦的 MCP/Native Messaging Host 入口、路径、注册、卸载和 doctor，实现不依赖主程序 Settings、模型调用、Anthropic 账号或内部 `USER_TYPE` 分支。Windows 可构建独立 `claudeinchrome-host.exe`；默认无参数运行 Native Host，`mcp` 运行 stdio MCP，`register`/`unregister`/`doctor` 由用户显式执行。
 - MCP 引擎、TCP Socket 生命周期、多实例端点池和工具声明已经迁入 `plugins/claudeinchrome/mcp`；旧 `packages/@ant/claude-for-chrome-mcp` workspace 包和 `src/utils/claudeInChrome` 主程序兼容层已经删除，并由防回归验证阻止恢复。
 - 插件 Manifest 已通过标准本地 stdio MCP 声明启动 Host，`skills/claude-in-chrome/SKILL.md` 只随插件加载；插件未加载时，主程序的系统提示、Skill 和工具列表均不宣传 Chrome 能力。

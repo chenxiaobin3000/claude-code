@@ -152,6 +152,8 @@ try {
     port: 43123,
     token: 'a'.repeat(64),
     pid: process.pid,
+    profileId: '00000000-0000-4000-8000-000000000001',
+    profileName: 'Validation Profile',
   } as const
   await writeFile(
     getEndpointDescriptorPath(endpoint.id),
@@ -183,11 +185,19 @@ const runtimeHost = new ChromeNativeHost()
 let stoppedEndpointCount = -1
 try {
   await runtimeHost.start()
+  await runtimeHost.handleMessage(
+    JSON.stringify({
+      type: 'profile_hello',
+      profile_id: '00000000-0000-4000-8000-000000000002',
+      profile_name: 'Runtime Validation',
+    }),
+  )
   const runtimeEndpoints = getAvailableSocketEndpoints()
   if (
     runtimeEndpoints.length !== 1 ||
     runtimeEndpoints[0]?.host !== CHROME_SOCKET_HOST ||
-    runtimeEndpoints[0]?.pid !== process.pid
+    runtimeEndpoints[0]?.pid !== process.pid ||
+    runtimeEndpoints[0]?.profileName !== 'Runtime Validation'
   ) {
     throw new Error(
       '[claudeinchrome-host] live loopback TCP endpoint was not published',

@@ -10,6 +10,60 @@ import type {
   PermissionOverrides,
 } from './types.js'
 
+export function chromeTabRouteKey(profileId: string, tabId: number): string {
+  return `${profileId}\u0000${tabId}`
+}
+
+export function selectChromeEndpointId(
+  args: Record<string, unknown>,
+  endpoints: readonly ChromeSocketEndpoint[],
+  tabRoutes: ReadonlyMap<string, string>,
+): string | undefined {
+  const profileId =
+    typeof args.profileId === 'string' && args.profileId.length > 0
+      ? args.profileId
+      : undefined
+  if (profileId) {
+    const matches = endpoints.filter(item => item.profileId === profileId)
+    if (matches.length === 0) {
+      throw new SocketConnectionError(
+        `Chrome profile ${profileId} is not connected. Refresh tabs_context_mcp before retrying.`,
+      )
+    }
+    if (matches.length > 1) {
+      throw new SocketConnectionError(
+        `Chrome profile ID ${profileId} is duplicated across multiple extension instances. Reinstall the extension in one affected profile before continuing.`,
+      )
+    }
+    return matches[0]!.id
+  }
+
+  const tabId = typeof args.tabId === 'number' ? args.tabId : undefined
+  if (tabId !== undefined) {
+    const matchingEndpointIds = [
+      ...new Set(
+        [...tabRoutes.entries()]
+          .filter(([key]) => key.endsWith(`\u0000${tabId}`))
+          .map(([, endpointId]) => endpointId),
+      ),
+    ]
+    if (matchingEndpointIds.length === 1) return matchingEndpointIds[0]
+    if (matchingEndpointIds.length > 1) {
+      throw new SocketConnectionError(
+        `Tab ID ${tabId} exists in multiple Chrome profiles. Pass profileId from tabs_context_mcp.`,
+      )
+    }
+  }
+
+  if (endpoints.length === 1) return endpoints[0]!.id
+  if (endpoints.length > 1) {
+    throw new SocketConnectionError(
+      'Multiple Chrome profiles are connected. Pass profileId from tabs_context_mcp; no profile was selected automatically.',
+    )
+  }
+  return undefined
+}
+
 /**
  * Manages plugin-local connections to Chrome native host sockets.
  * Routes tool calls to the correct socket based on tab ID.
@@ -20,7 +74,8 @@ import type {
  */
 export class McpSocketPool {
   private clients: Map<string, McpSocketClient> = new Map()
-  private tabRoutes: Map<number, string> = new Map()
+  private endpoints: Map<string, ChromeSocketEndpoint> = new Map()
+  private tabRoutes: Map<string, string> = new Map()
   private context: ClaudeForChromeContext
   private notificationHandler:
     | ((notification: {
@@ -88,27 +143,24 @@ export class McpSocketPool {
       return this.callTabsContext(args)
     }
 
-    // Route by tabId if present
-    const tabId = args.tabId as number | undefined
-    if (tabId !== undefined) {
-      const endpointId = this.tabRoutes.get(tabId)
-      if (endpointId) {
-        const client = this.clients.get(endpointId)
-        if (client?.isConnected()) {
-          return client.callTool(name, args)
-        }
-      }
-      // Tab route not found or client disconnected — fall through to any connected
-    }
-
-    // Fallback: use first connected client
-    const connected = this.getConnectedClients()
-    if (connected.length === 0) {
+    const connected = this.getConnectedEntries()
+    const endpointId = selectChromeEndpointId(
+      args,
+      connected.map(entry => entry.endpoint),
+      this.tabRoutes,
+    )
+    if (!endpointId) {
       throw new SocketConnectionError(
         `[${this.context.serverName}] No connected sockets available`,
       )
     }
-    return connected[0]!.callTool(name, args)
+    const client = this.clients.get(endpointId)
+    if (!client?.isConnected()) {
+      throw new SocketConnectionError(
+        `[${this.context.serverName}] Selected Chrome profile disconnected before the tool call`,
+      )
+    }
+    return client.callTool(name, args)
   }
 
   public async setPermissionMode(
@@ -130,11 +182,27 @@ export class McpSocketPool {
       client.disconnect()
     }
     this.clients.clear()
+    this.endpoints.clear()
     this.tabRoutes.clear()
   }
 
   private getConnectedClients(): McpSocketClient[] {
     return [...this.clients.values()].filter(c => c.isConnected())
+  }
+
+  private getConnectedEntries(): Array<{
+    endpoint: ChromeSocketEndpoint
+    client: McpSocketClient
+  }> {
+    const entries: Array<{
+      endpoint: ChromeSocketEndpoint
+      client: McpSocketClient
+    }> = []
+    for (const [endpointId, client] of this.clients) {
+      const endpoint = this.endpoints.get(endpointId)
+      if (endpoint && client.isConnected()) entries.push({ endpoint, client })
+    }
+    return entries
   }
 
   /**
@@ -145,32 +213,32 @@ export class McpSocketPool {
     args: Record<string, unknown>,
   ): Promise<unknown> {
     const { logger, serverName } = this.context
-    const connected = this.getConnectedClients()
+    const requestedProfileId =
+      typeof args.profileId === 'string' && args.profileId.length > 0
+        ? args.profileId
+        : undefined
+    const connected = this.getConnectedEntries().filter(
+      entry =>
+        !requestedProfileId || entry.endpoint.profileId === requestedProfileId,
+    )
 
     if (connected.length === 0) {
       throw new SocketConnectionError(
-        `[${serverName}] No connected sockets available`,
+        requestedProfileId
+          ? `[${serverName}] Chrome profile ${requestedProfileId} is not connected`
+          : `[${serverName}] No connected Chrome profiles are available`,
       )
     }
 
-    // If only one client, skip merging overhead
-    if (connected.length === 1) {
-      const result = await connected[0]!.callTool('tabs_context_mcp', args)
-      this.updateTabRoutes(result, this.getEndpointIdForClient(connected[0]!))
-      return result
-    }
-
-    // Query all connected clients in parallel
     const results = await Promise.allSettled(
-      connected.map(async client => {
+      connected.map(async ({ client, endpoint }) => {
         const result = await client.callTool('tabs_context_mcp', args)
-        const endpointId = this.getEndpointIdForClient(client)
-        return { result, endpointId }
+        return { result, endpoint }
       }),
     )
 
-    // Merge tab results
-    const mergedTabs: unknown[] = []
+    const mergedTabs: Array<Record<string, unknown>> = []
+    const profiles: Array<{ profileId: string; profileName: string }> = []
     this.tabRoutes.clear()
 
     for (const settledResult of results) {
@@ -181,63 +249,77 @@ export class McpSocketPool {
         continue
       }
 
-      const { result, endpointId } = settledResult.value
-      this.updateTabRoutes(result, endpointId)
+      const { result, endpoint } = settledResult.value
+      this.updateTabRoutes(result, endpoint)
+      profiles.push({
+        profileId: endpoint.profileId,
+        profileName: endpoint.profileName,
+      })
 
       const tabs = this.extractTabs(result)
       if (tabs) {
-        mergedTabs.push(...tabs)
+        for (const tab of tabs) {
+          if (typeof tab !== 'object' || tab === null) continue
+          mergedTabs.push({
+            ...(tab as Record<string, unknown>),
+            profileId: endpoint.profileId,
+            profileName: endpoint.profileName,
+          })
+        }
       }
     }
 
-    // Return merged result in the same format as the extension response
-    if (mergedTabs.length > 0) {
-      const tabListText = mergedTabs
-        .map(t => {
-          const tab = t as { tabId: number; title: string; url: string }
-          return `  • tabId ${tab.tabId}: "${tab.title}" (${tab.url})`
-        })
-        .join('\n')
-
-      return {
-        result: {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({ availableTabs: mergedTabs }),
-            },
-            {
-              type: 'text',
-              text: `\n\nTab Context:\n- Available tabs:\n${tabListText}`,
-            },
-          ],
-        },
-      }
+    if (profiles.length === 0) {
+      throw new SocketConnectionError(
+        `[${serverName}] All Chrome profiles failed for tabs_context_mcp`,
+      )
     }
 
-    // Fallback: return first successful result as-is
-    for (const settledResult of results) {
-      if (settledResult.status === 'fulfilled') {
-        return settledResult.value.result
-      }
-    }
+    const tabListText = mergedTabs
+      .map(tab => {
+        return `  • [${String(tab.profileName)} | ${String(tab.profileId)}] tabId ${String(tab.tabId)}: "${String(tab.title)}" (${String(tab.url)})`
+      })
+      .join('\n')
 
-    throw new SocketConnectionError(
-      `[${serverName}] All sockets failed for tabs_context_mcp`,
-    )
+    return {
+      result: {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ profiles, availableTabs: mergedTabs }),
+          },
+          {
+            type: 'text',
+            text: `\n\nChrome Profiles:\n${profiles
+              .map(
+                profile => `  • ${profile.profileName}: ${profile.profileId}`,
+              )
+              .join(
+                '\n',
+              )}\nAvailable tabs:\n${tabListText || '  • No tabs in the selected profile(s)'}`,
+          },
+        ],
+      },
+    }
   }
 
   /**
    * Extract tab objects from a tool response to update routing table.
    */
-  private updateTabRoutes(result: unknown, endpointId: string): void {
+  private updateTabRoutes(
+    result: unknown,
+    endpoint: ChromeSocketEndpoint,
+  ): void {
     const tabs = this.extractTabs(result)
     if (!tabs) return
 
     for (const tab of tabs) {
       if (typeof tab === 'object' && tab !== null && 'tabId' in tab) {
         const tabId = (tab as { tabId: number }).tabId
-        this.tabRoutes.set(tabId, endpointId)
+        this.tabRoutes.set(
+          chromeTabRouteKey(endpoint.profileId, tabId),
+          endpoint.id,
+        )
       }
     }
   }
@@ -269,13 +351,6 @@ export class McpSocketPool {
     return null
   }
 
-  private getEndpointIdForClient(client: McpSocketClient): string {
-    for (const [endpointId, candidate] of this.clients.entries()) {
-      if (candidate === client) return endpointId
-    }
-    return ''
-  }
-
   /**
    * Scan for available sockets and create/remove clients as needed.
    */
@@ -286,6 +361,7 @@ export class McpSocketPool {
 
     // Add new clients for newly discovered sockets
     for (const endpoint of endpoints) {
+      this.endpoints.set(endpoint.id, endpoint)
       if (!this.clients.has(endpoint.id)) {
         logger.info(
           `[${serverName}] Adding Chrome TCP endpoint to pool: ${endpoint.id}`,
@@ -312,6 +388,7 @@ export class McpSocketPool {
         )
         client.disconnect()
         this.clients.delete(endpointId)
+        this.endpoints.delete(endpointId)
         for (const [tabId, routeEndpointId] of this.tabRoutes.entries()) {
           if (routeEndpointId === endpointId) {
             this.tabRoutes.delete(tabId)

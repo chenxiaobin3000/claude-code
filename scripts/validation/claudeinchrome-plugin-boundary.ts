@@ -18,8 +18,7 @@ import { IMPLEMENTED_CHROME_TOOL_NAMES } from '../../plugins/claudeinchrome/prot
 const root = resolve(import.meta.dir, '../..')
 const pluginRoot = join(root, 'plugins', 'claudeinchrome')
 const manifestPath = join(pluginRoot, '.claude-plugin', 'plugin.json')
-const sourceHostArgument =
-  '$' + '{CLAUDE_PLUGIN_ROOT}/host/entry.ts'
+const sourceHostArgument = '$' + '{CLAUDE_PLUGIN_ROOT}/host/entry.ts'
 const extensionManifestPath = join(
   pluginRoot,
   'chrome-extension',
@@ -115,8 +114,7 @@ const scopedServers = await extractMcpServersFromPlugins(
   delete process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR
   await rm(pluginCache, { recursive: true, force: true })
 })
-const scopedServer =
-  scopedServers['plugin:claudeinchrome:claude-in-chrome']
+const scopedServer = scopedServers['plugin:claudeinchrome:claude-in-chrome']
 if (
   !scopedServer ||
   scopedServer.type !== 'stdio' ||
@@ -139,17 +137,11 @@ const skillTools = parseSlashCommandToolsFromFrontmatter(
   skill.frontmatter['allowed-tools'],
 )
 const expectedSkillTools = [...IMPLEMENTED_CHROME_TOOL_NAMES]
-  .map(name =>
-    buildMcpToolName(
-      'plugin:claudeinchrome:claude-in-chrome',
-      name,
-    ),
-  )
+  .map(name => buildMcpToolName('plugin:claudeinchrome:claude-in-chrome', name))
   .sort()
 if (
   skill.frontmatter.name !== 'claude-in-chrome' ||
-  JSON.stringify([...skillTools].sort()) !==
-    JSON.stringify(expectedSkillTools)
+  JSON.stringify([...skillTools].sort()) !== JSON.stringify(expectedSkillTools)
 ) {
   throw new Error(
     '[claudeinchrome-plugin-boundary] Chrome Skill permissions do not exactly match its scoped MCP tools',
@@ -260,7 +252,14 @@ for (const [relative, forbidden] of Object.entries(forbiddenByFile)) {
 }
 if (
   extensionManifest.permissions?.includes('activeTab') ||
-  extensionManifest.permissions?.includes('storage') ||
+  JSON.stringify(extensionManifest.permissions) !==
+    JSON.stringify([
+      'nativeMessaging',
+      'storage',
+      'tabs',
+      'scripting',
+      'windows',
+    ]) ||
   JSON.stringify(extensionManifest.host_permissions) !==
     JSON.stringify(['<all_urls>']) ||
   extensionManifest.optional_host_permissions !== undefined
@@ -323,11 +322,21 @@ for (const marker of [
   'allowedOrigins',
   'allowAllSites',
   'chrome.permissions.',
-  'chrome.storage.',
 ]) {
   if (popupSource.includes(marker) || extensionSource.includes(marker)) {
     throw new Error(
       `[claudeinchrome-plugin-boundary] removed page authorization marker was restored: ${marker}`,
+    )
+  }
+}
+for (const marker of [
+  "const PROFILE_STORAGE_KEY = 'claudeinchromeProfile'",
+  'chrome.storage.local.get(PROFILE_STORAGE_KEY)',
+  'chrome.storage.local.set({ [PROFILE_STORAGE_KEY]: profileIdentity })',
+]) {
+  if (!extensionSource.includes(marker)) {
+    throw new Error(
+      `[claudeinchrome-plugin-boundary] profile-local identity storage is missing: ${marker}`,
     )
   }
 }

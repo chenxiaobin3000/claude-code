@@ -38,6 +38,11 @@ Windows、Linux 和 macOS 使用相同的本机传输：每个 Chrome 扩展实�
 端点以随机令牌认证，令牌不会记录到日志；不使用 Windows 命名管道或 Unix
 Domain Socket。这个结构允许多个 Chrome 个人资料分别启动 Host 并同时连接。
 
+每个个人资料的扩展在独立的 `chrome.storage.local` 中生成永久 `profileId`，弹窗可
+设置 `profileName` 别名。`tabs_context_mcp` 会同时返回 Profile 列表以及带 Profile
+身份的标签页。一个以上 Profile 在线时，所有后续工具调用都必须传回准确的
+`profileId`；未指定、已断线、身份重复或 Tab ID 冲突时安全拒绝，不自动选择账户。
+
 后续迁移及验收范围以根目录 `DEVELOPMENT_PLAN.md` 为准。
 
 ## Host 命令
@@ -81,3 +86,7 @@ bun run chrome:verify:tools
 `chrome:verify:tools` 继续覆盖页面读取、查找、表单、JavaScript、点击、键盘、
 滚动、截图、窗口缩放与恢复、前进后退、刷新、Unicode URL、内部页面拒绝及
 1 MiB 超限结果恢复。验收不会读取浏览器 Profile、Cookie 或凭据。
+
+多账户部署时，需要在每个 Chrome 个人资料中分别加载扩展，并在各自弹窗设置容易
+辨认的账户别名。Native Host 注册按操作系统用户执行一次即可；每个已打开的个人
+资料会启动独立 Host。别名由用户提供，扩展不会读取 Chrome 的内部 Profile 名称。

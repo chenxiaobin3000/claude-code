@@ -46,6 +46,22 @@ function jsonParse(value: string): unknown {
 function jsonStringify(value: unknown): string {
   return JSON.stringify(value)
 }
+
+function isValidProfileId(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-f0-9-]{36}$/.test(value)
+}
+
+function isValidProfileName(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length >= 1 &&
+    value.length <= 64 &&
+    ![...value].some(character => {
+      const code = character.charCodeAt(0)
+      return code <= 31 || code === 127
+    })
+  )
+}
 /**
  * Send a message to stdout (Chrome native messaging protocol)
  */
@@ -177,22 +193,13 @@ export class ChromeNativeHost {
       port: address.port,
       token: randomBytes(32).toString('hex'),
       pid: process.pid,
+      profileId: '',
+      profileName: '',
     }
     this.descriptorPath = getEndpointDescriptorPath(id)
-    const temporaryDescriptorPath = `${this.descriptorPath}.tmp`
     try {
-      await writeFile(
-        temporaryDescriptorPath,
-        `${JSON.stringify(this.endpoint)}\n`,
-        {
-          encoding: 'utf8',
-          mode: 0o600,
-          flag: 'wx',
-        },
-      )
-      await rename(temporaryDescriptorPath, this.descriptorPath)
+      await this.publishEndpoint()
     } catch (error) {
-      await unlink(temporaryDescriptorPath).catch(() => {})
       await new Promise<void>(resolve => this.server!.close(() => resolve()))
       this.server = null
       this.running = false
@@ -279,6 +286,26 @@ export class ChromeNativeHost {
     log(`Handling Chrome message type: ${message.type}`)
 
     switch (message.type) {
+      case 'profile_hello': {
+        const profileId = message.profile_id
+        const profileName = message.profile_name
+        if (!isValidProfileId(profileId) || !isValidProfileName(profileName)) {
+          log('Rejecting invalid Chrome profile identity')
+          sendChromeMessage(
+            jsonStringify({
+              type: 'error',
+              error: 'Invalid Chrome profile identity',
+            }),
+          )
+          break
+        }
+        if (!this.endpoint) break
+        this.endpoint = { ...this.endpoint, profileId, profileName }
+        await this.publishEndpoint()
+        log('Published Chrome profile identity')
+        break
+      }
+
       case 'ping':
         log('Responding to ping')
 
@@ -506,6 +533,26 @@ export class ChromeNativeHost {
     const lengthBuffer = Buffer.alloc(4)
     lengthBuffer.writeUInt32LE(responseData.length, 0)
     client.socket.write(Buffer.concat([lengthBuffer, responseData]))
+  }
+
+  private async publishEndpoint(): Promise<void> {
+    if (!this.endpoint || !this.descriptorPath) {
+      throw new Error('Cannot publish an uninitialized Chrome TCP endpoint')
+    }
+    const temporaryDescriptorPath = `${this.descriptorPath}.${randomUUID()}.tmp`
+    try {
+      await writeFile(
+        temporaryDescriptorPath,
+        `${JSON.stringify(this.endpoint)}\n`,
+        { encoding: 'utf8', mode: 0o600, flag: 'wx' },
+      )
+      await chmod(temporaryDescriptorPath, 0o600).catch(() => {})
+      await unlink(this.descriptorPath).catch(() => {})
+      await rename(temporaryDescriptorPath, this.descriptorPath)
+    } catch (error) {
+      await unlink(temporaryDescriptorPath).catch(() => {})
+      throw error
+    }
   }
 }
 

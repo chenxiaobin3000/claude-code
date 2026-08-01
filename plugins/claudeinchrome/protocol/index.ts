@@ -53,6 +53,14 @@ export type ChromeSocketEndpoint = {
   port: number
   token: string
   pid: number
+  profileId: string
+  profileName: string
+}
+
+export type ChromeProfileHelloMessage = {
+  type: 'profile_hello'
+  profile_id: string
+  profile_name: string
 }
 
 export type ChromeBridgeToolResponse = {
@@ -70,6 +78,7 @@ export type NativeToolResponseMessage = ChromeBridgeToolResponse & {
 }
 
 export type NativeBridgeStatusMessage =
+  | ChromeProfileHelloMessage
   | { type: 'get_status' }
   | {
       type: 'status_response'

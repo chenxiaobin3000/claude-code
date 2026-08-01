@@ -45,6 +45,32 @@ section {
   min-height: 28px;
 }
 
+label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 12px;
+  color: #aaa49b;
+}
+
+.profile-editor {
+  display: flex;
+  gap: 8px;
+}
+
+input {
+  min-width: 0;
+  flex: 1;
+  padding: 8px 9px;
+  border: 1px solid #4b4741;
+  border-radius: 7px;
+  background: #151515;
+  color: inherit;
+}
+
+#profile-id {
+  margin-top: 7px;
+}
+
 .ok {
   color: #71c992;
 }
@@ -72,6 +98,16 @@ button {
 
 button:hover {
   background: #e48969;
+}
+
+button.secondary {
+  width: auto;
+  padding-inline: 12px;
+  background: #4b4741;
+}
+
+button.secondary:hover {
+  background: #625d56;
 }
 
 .message {

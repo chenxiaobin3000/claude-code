@@ -27,6 +27,13 @@ from another session. Reuse an existing tab only when the user explicitly asks
 to work in it; otherwise create a fresh tab. Refresh tab context after a tab is
 closed, navigation invalidates it, or a tool reports an unknown tab.
 
+Each tab includes a stable `profileId` and user-defined `profileName`. When more
+than one Chrome profile is connected, copy the exact `profileId` into every
+subsequent browser tool call, including tab creation. Never infer an account
+from a tab ID, choose the first profile, or fall back to another profile when
+the selected one disconnects. Ask the user when the requested account cannot
+be matched unambiguously.
+
 The extension grants site access. `update_plan` can report the domains a task
 expects to use, but it does not grant permission and must not be treated as an
 authorization bypass. Respect every permission response from the extension.

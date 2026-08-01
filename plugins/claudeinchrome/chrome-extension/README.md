@@ -9,6 +9,8 @@ Messaging 连接插件提供的 `claude-in-chrome` MCP。数据路径是：
 Chrome 操作由本扩展实现，Claude Code 主程序不直接实现或连接这些浏览器能力。
 三端统一使用仅绑定 `127.0.0.1` 的动态 TCP 端点；每个扩展实例对应独立 Host，
 通过随机令牌认证，MCP 可自动发现多个同时在线的 Chrome 个人资料实例。
+扩展在当前个人资料独立的 `chrome.storage.local` 中生成永久 `profileId`；用户可在
+弹窗设置账户别名。扩展不读取或猜测 Chrome 内部的个人资料名称、Cookie 或凭据。
 
 ## 当前安装状态
 

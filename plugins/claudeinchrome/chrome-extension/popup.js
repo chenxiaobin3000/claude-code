@@ -23,7 +23,25 @@ async function refreshStatus() {
     status?.nativeHostVersion
       ? `Native Host ${status.nativeHostVersion}`
       : 'claudeinchrome 插件的 Native Host 尚未连接'
+  if (status?.profileName) {
+    document.querySelector('#profile-name').value = status.profileName
+  }
+  document.querySelector('#profile-id').textContent = status?.profileId
+    ? `Profile ID: ${status.profileId}`
+    : '正在初始化 Profile ID…'
 }
+
+document.querySelector('#save-profile').addEventListener('click', async () => {
+  const profileName = document.querySelector('#profile-name').value.trim()
+  const response = await chrome.runtime.sendMessage({
+    type: 'set_profile_name',
+    profileName,
+  })
+  document.querySelector('#message').textContent = response?.ok
+    ? '个人资料别名已保存。'
+    : response?.error || '保存失败。'
+  if (response?.ok) await refreshStatus()
+})
 
 document.querySelector('#reconnect').addEventListener('click', async () => {
   document.querySelector('#message').textContent = '正在重新连接…'

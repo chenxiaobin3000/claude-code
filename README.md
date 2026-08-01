@@ -159,6 +159,12 @@ MCP 包及主程序兼容实现已经删除。真实 Chrome 的连接、授权�
 Host 端点，MCP 自动发现并汇总在线实例。端点使用随机令牌认证，令牌不写入日志，
 不使用 Windows 命名管道或 Unix Domain Socket。
 
+每个 Chrome 个人资料中的扩展会在自己的 `chrome.storage.local` 生成永久
+`profileId`，并允许在扩展弹窗设置 `profileName` 别名。`tabs_context_mcp` 返回在线
+Profile 及每个标签页的 `profileId`；多 Profile 同时连接时，后续工具调用必须携带
+明确的 `profileId`。缺少目标、Profile 已断开、Profile ID 重复或 Tab ID 在多个
+Profile 冲突时都会拒绝执行，不会回退到第一个账户。
+
 扩展固定访问所有普通 HTTP/HTTPS 页面，不提供页面授权或站点白名单；Chrome
 内部页、扩展页、文件页和无效 Tab 仍拒绝。真实浏览器验收使用
 `bun run chrome:verify` 检查连接和失效 Tab 拒绝；使用 `bun run chrome:fixture`
@@ -173,6 +179,8 @@ Host 端点，MCP 自动发现并汇总在线实例。端点使用随机令牌�
 2. 以实际运行 Chrome 的 Windows 用户执行
    `plugins/claudeinchrome/claudeinchrome-host.exe register`，再执行 `doctor`。
 3. 保持分发目录路径稳定；移动 Host 后必须重新执行 `register`。
+4. 多账户使用时，在每个 Chrome 个人资料中分别加载扩展并从弹窗设置可辨识别名；
+   Native Host 只需按操作系统用户注册一次，每个已打开的个人资料会建立独立端点。
 
 ## 构建与验证
 

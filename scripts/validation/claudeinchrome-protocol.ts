@@ -62,21 +62,27 @@ const executeToolSource = extensionSource.slice(
   executeToolStart,
   executeComputerStart,
 )
-const extensionTools = [
-  ...executeToolSource.matchAll(/case '([^']+)'/g),
-].map(match => match[1]!)
-assertSame(
-  'extension dispatcher',
-  extensionTools,
-  [...IMPLEMENTED_CHROME_TOOL_NAMES],
+const extensionTools = [...executeToolSource.matchAll(/case '([^']+)'/g)].map(
+  match => match[1]!,
 )
+assertSame('extension dispatcher', extensionTools, [
+  ...IMPLEMENTED_CHROME_TOOL_NAMES,
+])
 
 const advertisedTools = BROWSER_TOOLS.map(tool => tool.name)
-assertSame(
-  'MCP advertised tools',
-  advertisedTools,
-  [...IMPLEMENTED_CHROME_TOOL_NAMES],
-)
+assertSame('MCP advertised tools', advertisedTools, [
+  ...IMPLEMENTED_CHROME_TOOL_NAMES,
+])
+for (const tool of BROWSER_TOOLS) {
+  const profileId = tool.inputSchema.properties.profileId as
+    | { type?: string }
+    | undefined
+  if (profileId?.type !== 'string') {
+    throw new Error(
+      `[claudeinchrome-protocol] ${tool.name} does not accept profileId`,
+    )
+  }
+}
 
 const computerTool = BROWSER_TOOLS.find(tool => tool.name === 'computer')
 const computerActions = (
@@ -130,12 +136,24 @@ for (const [label, source, markers] of [
   [
     'extension',
     extensionSource,
-    ['message.request_id', 'request_id: requestId'],
+    [
+      'message.request_id',
+      'request_id: requestId',
+      'chrome.storage.local',
+      "type: 'profile_hello'",
+      "type === 'set_profile_name'",
+    ],
   ],
   [
     'native host',
     nativeHostSource,
-    ['requestOwners', 'request.request_id', 'message.request_id'],
+    [
+      'requestOwners',
+      'request.request_id',
+      'message.request_id',
+      "case 'profile_hello'",
+      'await this.publishEndpoint()',
+    ],
   ],
   [
     'MCP socket client',
