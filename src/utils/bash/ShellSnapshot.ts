@@ -68,19 +68,8 @@ export function createRipgrepShellIntegration(): {
 } {
   const rgCommand = ripgrepCommand()
 
-  // For embedded ripgrep (bun-internal), we need a shell function that sets argv0
-  if (rgCommand.argv0) {
-    return {
-      type: 'function',
-      snippet: createArgv0ShellFunction(
-        'rg',
-        rgCommand.argv0,
-        rgCommand.rgPath,
-      ),
-    }
-  }
-
-  // For regular ripgrep, use a simple alias target
+  // Ripgrep is always a real executable path. Standalone builds extract their
+  // verified embedded asset before this integration is created.
   const quotedPath = quote([rgCommand.rgPath])
   const quotedArgs = rgCommand.rgArgs.map(arg => quote([arg]))
   const aliasTarget =

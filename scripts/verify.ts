@@ -44,6 +44,7 @@ const validationScripts = [
   'scripts/validation/dependency-boundary.ts',
   'scripts/validation/feature-flags.ts',
   'scripts/validation/utility-modules-boundary.ts',
+  'scripts/validation/ripgrep-runtime.ts',
   'scripts/validation/repl-boundary.ts',
   'scripts/validation/model-preparation.ts',
   'scripts/validation/model-profiles.ts',
@@ -382,6 +383,12 @@ async function main(): Promise<void> {
       command: [resolve(projectRoot, 'dist', 'claude.exe')],
     }
     await verifyCliArtifact(exeArtifact, config)
+    await runStep('standalone Markdown configuration discovery', [
+      bunExecutable,
+      'run',
+      'scripts/validation/standalone-markdown-config.ts',
+      resolve(projectRoot, 'dist', 'claude.exe'),
+    ])
     await runStep('claudeinchrome standalone Host build', [
       bunExecutable,
       'run',

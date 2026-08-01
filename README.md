@@ -189,7 +189,7 @@ bun run verify
 
 - Bun bundle：开发和 Bun 运行时产物。
 - Vite/Rollup Node bundle：Node 兼容分发产物。
-- Bun standalone EXE：Windows standalone EXE 单文件 `claude.exe`。
+- Bun standalone EXE：Windows standalone EXE 单文件 `claude.exe`；内置 ripgrep 首次启动时按 SHA-256 校验并提取到用户配置缓存，不依赖系统 `rg` 或 EXE 同级文件。
 - claudeinchrome Plugin：`dist/plugins/claudeinchrome` 是完整分发目录，其中
   Host 为独立 Native Messaging/MCP 单文件，目标机器无需 Bun 或 Node.js。
 
@@ -201,7 +201,7 @@ bun run verify
 
 项目保持 TypeScript + Bun 实现，不以 Rust 或其他平台原生语言重写 CLI。`claude.exe` 是包含 Bun Runtime 的 standalone 产物；它的目标是免安装运行时分发，而不是追随官方的原生二进制实现或安装/自更新机制。
 
-`bun run verify` 是唯一的项目验证入口，覆盖依赖锁定、类型、Biome、适用构建、CLI `--version`/启动冒烟、源码级轻量验证，以及可用本地模型的单轮模型和工具调用。standalone 矩阵还验证自动插件发现、`--bare` 隔离、显式覆盖和插件目录移除后的不可达性。它不依赖付费云模型，也不引入第二套测试框架。
+`bun run verify` 是唯一的项目验证入口，覆盖依赖锁定、类型、Biome、适用构建、CLI `--version`/启动冒烟、源码级轻量验证，以及可用本地模型的单轮模型和工具调用。standalone 矩阵还验证本地 Markdown 配置发现、内置 ripgrep 的提取/校验/真实搜索、自动插件发现、`--bare` 隔离、显式覆盖和插件目录移除后的不可达性。它不依赖付费云模型，也不引入第二套测试框架。
 
 ### 性能与稳定性
 

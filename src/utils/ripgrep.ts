@@ -8,6 +8,7 @@ import { logEvent } from 'src/services/analytics/index.js'
 import { isInBundledMode } from './bundledMode.js'
 import { logForDebugging } from './debug.js'
 import { distRoot } from './distRoot.js'
+import { getExtractedEmbeddedRipgrepPath } from './embeddedRipgrep.js'
 import { isEnvDefinedFalsy } from './envUtils.js'
 import { execFileNoThrow } from './execFileNoThrow.js'
 import { findExecutable } from './findExecutable.js'
@@ -24,7 +25,6 @@ type RipgrepConfig = {
   mode: 'system' | 'builtin' | 'embedded'
   command: string
   args: string[]
-  argv0?: string
   note?: string
 }
 
@@ -44,15 +44,20 @@ export const getRipgrepConfig = memoize((): RipgrepConfig => {
     }
   }
 
-  // In bundled (native) mode, ripgrep is statically compiled into bun-internal
-  // and dispatches based on argv[0]. We spawn ourselves with argv0='rg'.
+  // A standalone executable cannot dispatch itself as ripgrep based on argv[0].
+  // Use the verified executable extracted from the embedded build asset.
   if (isInBundledMode()) {
-    return {
-      mode: 'embedded',
-      command: process.execPath,
-      args: ['--no-config'],
-      argv0: 'rg',
+    const embeddedCommand = getExtractedEmbeddedRipgrepPath()
+    if (embeddedCommand) {
+      return {
+        mode: 'embedded',
+        command: embeddedCommand,
+        args: ['--no-config'],
+      }
     }
+    throw new Error(
+      'Standalone ripgrep was not initialized from its embedded resource',
+    )
   }
 
   const relativeCommand =
@@ -136,13 +141,11 @@ export function resolveBuiltinWithFallback(
 export function ripgrepCommand(): {
   rgPath: string
   rgArgs: string[]
-  argv0?: string
 } {
   const config = getRipgrepConfig()
   return {
     rgPath: config.command,
     rgArgs: config.args,
-    argv0: config.argv0,
   }
 }
 
@@ -189,7 +192,7 @@ function ripGrepRaw(
   // argument, but when run non-interactively, it will hang unless a path or file
   // pattern is provided
 
-  const { rgPath, rgArgs, argv0 } = ripgrepCommand()
+  const { rgPath, rgArgs } = ripgrepCommand()
 
   // Use single-threaded mode only if explicitly requested for this call's retry
   const threadArgs = singleThread ? ['-j', '1'] : []
@@ -201,89 +204,6 @@ function ripGrepRaw(
     parseInt(process.env.CLAUDE_CODE_GLOB_TIMEOUT_SECONDS || '', 10) || 0
   const timeout = parsedSeconds > 0 ? parsedSeconds * 1000 : defaultTimeout
 
-  // For embedded ripgrep, use spawn with argv0 (execFile doesn't support argv0 properly)
-  if (argv0) {
-    const child = spawn(rgPath, fullArgs, {
-      argv0,
-      signal: abortSignal,
-      // Prevent visible console window on Windows (no-op on other platforms)
-      windowsHide: true,
-    })
-
-    let stdout = ''
-    let stderr = ''
-    let stdoutTruncated = false
-    let stderrTruncated = false
-
-    child.stdout?.on('data', (data: Buffer) => {
-      if (!stdoutTruncated) {
-        stdout += data.toString()
-        if (stdout.length > MAX_BUFFER_SIZE) {
-          stdout = stdout.slice(0, MAX_BUFFER_SIZE)
-          stdoutTruncated = true
-        }
-      }
-    })
-
-    child.stderr?.on('data', (data: Buffer) => {
-      if (!stderrTruncated) {
-        stderr += data.toString()
-        if (stderr.length > MAX_BUFFER_SIZE) {
-          stderr = stderr.slice(0, MAX_BUFFER_SIZE)
-          stderrTruncated = true
-        }
-      }
-    })
-
-    // Set up timeout with SIGKILL escalation.
-    // SIGTERM alone may not kill ripgrep if it's blocked in uninterruptible I/O
-    // (e.g., deep filesystem traversal). If SIGTERM doesn't work within 5 seconds,
-    // escalate to SIGKILL which cannot be caught or ignored.
-    // On Windows, child.kill('SIGTERM') throws; use default signal.
-    let killTimeoutId: ReturnType<typeof setTimeout> | undefined
-    const timeoutId = setTimeout(() => {
-      if (process.platform === 'win32') {
-        child.kill()
-      } else {
-        child.kill('SIGTERM')
-        killTimeoutId = setTimeout(c => c.kill('SIGKILL'), 5_000, child)
-      }
-    }, timeout)
-
-    // On Windows, both 'close' and 'error' can fire for the same process
-    // (e.g. when AbortSignal kills the child). Guard against double-callback.
-    let settled = false
-    child.on('close', (code, signal) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timeoutId)
-      clearTimeout(killTimeoutId)
-      if (code === 0 || code === 1) {
-        // 0 = matches found, 1 = no matches (both are success)
-        callback(null, stdout, stderr)
-      } else {
-        const error: ExecFileException = new Error(
-          `ripgrep exited with code ${code}`,
-        )
-        error.code = code ?? undefined
-        error.signal = signal ?? undefined
-        callback(error, stdout, stderr)
-      }
-    })
-
-    child.on('error', (err: NodeJS.ErrnoException) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timeoutId)
-      clearTimeout(killTimeoutId)
-      const error: ExecFileException = err
-      callback(error, stdout, stderr)
-    })
-
-    return child
-  }
-
-  // For non-embedded ripgrep, use execFile
   // Use SIGKILL as killSignal because SIGTERM may not terminate ripgrep
   // when it's blocked in uninterruptible filesystem I/O.
   // On Windows, SIGKILL throws; use default (undefined) which sends SIGTERM.
@@ -318,11 +238,11 @@ async function ripGrepFileCount(
   abortSignal: AbortSignal,
 ): Promise<number> {
   await codesignRipgrepIfNecessary()
-  const { rgPath, rgArgs, argv0 } = ripgrepCommand()
+  await ensureRipgrepAvailable()
+  const { rgPath, rgArgs } = ripgrepCommand()
 
   return new Promise<number>((resolve, reject) => {
     const child = spawn(rgPath, [...rgArgs, ...args, target], {
-      argv0,
       signal: abortSignal,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'ignore'],
@@ -368,11 +288,11 @@ export async function ripGrepStream(
   onLines: (lines: string[]) => void,
 ): Promise<void> {
   await codesignRipgrepIfNecessary()
-  const { rgPath, rgArgs, argv0 } = ripgrepCommand()
+  await ensureRipgrepAvailable()
+  const { rgPath, rgArgs } = ripgrepCommand()
 
   return new Promise<void>((resolve, reject) => {
     const child = spawn(rgPath, [...rgArgs, ...args, target], {
-      argv0,
       signal: abortSignal,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'ignore'],
@@ -418,10 +338,7 @@ export async function ripGrep(
 ): Promise<string[]> {
   await codesignRipgrepIfNecessary()
 
-  // Test ripgrep on first use and cache the result (fire and forget)
-  void testRipgrepOnFirstUse().catch(error => {
-    logError(error)
-  })
+  await ensureRipgrepAvailable()
 
   return new Promise((resolve, reject) => {
     const handleResult = (
@@ -445,6 +362,15 @@ export async function ripGrep(
       // Exit code 1 is normal "no matches"
       if (error.code === 1) {
         resolve([])
+        return
+      }
+
+      if (error.code === 2) {
+        reject(
+          new Error(
+            `Ripgrep rejected its command arguments: ${stderr.trim() || 'unknown usage error'}`,
+          ),
+        )
         return
       }
 
@@ -629,36 +555,13 @@ const testRipgrepOnFirstUse = memoize(async (): Promise<void> => {
   const config = getRipgrepConfig()
 
   try {
-    let test: { code: number; stdout: string }
-
-    // For embedded ripgrep, use Bun.spawn with argv0
-    if (config.argv0) {
-      // Only Bun embeds ripgrep.
-      // eslint-disable-next-line custom-rules/require-bun-typeof-guard
-      const proc = Bun.spawn([config.command, '--version'], {
-        argv0: config.argv0,
-        stderr: 'ignore',
-        stdout: 'pipe',
-      })
-
-      // Bun's ReadableStream has .text() at runtime, but TS types don't reflect it
-      const [stdout, code] = await Promise.all([
-        (proc.stdout as unknown as Blob).text(),
-        proc.exited,
-      ])
-      test = {
-        code,
-        stdout,
-      }
-    } else {
-      test = await execFileNoThrow(
-        config.command,
-        [...config.args, '--version'],
-        {
-          timeout: 5000,
-        },
-      )
-    }
+    const test = await execFileNoThrow(
+      config.command,
+      [...config.args, '--version'],
+      {
+        timeout: 5000,
+      },
+    )
 
     const working =
       test.code === 0 && !!test.stdout && test.stdout.startsWith('ripgrep ')
@@ -689,6 +592,15 @@ const testRipgrepOnFirstUse = memoize(async (): Promise<void> => {
     logError(error)
   }
 })
+
+async function ensureRipgrepAvailable(): Promise<void> {
+  await testRipgrepOnFirstUse()
+  if (ripgrepStatus?.working) return
+  const config = getRipgrepConfig()
+  throw new Error(
+    `Ripgrep is unavailable or invalid (mode=${config.mode}, path=${config.command})`,
+  )
+}
 
 let alreadyDoneSignCheck = false
 async function codesignRipgrepIfNecessary() {
