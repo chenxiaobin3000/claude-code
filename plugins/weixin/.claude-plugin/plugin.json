@@ -1,8 +1,13 @@
 {
   "name": "weixin",
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "weixinCompatibility": {
+    "upstreamPackage": "@tencent-weixin/openclaw-weixin",
+    "upstreamVersion": "2.4.6",
+    "upstreamCommit": "cef0bfc390393f716903e16d50408118047f87e0"
+  },
   "apiVersion": "^1.0.0",
-  "description": "Local WeChat channel integration with inbound messages, replies, typing notifications, attachments, and permission relay.",
+  "description": "Local multi-account WeChat channel integration with isolated routing, replies, media, diagnostics, and permission relay.",
   "author": {
     "name": "claude-code"
   },

@@ -22,11 +22,13 @@ export type {
   GetUpdatesReq,
   GetUpdatesResp,
   SendMessageReq,
+  SendMessageResp,
   GetUploadUrlReq,
   GetUploadUrlResp,
   GetConfigResp,
   SendTypingReq,
   SendTypingResp,
+  NotifyLifecycleResp,
 } from './types.js'
 
 // API client
@@ -36,18 +38,39 @@ export {
   getUploadUrl,
   getConfig,
   sendTyping,
+  notifyStart,
+  notifyStop,
 } from './api.js'
 
 // Account management
 export {
   DEFAULT_BASE_URL,
   CDN_BASE_URL,
+  DEFAULT_ACCOUNT_ID,
+  DEFAULT_FEATURE_CONFIG,
   getStateDir,
+  getAccountStateDir,
+  listAccounts,
+  loadAllAccounts,
+  resolveAccountId,
+  validateAccountId,
   loadAccount,
   saveAccount,
   clearAccount,
+  loadStateJson,
+  saveStateJson,
+  loadStateText,
+  saveStateText,
+  loadFeatureConfig,
+  formatRoutedChatId,
+  parseRoutedChatId,
+  listAccountStateFiles,
 } from './accounts.js'
-export type { AccountData } from './accounts.js'
+export type {
+  AccountData,
+  AccountSummary,
+  WeixinFeatureConfig,
+} from './accounts.js'
 
 // Login
 export { startLogin, waitForLogin } from './login.js'
@@ -75,6 +98,8 @@ export {
   uploadFile,
   guessMediaType,
   downloadRemoteToTemp,
+  uploadBufferToCdn,
+  WEIXIN_MEDIA_MAX_BYTES,
 } from './media.js'
 export type { UploadedFileInfo } from './media.js'
 
@@ -85,6 +110,10 @@ export { markdownToPlainText, sendText, sendMediaFile } from './send.js'
 export {
   getContextToken,
   extractPermissionReply,
+  extractEchoCommand,
+  extractMessageText,
+  selectInboundMedia,
+  resolveNextLongPollTimeout,
   startPollLoop,
 } from './monitor.js'
 export type {
@@ -108,7 +137,11 @@ export type {
 } from './permissions.js'
 
 // Server (MCP)
-export { createWeixinMcpServer, runWeixinMcpServer } from './server.js'
+export {
+  createWeixinMcpServer,
+  resolveWeixinToolTarget,
+  runWeixinMcpServer,
+} from './server.js'
 
 // CLI
 export { handleWeixinCli } from './cli.js'

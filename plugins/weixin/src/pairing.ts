@@ -1,6 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { getStateDir } from './accounts.js'
+import { loadStateJson, saveStateJson } from './accounts.js'
 
 export interface AccessConfig {
   policy: 'pairing' | 'allowlist' | 'disabled'
@@ -12,55 +10,38 @@ interface PendingEntry {
   expiresAt: number
 }
 
-function configPath(): string {
-  return join(getStateDir(), 'access.json')
+function loadPending(accountId: string): Record<string, PendingEntry> {
+  return loadStateJson<Record<string, PendingEntry>>(
+    'pending-pairings.json',
+    {},
+    accountId,
+  )
 }
 
-function pendingPath(): string {
-  return join(getStateDir(), 'pending-pairings.json')
+function savePending(accountId: string, data: Record<string, PendingEntry>): void {
+  saveStateJson('pending-pairings.json', data, accountId)
 }
 
-function loadPending(): Record<string, PendingEntry> {
-  const path = pendingPath()
-  if (!existsSync(path)) return {}
-  try {
-    return JSON.parse(readFileSync(path, 'utf-8')) as Record<
-      string,
-      PendingEntry
-    >
-  } catch {
-    return {}
-  }
+export function loadAccessConfig(accountId = 'default'): AccessConfig {
+  return loadStateJson<AccessConfig>(
+    'access.json',
+    { policy: 'pairing', allowFrom: [] },
+    accountId,
+  )
 }
 
-function savePending(data: Record<string, PendingEntry>): void {
-  writeFileSync(pendingPath(), JSON.stringify(data, null, 2), 'utf-8')
+export function saveAccessConfig(config: AccessConfig, accountId = 'default'): void {
+  saveStateJson('access.json', config, accountId)
 }
 
-export function loadAccessConfig(): AccessConfig {
-  const path = configPath()
-  if (!existsSync(path)) {
-    return { policy: 'pairing', allowFrom: [] }
-  }
-  try {
-    return JSON.parse(readFileSync(path, 'utf-8')) as AccessConfig
-  } catch {
-    return { policy: 'pairing', allowFrom: [] }
-  }
-}
-
-export function saveAccessConfig(config: AccessConfig): void {
-  writeFileSync(configPath(), JSON.stringify(config, null, 2), 'utf-8')
-}
-
-export function isAllowed(userId: string): boolean {
-  const config = loadAccessConfig()
+export function isAllowed(userId: string, accountId = 'default'): boolean {
+  const config = loadAccessConfig(accountId)
   if (config.policy === 'disabled') return true
   return config.allowFrom.includes(userId)
 }
 
-export function addPendingPairing(userId: string): string {
-  const pending = loadPending()
+export function addPendingPairing(userId: string, accountId = 'default'): string {
+  const pending = loadPending(accountId)
   const now = Date.now()
 
   for (const code of Object.keys(pending)) {
@@ -71,33 +52,33 @@ export function addPendingPairing(userId: string): string {
 
   for (const [code, entry] of Object.entries(pending)) {
     if (entry.userId === userId) {
-      savePending(pending)
+      savePending(accountId, pending)
       return code
     }
   }
 
   const code = String(Math.floor(100000 + Math.random() * 900000))
   pending[code] = { userId, expiresAt: now + 10 * 60 * 1000 }
-  savePending(pending)
+  savePending(accountId, pending)
   return code
 }
 
-export function confirmPairing(code: string): string | null {
-  const pending = loadPending()
+export function confirmPairing(code: string, accountId = 'default'): string | null {
+  const pending = loadPending(accountId)
   const entry = pending[code]
   if (!entry || entry.expiresAt < Date.now()) {
     delete pending[code]
-    savePending(pending)
+    savePending(accountId, pending)
     return null
   }
 
   delete pending[code]
-  savePending(pending)
+  savePending(accountId, pending)
 
-  const config = loadAccessConfig()
+  const config = loadAccessConfig(accountId)
   if (!config.allowFrom.includes(entry.userId)) {
     config.allowFrom.push(entry.userId)
-    saveAccessConfig(config)
+    saveAccessConfig(config, accountId)
   }
 
   return entry.userId

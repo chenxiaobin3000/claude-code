@@ -10,6 +10,9 @@ const bunExecutable = process.execPath
 const packageJson = JSON.parse(
   await readFile(join(projectRoot, 'package.json'), 'utf8'),
 ) as { version: string }
+const weixinPackageJson = JSON.parse(
+  await readFile(join(projectRoot, 'plugins', 'weixin', 'package.json'), 'utf8'),
+) as { version: string }
 const expectedVersion = `${packageJson.version} (Claude Code)`
 const commandTimeoutMs = 120_000
 const modelTimeoutMs = 180_000
@@ -31,6 +34,12 @@ const validationScripts = [
   'scripts/validation/mcp-lifecycle.ts',
   'scripts/validation/chrome-plugin-boundary.ts',
   'scripts/validation/weixin-plugin-boundary.ts',
+  'scripts/validation/weixin-api-protocol.ts',
+  'scripts/validation/weixin-login-state.ts',
+  'scripts/validation/weixin-session-state.ts',
+  'scripts/validation/weixin-media-protocol.ts',
+  'scripts/validation/weixin-multi-account.ts',
+  'scripts/validation/weixin-channel-features.ts',
   'scripts/validation/chrome-protocol.ts',
   'scripts/validation/chrome-profiles.ts',
   'scripts/validation/chrome-host.ts',
@@ -451,7 +460,7 @@ async function main(): Promise<void> {
       [weixinHost, '--version'],
       { capture: true },
     )
-    if (weixinHostVersion.stdout.trim() !== '1.0.0') {
+    if (weixinHostVersion.stdout.trim() !== weixinPackageJson.version) {
       throw new Error(
         `weixin Host version mismatch: ${weixinHostVersion.stdout.trim()}`,
       )

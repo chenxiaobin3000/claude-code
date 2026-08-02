@@ -11,6 +11,7 @@ export interface ChannelPermissionRequestParams {
 }
 
 export type PendingPermissionRequest = ChannelPermissionRequestParams & {
+  accountId: string
   chatId: string
   contextToken?: string
   createdAt: number
@@ -18,6 +19,7 @@ export type PendingPermissionRequest = ChannelPermissionRequestParams & {
 }
 
 export type ActivePermissionChat = {
+  accountId: string
   chatId: string
   contextToken?: string
   updatedAt: number
@@ -26,7 +28,7 @@ export type ActivePermissionChat = {
 const PENDING_PERMISSION_TTL_MS = 15 * 60 * 1000
 
 const pendingPermissions = new Map<string, PendingPermissionRequest>()
-let activePermissionChat: ActivePermissionChat | null = null
+const activePermissionChats = new Map<string, ActivePermissionChat>()
 
 function pruneExpiredPendingPermissions(now = Date.now()): void {
   for (const [requestId, entry] of pendingPermissions.entries()) {
@@ -37,47 +39,63 @@ function pruneExpiredPendingPermissions(now = Date.now()): void {
 }
 
 export function setActivePermissionChat(
+  accountId: string,
   chatId: string,
   contextToken?: string,
 ): void {
-  activePermissionChat = { chatId, contextToken, updatedAt: Date.now() }
+  activePermissionChats.set(accountId, {
+    accountId,
+    chatId,
+    contextToken,
+    updatedAt: Date.now(),
+  })
 }
 
-export function getActivePermissionChat(): ActivePermissionChat | null {
-  return activePermissionChat
+function pendingKey(accountId: string, requestId: string): string {
+  return `${accountId}\u0000${requestId.toLowerCase()}`
+}
+
+export function getActivePermissionChat(accountId?: string): ActivePermissionChat | null {
+  if (accountId) return activePermissionChats.get(accountId) ?? null
+  const active = [...activePermissionChats.values()]
+  if (active.length !== 1) return null
+  return active[0] ?? null
 }
 
 export function savePendingPermission(
   request: ChannelPermissionRequestParams,
+  accountId: string,
   chatId: string,
   contextToken?: string,
 ): PendingPermissionRequest {
   pruneExpiredPendingPermissions()
   const entry: PendingPermissionRequest = {
     ...request,
+    accountId,
     chatId,
     contextToken,
     createdAt: Date.now(),
     expiresAt: Date.now() + PENDING_PERMISSION_TTL_MS,
   }
-  pendingPermissions.set(request.request_id.toLowerCase(), entry)
+  pendingPermissions.set(pendingKey(accountId, request.request_id), entry)
   return entry
 }
 
 export function consumePendingPermission(
   requestId: string,
+  accountId: string,
   fromUserId: string,
 ): PendingPermissionRequest | null {
   pruneExpiredPendingPermissions()
-  const key = requestId.toLowerCase()
+  const key = pendingKey(accountId, requestId)
   const entry = pendingPermissions.get(key)
   if (!entry) return null
-  if (entry.chatId !== fromUserId) return null
+  if (entry.accountId !== accountId || entry.chatId !== fromUserId) return null
   pendingPermissions.delete(key)
   return entry
 }
 
 export function clearPermissionStateForTests(): void {
   pendingPermissions.clear()
-  activePermissionChat = null
+  activePermissionChats.clear()
 }

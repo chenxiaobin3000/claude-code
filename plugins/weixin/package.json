@@ -1,6 +1,13 @@
 {
   "name": "@claude-code/weixin-plugin",
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "weixinCompatibility": {
+    "upstreamPackage": "@tencent-weixin/openclaw-weixin",
+    "upstreamVersion": "2.4.6",
+    "upstreamCommit": "cef0bfc390393f716903e16d50408118047f87e0",
+    "upstreamRepository": "https://github.com/Tencent/openclaw-weixin",
+    "auditedAt": "2026-08-03"
+  },
   "private": true,
   "type": "module",
   "main": "./src/index.ts",

@@ -57,6 +57,11 @@
 - 插件优先级固定为显式 `--plugin-dir`（`@inline`）> standalone 自动发现（`@local`）> 内置（`@builtin`）。同级重名禁用歧义项，高优先级插件失败时不回退同名低优先级实现；`--bare` 禁用自动发现但保留显式插件，`/reload-plugins` 会重新扫描并裁剪已移除的全部插件组件。
 - 不支持远端市场、自动下载、原生安装、CLI 自更新或插件自动更新；自动发现不会安装 Chrome 扩展、注册 Native Host 或修改注册表。
 - 微信能力已从主程序内置 workspace 迁入 `plugins/weixin`：登录、轮询、媒体、二维码、配对、回复和权限转发由独立 `weixin-host` 承担。主程序不保留 `ccb weixin`、`weixin@builtin` 或微信实现依赖；生产使用 `weixin@local`，源码显式加载使用 `weixin@inline`，删除插件目录即可移除全部微信入口。
+- 微信插件是腾讯官方 iLink 网络协议的独立实现，不依赖 OpenClaw Runtime；当前冻结兼容基线为 `@tencent-weixin/openclaw-weixin@2.4.6`（`cef0bfc390393f716903e16d50408118047f87e0`），本地 Manifest 与包元数据分别记录本地版本和上游兼容版本。
+- 微信 iLink 基线覆盖通用请求头和 `base_info`、二维码完整状态机与 IDC 重定向、动态长轮询、业务返回码、Token 失效暂停、启停通知、游标和 `context_token` 原子持久化、CDN 完整 URL/参数回退、上传重试、引用媒体及确定性媒体优先级；网络错误保持脱敏，HTTP 200 下的业务失败不得伪装为成功。
+- 微信账号使用索引和逐账号私有目录；凭据、游标、上下文 Token、允许列表、配对状态、体验配置与 Token 失效暂停互相隔离。Host 并发轮询全部账号，入站 `chat_id` 固定为 `account-id::user-id`；未限定账号且路由不唯一时 fail-closed，旧单账号状态一次性迁移为 `default`。
+- 微信引用文本默认开启；远程 HTTP 媒体、脱敏 Channel 诊断和 Host 本地 `/echo` 按账号配置且默认关闭。远程媒体保持 HTTP(S) 协议和 100 MiB 限制，诊断禁止返回 Token 或消息正文。流式 Markdown 与工具进度依赖当前 MCP Channel 不提供的生成中事件，明确不支持，开启对应配置会报错退出。
+- 微信协议通过 `scripts/validation/weixin-*.ts` 固定 Fixture 验证并并入 `bun run verify`，不依赖测试框架或真实账号；验证覆盖双账号并发轮询、状态/权限/回复隔离、歧义路由拒绝以及全部体验开关。
 - 本地 Plugin Manifest 使用可选 `apiVersion` SemVer 范围协商声明式扩展 API；当前版本为 `1.0.0`，缺省按旧 v1 契约兼容。显式不兼容时整插件及其组件不可达，依赖降级继续按固定点传播；MCP 与 ACP 保持各自协议协商。
 - `/cd` 有意保持为本项目的临时 cwd 命令，不对齐官方的跨项目会话迁移：它只改变主会话后续工具使用的当前目录，不改变启动项目根、Session ID、Transcript/Resume 归属、权限根、Settings、CLAUDE.md、Hook、Skill、Plugin、MCP、Memory、Plan 或 Checkpoint 作用域。
 - `/cd` 不改变已运行子 Agent 的 cwd；新建 Agent 从稳定的会话/工作树根启动，不继承主会话的临时 `/cd`，子 Agent 的 cwd 变化也不得回写主会话。`/clear` 和进程重启恢复到启动项目目录；无参数只报告当前 cwd，失败不得改变现有 cwd。

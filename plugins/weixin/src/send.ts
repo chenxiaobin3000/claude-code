@@ -68,6 +68,7 @@ export async function sendText(params: {
   baseUrl: string
   token: string
   contextToken: string
+  accountId?: string
 }): Promise<{ messageId: string }> {
   const clientId = randomUUID()
   await sendMessage(params.baseUrl, params.token, {
@@ -83,7 +84,7 @@ export async function sendText(params: {
         text_item: { text: markdownToPlainText(params.text) },
       },
     ],
-  })
+  }, params.accountId)
 
   return { messageId: clientId }
 }
@@ -94,6 +95,7 @@ async function sendItems(params: {
   baseUrl: string
   token: string
   contextToken: string
+  accountId?: string
 }): Promise<string> {
   let lastClientId = ''
   for (const item of params.items) {
@@ -106,7 +108,7 @@ async function sendItems(params: {
       message_state: MessageState.FINISH,
       context_token: params.contextToken,
       item_list: [item],
-    })
+    }, params.accountId)
   }
   return lastClientId
 }
@@ -119,6 +121,7 @@ export async function sendMediaFile(params: {
   token: string
   contextToken: string
   cdnBaseUrl: string
+  accountId?: string
 }): Promise<{ messageId: string }> {
   const mediaType = guessMediaType(params.filePath)
   const uploaded = await uploadFile({
@@ -128,6 +131,7 @@ export async function sendMediaFile(params: {
     apiBaseUrl: params.baseUrl,
     token: params.token,
     cdnBaseUrl: params.cdnBaseUrl,
+    accountId: params.accountId,
   })
 
   const cdnMedia: CDNMedia = {
@@ -175,6 +179,7 @@ export async function sendMediaFile(params: {
     baseUrl: params.baseUrl,
     token: params.token,
     contextToken: params.contextToken,
+    accountId: params.accountId,
   })
   return { messageId }
 }

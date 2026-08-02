@@ -8,9 +8,11 @@ function printHelp(): void {
 
 Usage:
   weixin-host mcp
-  weixin-host login
-  weixin-host login clear
-  weixin-host access pair <code>
+  weixin-host accounts
+  weixin-host login [account-id]
+  weixin-host login refresh [account-id]
+  weixin-host login clear [account-id]
+  weixin-host access pair [account-id] <code>
   weixin-host --version
 `)
 }

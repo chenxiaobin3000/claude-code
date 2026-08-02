@@ -33,12 +33,14 @@ export const TypingStatus = {
 
 export interface BaseInfo {
   channel_version?: string
+  bot_agent?: string
 }
 
 export interface CDNMedia {
   encrypt_query_param?: string
   aes_key?: string
   encrypt_type?: number
+  full_url?: string
 }
 
 export interface TextItem {
@@ -139,6 +141,11 @@ export interface SendMessageReq {
   base_info?: BaseInfo
 }
 
+export interface SendMessageResp {
+  ret?: number
+  errmsg?: string
+}
+
 export interface GetUploadUrlReq {
   filekey?: string
   media_type?: number
@@ -157,6 +164,8 @@ export interface GetUploadUrlReq {
 export interface GetUploadUrlResp {
   upload_param?: string
   thumb_upload_param?: string
+  upload_full_url?: string
+  thumb_upload_full_url?: string
 }
 
 export interface GetConfigResp {
@@ -173,6 +182,11 @@ export interface SendTypingReq {
 }
 
 export interface SendTypingResp {
+  ret?: number
+  errmsg?: string
+}
+
+export interface NotifyLifecycleResp {
   ret?: number
   errmsg?: string
 }

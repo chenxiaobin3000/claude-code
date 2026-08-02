@@ -188,23 +188,53 @@ Profile 冲突时都会拒绝执行，不会回退到第一个账户。
 [`plugins/weixin`](plugins/weixin)。主程序不再包含 `ccb weixin` 专用命令、内置
 `weixin@builtin` 注册或微信 workspace 依赖。
 
+该插件连接腾讯微信团队维护的 iLink 后端，采用与官方
+[`@tencent-weixin/openclaw-weixin`](https://github.com/Tencent/openclaw-weixin)
+插件相同的扫码登录与消息协议，但客户端代码由本项目独立实现和维护，并不安装、
+运行或依赖该官方 npm 包。因此，腾讯官方插件的后续协议修复与功能更新不会自动
+同步到本项目，需要在这里单独跟进。扫码登录授权的是微信机器人消息通道，不是接管
+手机或 PC 微信客户端；当前能力边界以私信和媒体收发为主，不代表能够读取联系人、
+历史聊天或任意操作个人微信界面。
+
+当前 iLink 协议同步基线固定为官方插件 `2.4.6`（commit
+`cef0bfc390393f716903e16d50408118047f87e0`），本地插件 Manifest 与
+`package.json` 分别记录本地版本和官方兼容基线。现有实现已对齐请求标识、业务返回码、
+完整二维码状态机、动态长轮询、Token 失效暂停、启动/停止通知、上下文持久化、CDN
+完整 URL/重试以及引用媒体；同步基线不表示依赖或运行 OpenClaw。Host 可并发运行多个
+账号，入站 `chat_id` 使用 `account-id::user-id` 显式路由；凭据、游标、上下文 Token、
+允许列表和配对状态逐账号隔离，路由不唯一时 fail-closed。旧单账号状态首次使用时迁移
+为 `default` 账号。
+
 源码开发使用：
 
 ```powershell
-bun plugins/weixin/host/entry.ts login
+bun plugins/weixin/host/entry.ts login personal
+bun plugins/weixin/host/entry.ts login work
+bun plugins/weixin/host/entry.ts accounts
+# 已连接账号需要重新扫码或刷新 Token 时：
+bun plugins/weixin/host/entry.ts login refresh personal
 bun run dev -- --plugin-dir plugins/weixin --dangerously-load-development-channels plugin:weixin@inline
 ```
 
 生产分发使用：
 
 ```powershell
-.\dist\plugins\weixin\weixin-host.exe login
+.\dist\plugins\weixin\weixin-host.exe login personal
+.\dist\plugins\weixin\weixin-host.exe login work
+.\dist\plugins\weixin\weixin-host.exe accounts
+# 已连接账号需要重新扫码或刷新 Token 时：
+.\dist\plugins\weixin\weixin-host.exe login refresh personal
 .\dist\claude.exe --channels plugin:weixin@local
 ```
 
 生产来源 `weixin@local` 是已验收的本地 Channel 边界；显式 `--plugin-dir` 加载的
 `weixin@inline` 仍按开发插件处理。账号与配对状态保存在用户目录
 `.claude/channels/weixin`，不随插件目录复制。
+
+每个账号可在 `.claude/channels/weixin/accounts/<account-id>/features.json` 独立配置
+引用文本、远程 HTTP 媒体、脱敏诊断和 `/echo`；后三项默认关闭。流式 Markdown 与工具
+进度需要当前 MCP Channel 不提供的生成中事件，因此明确不支持，配置开启会报错退出。
+完整字段与安全边界见 [`plugins/weixin/README.md`](plugins/weixin/README.md)。
 
 ## 构建与验证
 
