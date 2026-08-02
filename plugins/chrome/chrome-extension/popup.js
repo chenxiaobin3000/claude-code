@@ -22,7 +22,7 @@ async function refreshStatus() {
   document.querySelector('#native-version').textContent =
     status?.nativeHostVersion
       ? `Native Host ${status.nativeHostVersion}`
-      : 'claudeinchrome 插件的 Native Host 尚未连接'
+      : 'chrome 插件的 Native Host 尚未连接'
   if (status?.profileName) {
     document.querySelector('#profile-name').value = status.profileName
   }

@@ -14,15 +14,24 @@ const platformTarget =
         ? 'bun-linux-arm64'
         : 'bun-linux-x64'
 const projectRoot = resolve(import.meta.dir, '..')
-const pluginRoot = join(projectRoot, 'plugins', 'claudeinchrome')
-const outputDirectory = join(projectRoot, 'dist', 'plugins', 'claudeinchrome')
+const pluginRoot = join(projectRoot, 'plugins', 'chrome')
+const outputDirectory = join(projectRoot, 'dist', 'plugins', 'chrome')
+const legacyOutputDirectory = join(
+  projectRoot,
+  'dist',
+  'plugins',
+  'claudeinchrome',
+)
 const hostFilename =
   process.platform === 'win32'
-    ? 'claudeinchrome-host.exe'
-    : 'claudeinchrome-host'
+    ? 'chrome-host.exe'
+    : 'chrome-host'
 const outfile = join(outputDirectory, hostFilename)
 
-await rm(outputDirectory, { recursive: true, force: true })
+await Promise.all([
+  rm(outputDirectory, { recursive: true, force: true }),
+  rm(legacyOutputDirectory, { recursive: true, force: true }),
+])
 await mkdir(outputDirectory, { recursive: true })
 
 const result = await Bun.build({

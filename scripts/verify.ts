@@ -426,8 +426,8 @@ async function main(): Promise<void> {
       projectRoot,
       'dist',
       'plugins',
-      'claudeinchrome',
-      'claudeinchrome-host.exe',
+      'chrome',
+      'chrome-host.exe',
     )
     const chromeHostVersion = await runStep(
       'claudeinchrome standalone Host version',

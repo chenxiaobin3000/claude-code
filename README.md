@@ -19,7 +19,7 @@
 
 - **模型与登录**：官方的 Anthropic 登录、官方模型、组织默认/限制模型、Claude API Provider 与相关云端模型能力不适用。本项目只从 `models.json` 加载 OpenAI-compatible 模型；模型 Profile 静态声明，不做服务端模型发现或自动模型替换。
 - **云端与远程产品**：官方的 Web/Desktop/Mobile、Remote Control、GitHub App、Cloud Code Review、Routines、云端 Channels、Artifacts、语音与账户/用量产品均不提供。本项目也不包含官方自动更新、安装器或远端遥测；可选的本地 `weixin` Channel 插件不依赖 Anthropic 云服务。
-- **插件与浏览器**：官方插件市场、远端安装/更新和插件自动重命名不提供。主程序不实现 Chrome 或微信业务；生产 standalone 自动发现同级 `plugins` 一级目录中的本地 `claudeinchrome` 与 `weixin`，源码开发通过 `--plugin-dir` 加载。两个插件均以独立 Host 分发，删除对应目录即可移除能力。
+- **插件与浏览器**：官方插件市场、远端安装/更新和插件自动重命名不提供。主程序不实现 Chrome 或微信业务；生产 standalone 自动发现同级 `plugins` 一级目录中的本地 `chrome` 与 `weixin`，源码开发通过 `--plugin-dir` 加载。两个插件均以独立 Host 分发，删除对应目录即可移除能力。
 - **Sandbox**：Windows 上启用 Sandbox 时，Shell 会在 Windows Sandbox VM 内执行，默认只映射启动工作区和只读 Shell 运行时，且固定断网、不传递用户主目录或凭据。`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands` 保持上层语义；Windows 不能精确落实域名白名单、代理和目录内文件 allow/deny 规则，配置这些规则时会 fail-closed，而不会回退宿主执行。
 - **会话路径**：官方 `/cd` 可迁移会话；本项目有意保持临时 cwd 语义，只改变主会话后续工具的当前目录，不迁移项目身份、会话存储、权限根、配置或扩展作用域。
 - **Agent、Hook、MCP 与 Skill**：本地 Agent、后台任务、Hook、Plugin、Skill 与 MCP 已固化为当前基线；嵌套 Skill 使用相对启动项目根的限定名，连续 inline Skill 可在同一条输入中组合。`/cd` 的临时 cwd、OpenAI-compatible Provider、本地安全增强和不提供云端 Agent 产品仍是明确差异。本地 `/mcp login`/`logout` 仅管理用户配置的 MCP OAuth 凭据。
@@ -130,20 +130,20 @@ Bash/PowerShell 命令中的 `cd` 属于 Shell cwd 持久化规则，不会触�
 
 本地 Plugin Manifest 可用 `apiVersion` 声明所需的扩展 API SemVer 范围，例如 `"apiVersion": "^1.0.0"`。当前扩展 API 为 `1.0.0`，并与 CLI 产品版本独立；同一主版本只允许新增可选字段或能力，删除、改名、默认行为变化等破坏性修改必须升级主版本。旧 Manifest 缺少该字段时按 v1 契约继续加载。显式范围不兼容时会禁用整个 Plugin，并连带收回其 Hook、Skill、Agent、Command、MCP、LSP 和 Settings，避免组件半加载；依赖该 Plugin 的其他 Plugin 也会按依赖闭包安全降级。MCP 和 ACP 仍使用各自协议的原生版本协商，不复用 Plugin API 版本。
 
-### claudeinchrome 插件与 Chrome 扩展
+### chrome 插件与 Chrome 扩展
 
 主程序自身不包含 Chrome 操作实现。Chrome 集成全部位于
-[`plugins/claudeinchrome`](plugins/claudeinchrome)，连接链路为“主程序标准插件
+[`plugins/chrome`](plugins/chrome)，连接链路为“主程序标准插件
 加载器 → 插件 MCP/Skill → 插件 Native Host → Chrome 扩展 → Chrome”。主程序
 不会自动注入 Chrome MCP，也不提供 `--chrome`、`/chrome` 或内置 Chrome Skill。
 
-生产构建把插件放在 `dist/plugins/claudeinchrome`，与 `dist/claude.exe` 的自动
+生产构建把插件放在 `dist/plugins/chrome`，与 `dist/claude.exe` 的自动
 发现目录一致；复制整个 `dist` 到固定目录后可直接运行 `claude.exe`，无需再传
 `--plugin-dir`。源码/Bun 开发模式不会自动扫描仓库插件，仍使用
-`bun run dev -- --plugin-dir plugins/claudeinchrome`。
+`bun run dev -- --plugin-dir plugins/chrome`。
 
 Manifest V3 扩展源码位于
-[`plugins/claudeinchrome/chrome-extension`](plugins/claudeinchrome/chrome-extension)，
+[`plugins/chrome/chrome-extension`](plugins/chrome/chrome-extension)，
 固定扩展 ID 为 `dlpofjonbnceelbmpelkfblmnghclmkm`。扩展端已经实现标签页、
 导航、页面读取与交互、截图和窗口缩放等能力。插件目录已经包含标准 MCP 声明、
 正式 Skill、独立 MCP/Native Messaging Host、注册命令和 doctor；旧 workspace
@@ -151,7 +151,7 @@ MCP 包及主程序兼容实现已经删除。真实 Chrome 的连接、授权�
 路径和核心工具矩阵已经验收，且不依赖 Anthropic 账号或云端浏览器服务。
 
 插件工具与 Native Messaging 协议的权威定义位于
-[`plugins/claudeinchrome/protocol`](plugins/claudeinchrome/protocol)。MCP 只能
+[`plugins/chrome/protocol`](plugins/chrome/protocol)。MCP 只能
 广告扩展已经实现的 11 个工具；GIF、图片上传、Console/Network、快捷方式和
 `computer.zoom` 不属于当前能力。工具请求使用必填 `request_id` 精确匹配响应，
 消息上限为 1 MiB，工具超时为 30 秒。Windows、Linux 和 macOS 的 Host 与 MCP
@@ -174,10 +174,10 @@ Profile 冲突时都会拒绝执行，不会回退到第一个账户。
 生产机器仍须显式完成浏览器侧安装，CLI 自动发现插件不会修改 Chrome 或注册表：
 
 1. 在 `chrome://extensions` 启用开发者模式，加载
-   `plugins/claudeinchrome/chrome-extension`；扩展 ID 必须为
+   `plugins/chrome/chrome-extension`；扩展 ID 必须为
    `dlpofjonbnceelbmpelkfblmnghclmkm`。
 2. 以实际运行 Chrome 的 Windows 用户执行
-   `plugins/claudeinchrome/claudeinchrome-host.exe register`，再执行 `doctor`。
+   `plugins/chrome/chrome-host.exe register`，再执行 `doctor`。
 3. 保持分发目录路径稳定；移动 Host 后必须重新执行 `register`。
 4. 多账户使用时，在每个 Chrome 个人资料中分别加载扩展并从弹窗设置可辨识别名；
    Native Host 只需按操作系统用户注册一次，每个已打开的个人资料会建立独立端点。
@@ -226,13 +226,13 @@ bun run verify
 - Bun bundle：开发和 Bun 运行时产物。
 - Vite/Rollup Node bundle：Node 兼容分发产物。
 - Bun standalone EXE：Windows standalone EXE 单文件 `claude.exe`；内置 ripgrep 首次启动时按 SHA-256 校验并提取到用户配置缓存，不依赖系统 `rg` 或 EXE 同级文件。
-- claudeinchrome Plugin：`dist/plugins/claudeinchrome` 是完整分发目录，其中
+- chrome Plugin：`dist/plugins/chrome` 是完整分发目录，其中
   Host 为独立 Native Messaging/MCP 单文件，目标机器无需 Bun 或 Node.js。
 - weixin Plugin：`dist/plugins/weixin` 是完整分发目录，其中 Host 为独立 Channel
   MCP 单文件，目标机器无需 Bun 或 Node.js。
 
 `bun run build:production` 一次生成 `dist/claude.exe` 和
-`dist/plugins/claudeinchrome`、`dist/plugins/weixin`。整个 `dist` 是 Windows 生产分发单元：standalone
+`dist/plugins/chrome`、`dist/plugins/weixin`。整个 `dist` 是 Windows 生产分发单元：standalone
 启动时只自动加载同级 `plugins` 下的一级插件目录；`--plugin-dir <path>` 仍可加载
 临时插件或覆盖同名自动插件。自动发现不会安装 Chrome 扩展、注册 Native Host、
 下载插件或更新任何产物。

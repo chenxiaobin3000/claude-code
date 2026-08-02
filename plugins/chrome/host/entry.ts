@@ -15,12 +15,12 @@ function printHelp(): void {
   console.log(`claudeinchrome Host ${VERSION}
 
 Usage:
-  claudeinchrome-host                  Run as Chrome Native Messaging Host
-  claudeinchrome-host mcp              Run stdio MCP Server
-  claudeinchrome-host register         Register this executable for Chrome
-  claudeinchrome-host unregister       Remove this Host registration
-  claudeinchrome-host doctor           Validate Host registration
-  claudeinchrome-host --version
+  chrome-host                  Run as Chrome Native Messaging Host
+  chrome-host mcp              Run stdio MCP Server
+  chrome-host register         Register this executable for Chrome
+  chrome-host unregister       Remove this Host registration
+  chrome-host doctor           Validate Host registration
+  chrome-host --version
 `)
 }
 

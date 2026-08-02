@@ -14,21 +14,21 @@ import {
   doctorNativeHost,
   registerNativeHost,
   unregisterNativeHost,
-} from '../../plugins/claudeinchrome/host/registration.js'
+} from '../../plugins/chrome/host/registration.js'
 import {
   CHROME_SOCKET_HOST,
   getAvailableSocketEndpoints,
   getEndpointDescriptorPath,
   getSocketDirectory,
-} from '../../plugins/claudeinchrome/host/paths.js'
-import { ChromeNativeHost } from '../../plugins/claudeinchrome/host/nativeHost.js'
+} from '../../plugins/chrome/host/paths.js'
+import { ChromeNativeHost } from '../../plugins/chrome/host/nativeHost.js'
 import {
   CHROME_NATIVE_HOST_NAME,
   CLAUDEINCHROME_EXTENSION_ID,
-} from '../../plugins/claudeinchrome/protocol/index.js'
+} from '../../plugins/chrome/protocol/index.js'
 
 const root = resolve(import.meta.dir, '../..')
-const hostRoot = join(root, 'plugins', 'claudeinchrome', 'host')
+const hostRoot = join(root, 'plugins', 'chrome', 'host')
 const sources = await Promise.all(
   [
     'entry.ts',

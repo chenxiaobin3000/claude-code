@@ -1,13 +1,13 @@
-# claudeinchrome
+# chrome
 
-`claudeinchrome` 是项目唯一的本地 Chrome 集成边界。Claude 主程序本身不实现
+`chrome` 是项目唯一的本地 Chrome 集成插件。Claude 主程序本身不实现
 Chrome 操作；生产 standalone 从 `claude.exe` 同级 `plugins` 下的一级目录自动
-发现本插件，源码开发则通过 `--plugin-dir plugins/claudeinchrome` 显式加载。插件
+发现本插件，源码开发则通过 `--plugin-dir plugins/chrome` 显式加载。插件
 成功加载后，才能通过其 MCP 与 Skill 连接 Chrome 扩展并控制 Chrome。
 
 目标数据路径：
 
-`Claude 主程序 -> claudeinchrome 插件 MCP/Skill -> Native Host -> Chrome 扩展 -> Chrome`
+`Claude 主程序 -> chrome 插件 MCP/Skill -> Native Host -> Chrome 扩展 -> Chrome`
 
 ## 当前状态
 
@@ -15,13 +15,13 @@ Chrome 操作；生产 standalone 从 `claude.exe` 同级 `plugins` 下的一级
   为 `dlpofjonbnceelbmpelkfblmnghclmkm`；已实现标签页、导航、页面读取与交互、
   截图和窗口缩放等浏览器端能力。
 - `.claude-plugin/plugin.json`：已声明标准本地 stdio MCP；源码目录可通过
-  `--plugin-dir plugins/claudeinchrome` 开发加载；生产分发目录由 standalone 自动
+  `--plugin-dir plugins/chrome` 开发加载；生产分发目录由 standalone 自动
   发现，无需传该参数。
 - `protocol/`：已经固定扩展实际实现的 11 个工具、Native Host 名称、1 MiB
   消息上限、30 秒工具超时、必填 `request_id` 及本地 TCP 端点契约；MCP 工具广告
   与扩展分发器由轻量验证保持一致。
 - `host/`：已经提供独立 Native Messaging/MCP Host、注册、卸载和 doctor；
-  Windows 分发产物位于 `dist/plugins/claudeinchrome`。
+  Windows 分发产物位于 `dist/plugins/chrome`。
 - `mcp/`：MCP 引擎、11 个工具声明、TCP Socket 生命周期和多实例端点池均已归入
   插件，不依赖旧 workspace 包或主程序 Chrome 实现。
 - `skills/claude-in-chrome/`：标准 Plugin Skill 已建立，仅随插件加载。
@@ -49,13 +49,13 @@ Domain Socket。这个结构允许多个 Chrome 个人资料分别启动 Host �
 
 ```powershell
 bun run build:chrome-host
-.\dist\plugins\claudeinchrome\claudeinchrome-host.exe register
-.\dist\plugins\claudeinchrome\claudeinchrome-host.exe doctor
-.\dist\plugins\claudeinchrome\claudeinchrome-host.exe unregister
+.\dist\plugins\chrome\chrome-host.exe register
+.\dist\plugins\chrome\chrome-host.exe doctor
+.\dist\plugins\chrome\chrome-host.exe unregister
 ```
 
 注册和卸载必须由用户显式执行；插件不会从主程序启动流程自动修改 Native Host
-清单或 Windows 注册表。构建后的整个 `dist/plugins/claudeinchrome` 是分发单元；
+清单或 Windows 注册表。构建后的整个 `dist/plugins/chrome` 是分发单元；
 其 Manifest 直接启动独立 Host，目标机器不需要 Bun 或 Node.js。
 
 完整 Windows 生产产物可在仓库根目录执行 `bun run build:production` 生成。将整个
@@ -66,10 +66,10 @@ bun run build:chrome-host
 ## 真实 Chrome 验收
 
 真实浏览器验收不进入无状态 CI。先在 Chrome 的扩展管理页加载
-`dist/plugins/claudeinchrome/chrome-extension`，再执行：
+`dist/plugins/chrome/chrome-extension`，再执行：
 
 ```powershell
-.\dist\plugins\claudeinchrome\claudeinchrome-host.exe register
+.\dist\plugins\chrome\chrome-host.exe register
 bun run chrome:verify
 ```
 

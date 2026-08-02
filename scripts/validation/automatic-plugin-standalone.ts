@@ -26,12 +26,12 @@ const distributionRoot = dirname(exe)
 const pluginPath = join(
   distributionRoot,
   'plugins',
-  'claudeinchrome',
+  'chrome',
 )
 const weixinPluginPath = join(distributionRoot, 'plugins', 'weixin')
 const hiddenPluginPath = join(
   distributionRoot,
-  `.claudeinchrome-validation-hidden-${process.pid}`,
+  `.chrome-validation-hidden-${process.pid}`,
 )
 
 function listPlugins(prefixArgs: string[] = []): ListedPlugin[] {
@@ -57,13 +57,17 @@ await access(pluginPath)
 await access(weixinPluginPath)
 
 const automatic = listPlugins()
-const automaticChrome = automatic.find(
-  plugin => plugin.name === 'claudeinchrome',
+assert(
+  !automatic.some(plugin => plugin.name === 'claudeinchrome'),
+  'standalone must not expose the legacy claudeinchrome Plugin identity',
 )
-assert(automaticChrome, 'standalone must automatically discover claudeinchrome')
+const automaticChrome = automatic.find(
+  plugin => plugin.name === 'chrome',
+)
+assert(automaticChrome, 'standalone must automatically discover chrome')
 assertEqual(
   automaticChrome.source,
-  'claudeinchrome@local',
+  'chrome@local',
   'standalone automatic source',
 )
 const automaticWeixin = automatic.find(plugin => plugin.name === 'weixin')
@@ -88,12 +92,12 @@ assert(
 
 const explicit = listPlugins(['--plugin-dir', pluginPath])
 const explicitChrome = explicit.find(
-  plugin => plugin.name === 'claudeinchrome',
+  plugin => plugin.name === 'chrome',
 )
 assert(explicitChrome, 'explicit --plugin-dir must remain available')
 assertEqual(
   explicitChrome.source,
-  'claudeinchrome@inline',
+  'chrome@inline',
   'explicit plugin overrides automatic plugin',
 )
 
@@ -104,13 +108,13 @@ try {
   const withoutAutomaticPlugin = listPlugins()
   assert(
     !withoutAutomaticPlugin.some(
-      plugin => plugin.name === 'claudeinchrome',
+      plugin => plugin.name === 'chrome',
     ),
     'removing the automatic plugin directory must remove its MCP and Skill entry point',
   )
   assert(
     withoutAutomaticPlugin.some(plugin => plugin.name === 'weixin'),
-    'removing claudeinchrome must not remove the independent weixin plugin',
+    'removing chrome must not remove the independent weixin plugin',
   )
 } finally {
   if (moved) await rename(hiddenPluginPath, pluginPath)

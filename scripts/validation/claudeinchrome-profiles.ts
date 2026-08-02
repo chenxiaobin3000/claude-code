@@ -3,8 +3,8 @@
 import {
   chromeTabRouteKey,
   selectChromeEndpointId,
-} from '../../plugins/claudeinchrome/mcp/mcpSocketPool.js'
-import type { ChromeSocketEndpoint } from '../../plugins/claudeinchrome/protocol/index.js'
+} from '../../plugins/chrome/mcp/mcpSocketPool.js'
+import type { ChromeSocketEndpoint } from '../../plugins/chrome/protocol/index.js'
 
 const profiles: ChromeSocketEndpoint[] = [
   {

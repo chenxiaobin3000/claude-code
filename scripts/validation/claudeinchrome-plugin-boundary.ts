@@ -13,10 +13,10 @@ import {
 import { parseFrontmatter } from '../../src/utils/frontmatterParser.js'
 import { parseSlashCommandToolsFromFrontmatter } from '../../src/utils/markdownConfigLoader.js'
 import { buildMcpToolName } from '../../src/services/mcp/mcpStringUtils.js'
-import { IMPLEMENTED_CHROME_TOOL_NAMES } from '../../plugins/claudeinchrome/protocol/index.js'
+import { IMPLEMENTED_CHROME_TOOL_NAMES } from '../../plugins/chrome/protocol/index.js'
 
 const root = resolve(import.meta.dir, '../..')
-const pluginRoot = join(root, 'plugins', 'claudeinchrome')
+const pluginRoot = join(root, 'plugins', 'chrome')
 const manifestPath = join(pluginRoot, '.claude-plugin', 'plugin.json')
 const sourceHostArgument = '$' + '{CLAUDE_PLUGIN_ROOT}/host/entry.ts'
 const extensionManifestPath = join(
@@ -45,10 +45,24 @@ for (const path of [
   await access(path)
 }
 
+try {
+  await access(join(root, 'plugins', 'claudeinchrome'))
+  throw new Error(
+    '[claudeinchrome-plugin-boundary] legacy claudeinchrome Plugin directory still exists',
+  )
+} catch (error) {
+  if (
+    error instanceof Error &&
+    error.message.startsWith('[claudeinchrome-plugin-boundary]')
+  ) {
+    throw error
+  }
+}
+
 const manifest = PluginManifestSchema().parse(
   JSON.parse(await readFile(manifestPath, 'utf8')),
 )
-if (manifest.name !== 'claudeinchrome') {
+if (manifest.name !== 'chrome') {
   throw new Error(
     `[claudeinchrome-plugin-boundary] unexpected plugin name: ${manifest.name}`,
   )
@@ -83,9 +97,9 @@ if (manifest.skills) {
 
 const loaded = await createPluginFromPath(
   pluginRoot,
-  'claudeinchrome@local',
+  'chrome@local',
   true,
-  'claudeinchrome',
+  'chrome',
 )
 if (loaded.errors.length > 0 || !loaded.plugin.skillsPath) {
   throw new Error(
@@ -113,7 +127,7 @@ const scopedServers = await extractMcpServersFromPlugins(
   delete process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR
   await rm(pluginCache, { recursive: true, force: true })
 })
-const scopedServer = scopedServers['plugin:claudeinchrome:claude-in-chrome']
+const scopedServer = scopedServers['plugin:chrome:claude-in-chrome']
 if (
   !scopedServer ||
   scopedServer.type !== 'stdio' ||
@@ -136,7 +150,7 @@ const skillTools = parseSlashCommandToolsFromFrontmatter(
   skill.frontmatter['allowed-tools'],
 )
 const expectedSkillTools = [...IMPLEMENTED_CHROME_TOOL_NAMES]
-  .map(name => buildMcpToolName('plugin:claudeinchrome:claude-in-chrome', name))
+  .map(name => buildMcpToolName('plugin:chrome:claude-in-chrome', name))
   .sort()
 if (
   skill.frontmatter.name !== 'claude-in-chrome' ||

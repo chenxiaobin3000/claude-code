@@ -4,7 +4,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { appendFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { IMPLEMENTED_CHROME_TOOL_NAMES } from '../../plugins/claudeinchrome/protocol/index.js'
+import { IMPLEMENTED_CHROME_TOOL_NAMES } from '../../plugins/chrome/protocol/index.js'
 
 const root = resolve(import.meta.dir, '../..')
 const hostPath =
@@ -13,10 +13,10 @@ const hostPath =
     root,
     'dist',
     'plugins',
-    'claudeinchrome',
+    'chrome',
     process.platform === 'win32'
-      ? 'claudeinchrome-host.exe'
-      : 'claudeinchrome-host',
+      ? 'chrome-host.exe'
+      : 'chrome-host',
   )
 const fixturePort = Number.parseInt(
   process.env.CLAUDEINCHROME_FIXTURE_PORT ?? '17381',

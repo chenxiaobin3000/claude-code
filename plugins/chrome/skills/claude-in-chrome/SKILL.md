@@ -2,24 +2,24 @@
 name: claude-in-chrome
 description: Control the user's local Chrome when the task requires existing tabs, authenticated sessions, OAuth, or visible browser interaction.
 allowed-tools:
-  - mcp__plugin_claudeinchrome_claude-in-chrome__tabs_context_mcp
-  - mcp__plugin_claudeinchrome_claude-in-chrome__tabs_create_mcp
-  - mcp__plugin_claudeinchrome_claude-in-chrome__navigate
-  - mcp__plugin_claudeinchrome_claude-in-chrome__read_page
-  - mcp__plugin_claudeinchrome_claude-in-chrome__find
-  - mcp__plugin_claudeinchrome_claude-in-chrome__form_input
-  - mcp__plugin_claudeinchrome_claude-in-chrome__computer
-  - mcp__plugin_claudeinchrome_claude-in-chrome__javascript_tool
-  - mcp__plugin_claudeinchrome_claude-in-chrome__get_page_text
-  - mcp__plugin_claudeinchrome_claude-in-chrome__update_plan
-  - mcp__plugin_claudeinchrome_claude-in-chrome__resize_window
+  - mcp__plugin_chrome_claude-in-chrome__tabs_context_mcp
+  - mcp__plugin_chrome_claude-in-chrome__tabs_create_mcp
+  - mcp__plugin_chrome_claude-in-chrome__navigate
+  - mcp__plugin_chrome_claude-in-chrome__read_page
+  - mcp__plugin_chrome_claude-in-chrome__find
+  - mcp__plugin_chrome_claude-in-chrome__form_input
+  - mcp__plugin_chrome_claude-in-chrome__computer
+  - mcp__plugin_chrome_claude-in-chrome__javascript_tool
+  - mcp__plugin_chrome_claude-in-chrome__get_page_text
+  - mcp__plugin_chrome_claude-in-chrome__update_plan
+  - mcp__plugin_chrome_claude-in-chrome__resize_window
 user-invocable: true
 ---
 
 # Claude in Chrome
 
-Use this Skill only for the user's local Chrome through the claudeinchrome
-extension. It is appropriate when the task depends on an existing signed-in
+Use this Skill only for the user's local Chrome through the chrome Plugin and
+its extension. It is appropriate when the task depends on an existing signed-in
 session, an OAuth flow, current tabs, or visible browser interaction.
 
 At the start of each browser task, call `tabs_context_mcp`. Never reuse a tab ID

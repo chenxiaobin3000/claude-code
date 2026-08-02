@@ -1,5 +1,5 @@
 {
-  "name": "claudeinchrome",
+  "name": "chrome",
   "version": "0.1.0",
   "apiVersion": "^1.0.0",
   "description": "Local-only Chrome integration through a standard Plugin MCP server, Skill, Native Host, and Chrome extension.",

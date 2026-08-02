@@ -1,6 +1,6 @@
 # Claude Code Local Browser Bridge
 
-这是 `claudeinchrome` 本地插件的 Manifest V3 Chrome 扩展，用 Native
+这是 `chrome` 本地插件的 Manifest V3 Chrome 扩展，用 Native
 Messaging 连接插件提供的 `claude-in-chrome` MCP。数据路径是：
 
 `Claude Code CLI <-> 本地回环 TCP <-> Native Host <-> Chrome 扩展`

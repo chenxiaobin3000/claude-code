@@ -2,24 +2,24 @@
 
 import { readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-import { BROWSER_TOOLS } from '../../plugins/claudeinchrome/mcp/browserTools.js'
+import { BROWSER_TOOLS } from '../../plugins/chrome/mcp/browserTools.js'
 import {
   CHROME_NATIVE_HOST_NAME,
   CHROME_TOOL_TIMEOUT_MS,
   IMPLEMENTED_CHROME_TOOL_NAMES,
   MAX_CHROME_BRIDGE_MESSAGE_BYTES,
-} from '../../plugins/claudeinchrome/protocol/index.js'
+} from '../../plugins/chrome/protocol/index.js'
 
 const root = resolve(import.meta.dir, '../..')
 const extensionSource = await readFile(
-  join(root, 'plugins', 'claudeinchrome', 'chrome-extension', 'background.js'),
+  join(root, 'plugins', 'chrome', 'chrome-extension', 'background.js'),
   'utf8',
 )
 const promptSource = await readFile(
   join(
     root,
     'plugins',
-    'claudeinchrome',
+    'chrome',
     'skills',
     'claude-in-chrome',
     'SKILL.md',
@@ -27,11 +27,11 @@ const promptSource = await readFile(
   'utf8',
 )
 const nativeHostSource = await readFile(
-  join(root, 'plugins', 'claudeinchrome', 'host', 'nativeHost.ts'),
+  join(root, 'plugins', 'chrome', 'host', 'nativeHost.ts'),
   'utf8',
 )
 const socketClientSource = await readFile(
-  join(root, 'plugins', 'claudeinchrome', 'mcp', 'mcpSocketClient.ts'),
+  join(root, 'plugins', 'chrome', 'mcp', 'mcpSocketClient.ts'),
   'utf8',
 )
 

@@ -11,11 +11,11 @@ import {
 } from '../../src/utils/plugins/mcpPluginIntegration.js'
 
 const root = resolve(import.meta.dir, '../..')
-const pluginRoot = join(root, 'dist', 'plugins', 'claudeinchrome')
+const pluginRoot = join(root, 'dist', 'plugins', 'chrome')
 const hostFilename =
   process.platform === 'win32'
-    ? 'claudeinchrome-host.exe'
-    : 'claudeinchrome-host'
+    ? 'chrome-host.exe'
+    : 'chrome-host'
 const hostPath = join(pluginRoot, hostFilename)
 const manifestPath = join(pluginRoot, '.claude-plugin', 'plugin.json')
 
@@ -27,6 +27,20 @@ for (const path of [
   join(pluginRoot, 'skills', 'claude-in-chrome', 'SKILL.md'),
 ]) {
   await access(path)
+}
+
+try {
+  await access(join(root, 'dist', 'plugins', 'claudeinchrome'))
+  throw new Error(
+    '[claudeinchrome-distribution] legacy Plugin distribution still exists',
+  )
+} catch (error) {
+  if (
+    error instanceof Error &&
+    error.message.startsWith('[claudeinchrome-distribution]')
+  ) {
+    throw error
+  }
 }
 
 const manifest = PluginManifestSchema().parse(
@@ -56,9 +70,9 @@ if (
 
 const loaded = await createPluginFromPath(
   pluginRoot,
-  'claudeinchrome@distribution',
+  'chrome@distribution',
   true,
-  'claudeinchrome',
+  'chrome',
 )
 const errors = [...loaded.errors]
 const rawServers = await loadPluginMcpServers(loaded.plugin, errors)
@@ -73,7 +87,7 @@ const scopedServers = await extractMcpServersFromPlugins(
   delete process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR
   await rm(pluginCache, { recursive: true, force: true })
 })
-const scoped = scopedServers['plugin:claudeinchrome:claude-in-chrome']
+const scoped = scopedServers['plugin:chrome:claude-in-chrome']
 if (
   errors.length > 0 ||
   Object.keys(rawServers ?? {}).join(',') !== 'claude-in-chrome' ||
