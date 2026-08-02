@@ -123,14 +123,28 @@
 
 完成条件：两个 Bot 可通过 `wxwork-host` 同时运行且不会串连接、会话、回复、媒体、权限或 Secret；源码开发使用显式 `--plugin-dir`，生产使用 standalone 同级 `plugins/wxwork` 自动发现，删除插件目录即可移除全部企业微信能力；`typecheck:wxwork-host`、`build:wxwork-host`、分发验证和 `bun run verify -- --ci` 全部通过。真实企业微信账号环境下的 Bot ID/Secret 认证、单聊、群聊和媒体收发作为固定 Fixture 之后的附加验收。
 
-### P1：多平台机器人 Channel 插件
+### P1：QQ 机器人 Channel 插件
 
-- [ ] 增加 QQ 机器人插件，代码与依赖全部位于 `plugins/qq`，通过标准 Plugin Manifest、独立 MCP Host 和 Channel 通知接入主程序；开发前固定采用的 QQ 官方机器人接口、鉴权方式、事件回调/轮询方式及支持的消息类型。
+- [ ] 冻结 QQ 开放平台官方协议文档、Gateway/REST 接口版本，以及 `@tencent-connect/openclaw-qqbot`、`@tencent-connect/qqbot-connector` 和 `@tencent-connect/qqbot-nodejs` 的参考版本与 commit；这些包只用于人工差异审计和 Fixture 校对，不安装、不导入、不打入生产 Bundle，也不引入 OpenClaw Runtime。
+- [ ] 在 `plugins/qq` 独立实现 `qq` Plugin Manifest、MCP Server、`qq-host` 和 standalone Host。主程序只通过现有插件发现、MCP 生命周期和 Channel 通知接入，不增加 QQ SDK、静态注册、专用主 CLI 命令或供应商分支；删除插件目录即可完整移除 QQ 能力。
+- [ ] 产品范围只包含 QQ 官方机器人 AppID/AppSecret 鉴权、WebSocket Gateway 入站和 REST API 出站，支持 C2C 单聊与群聊，群聊默认要求明确 `@` 机器人。P1 不实现 Webhook、二维码/个人 QQ 登录、频道 Guild、OpenClaw Gateway、Cron、动态 Agent、内置 Skill、远程安装、热更新或自动更新；长连接不可用时必须明确失败，不得隐式切换协议。
+- [ ] 支持多个 QQ Bot 配置并要求别名唯一，Secret 优先从环境变量读取；每个 Bot 独立保存 Access Token、Gateway `session_id`/`seq`、心跳状态、排重状态、允许列表和媒体状态。提供 `qq-host bot add|remove|list|doctor` 管理入口，配置和状态采用私有权限、原子写入，单个 Bot 故障不得影响其他 Bot。
+- [ ] 实现 Access Token 获取、提前刷新、Gateway 地址发现、HELLO/Identify、Heartbeat/ACK、事件序号、断线重连、有效会话 Resume、失效会话重新 Identify、带抖动退避和连接代际隔离；认证失败、被踢下线、无 ACK、限流和不可恢复错误必须输出可脱敏的明确诊断，禁止无限快速重连。
+- [ ] 将 QQ 入站事件转换为标准 Channel 通知，`chat_id` 固定编码为 `bot-alias::c2c::user-openid` 或 `bot-alias::group::group-openid`，OpenID 只作为 Bot 作用域内的不透明标识。覆盖文本、图片、语音、视频、文件、引用关系和官方已提供的语音识别文本；模型侧不存在语音转写能力时不得伪造识别结果。按事件 ID、消息 ID 和 Bot 作用域排重，目标不唯一时 fail-closed。
+- [ ] 实现文本和受支持媒体的回复，回复绑定原始消息 ID，并按原消息/会话生成确定性的 `msg_seq`，避免超时重试造成重复发送。严格处理 REST 业务错误、HTTP 错误、`429`/Retry-After、平台消息窗口和媒体限制；不安全的出站请求不得自动重放。远程媒体 URL 默认禁用，启用时必须经过 SSRF 防护；本地文件只能来自显式允许根目录，临时文件按 Bot 和会话隔离。
+- [ ] 复用现有 Channel 权限边界，但所有审批状态必须按 Bot、会话类型、会话 ID 和发送者隔离，群内其他成员不得批准不属于自己的请求。P1 以文本确认完成权限闭环；主动发送默认关闭并要求独立工具权限。禁止提供读取运行日志、修改插件配置、自更新或升级 Host 的聊天命令，日志必须脱敏 AppSecret、Token、完整敏感消息和媒体地址。
+- [ ] 在 `scripts/validation` 增加 QQ 插件边界、官方依赖禁入、鉴权、Gateway、Resume、路由、媒体、权限和分发验证，并统一并入 `bun run verify`。固定 Fixture 至少覆盖双 Bot 并发、Token/会话/OpenID 隔离、HELLO/心跳/ACK、断线 Resume、失效会话重建、事件序号与排重、群聊 `@`、跨 Bot/跨群/跨用户权限拒绝、REST 限流和业务错误、媒体与 SSRF 边界、Secret 脱敏、Host EOF 以及 standalone 自动发现。
+- [ ] 后续升级采用人工同步：发现 QQ 官方文档、SDK 或 `@tencent-connect/openclaw-qqbot` 新版本后，先冻结版本和 commit，审计协议、缺陷修复及产品范围差异，只移植本项目适用行为并更新独立 Fixture；验证通过后再更新本地兼容元数据，禁止自动下载、覆盖插件或触发 CLI 自更新。
+
+完成条件：至少两个 QQ Bot 可由 `qq-host` 同时运行，且不会串 Token、Gateway 会话、OpenID、消息、媒体、权限或 Secret；源码开发使用显式 `--plugin-dir`，生产使用 standalone 同级 `plugins/qq` 自动发现；QQ Host 独立类型检查、构建、边界验证、分发验证和 `bun run verify -- --ci` 全部通过。固定 Fixture 通过后，再使用真实 QQ 开放平台 AppID/AppSecret 验收 C2C、群聊、断线恢复和媒体收发。
+
+### P2：Telegram 机器人 Channel 插件
+
 - [ ] 增加 Telegram 机器人插件，代码与依赖全部位于 `plugins/telegram`，通过 Telegram Bot API 实现登录配置、入站更新、文本/媒体回复、会话路由和权限请求转发。
 
-完成条件：两个机器人均作为可删除的独立本地插件分发，不向主 CLI 增加供应商 SDK、专用命令或静态注册；生产使用 standalone 同级 `plugins` 自动发现，源码开发使用显式 `--plugin-dir`。每个插件必须具备独立类型检查、Manifest/MCP 生命周期、鉴权失败、断线恢复、消息路由、敏感凭据脱敏及生产 Host 构建验证；平台不支持的能力必须明确降级或拒绝，不能伪造成功。
+完成条件：Telegram 机器人作为可删除的独立本地插件分发，不向主 CLI 增加供应商 SDK、专用命令或静态注册；生产使用 standalone 同级 `plugins` 自动发现，源码开发使用显式 `--plugin-dir`。插件必须具备独立类型检查、Manifest/MCP 生命周期、鉴权失败、断线恢复、消息路由、敏感凭据脱敏及生产 Host 构建验证；平台不支持的能力必须明确降级或拒绝，不能伪造成功。
 
-### P2：可选产品能力
+### P3：可选产品能力
 
 - [ ] 支持 macOS 专用、默认关闭的 `sandbox.allowAppleEvents`，并确保该例外不会放宽文件系统、网络或其他平台的边界。
 
