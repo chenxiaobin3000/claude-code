@@ -140,9 +140,19 @@
 
 ### P2：Telegram 机器人 Channel 插件
 
-- [ ] 增加 Telegram 机器人插件，代码与依赖全部位于 `plugins/telegram`，通过 Telegram Bot API 实现登录配置、入站更新、文本/媒体回复、会话路由和权限请求转发。
+- [ ] 固定 Telegram Bot API、grammY 官方文档和 `grammy@1.45.1` 为首个实施基线，并在插件包元数据中记录精确版本、仓库 commit 和审计日期；实施时使用锁文件固定实际依赖，不跟随浮动版本。grammY 是本插件允许使用的正式运行时框架，不要求像 QQ、微信和企业微信协议一样自行重写，但后续升级仍须人工审计并通过 Fixture，禁止自动下载或更新。
+- [ ] 在 `plugins/telegram` 建立独立的 `telegram` Plugin Manifest、TypeScript/Bun workspace、stdio MCP Server、`telegram-host` 和 standalone 分发目录。`grammy`、`@modelcontextprotocol/sdk`、`zod` 及后续确有必要的 Telegram 依赖只能位于该插件，不得进入根包、主 CLI、其他插件或非 Telegram 生产 Bundle；删除插件目录即可移除全部 Telegram 能力。
+- [ ] P2 只使用 grammY 的 `bot.start()` 接收 Telegram `getUpdates` 长轮询，不建立公网 HTTP 服务，不实现 Webhook，也不在发现既有 Webhook 时自动调用 `deleteWebhook`。`telegram-host bot doctor` 必须通过 `getMe` 验证 Token、通过 `getWebhookInfo` 报告互斥配置，并在同一 Token 已被其他轮询进程占用或返回 `409` 时明确失败，不抢占外部 Bot。
+- [ ] 支持多个 Telegram Bot，要求别名和 Token 唯一，Token 只能由秘密环境变量或私有状态读取，不能作为普通命令行参数、Manifest 字段或日志内容。提供 `telegram-host bot add|remove|list|doctor` 和 `mcp` 生命周期；账号索引、允许列表、Update 排重及诊断状态保存至 `.claude/channels/telegram`，按 Bot 原子写入和隔离，一个 Bot 故障不得停止其他 Bot。
+- [ ] 每个配置创建独立 grammY `Bot` 实例，显式限定 `allowed_updates`，安装 `bot.catch`，并接入 MCP EOF、父进程消失、`SIGINT`、`SIGTERM` 和 `SIGHUP` 的有界停止流程。首版入站中间件只完成过滤、消息转换和 MCP notification，不等待模型响应，因此保持 `bot.start()` 的顺序处理；不引入 `@grammyjs/runner`、Conversations、Session、数据库或第二套会话状态，只有验收证明吞吐不足时才单独规划并发 Runner。
+- [ ] 将入站消息转换为标准 Channel 通知，路由固定为 `bot-alias::private::chat-id`、`bot-alias::group::chat-id` 或带 `::topic::thread-id` 的群组 Topic；保留 Bot 别名、`update_id`、消息 ID、发送者 ID、会话类型、Topic、引用关系、Caption 和附件元数据。首版覆盖私聊、群聊、Forum Topic、文本、图片、文档、音频、语音和视频；群聊默认只接收明确 `@` Bot、回复 Bot 或发给 Bot 的命令，目标不唯一时 fail-closed。
+- [ ] 在 MCP 中提供 `reply` 和 `send_typing`，回复必须绑定原始 Chat、Topic 和可用的原消息 ID。文本首版使用纯文本，不默认启用 Markdown/HTML，并按 Telegram 限制和 Unicode 边界确定性拆分；媒体经 grammY/Bot API 的 `getFile`、`InputFile` 和对应发送方法处理，保存原始 MIME/文件名，限制大小、类型和超时，临时文件按 Bot/Chat/Message 隔离，包含 Token 的文件 URL和完整敏感媒体地址不得写入日志。
+- [ ] 不全局启用 grammY `auto-retry`。出站包装器只对 Telegram 明确返回的 `429` 按 `retry_after` 有界重试，对确定未执行的安全请求使用有限退避；对于网络断线后结果不确定的消息或媒体发送不得自动重放，必须返回可诊断错误，避免重复消息。每个出站操作记录不含敏感内容的本地操作 ID，并区分 grammY `GrammyError`、`HttpError`、权限错误和配置错误。
+- [ ] 复用现有 Channel 权限协议，但审批键必须包含 Bot 别名、会话类型、Chat ID、Topic ID、发送者 ID 和 Request ID；其他 Bot、群、Topic 或用户不得批准请求，过期请求必须拒绝。首版使用 `yes <request-id>` / `no <request-id>` 文本完成闭环，主动发送默认关闭并要求独立工具权限；Inline Keyboard、广播、定时任务、Telegram Mini App 和 Bot 管理面板不在 P2 范围。
+- [ ] 在 `scripts/validation` 增加 Telegram 插件边界、grammY 依赖边界、配置、鉴权、长轮询、路由、媒体、权限、错误恢复和分发验证，并统一并入 `bun run verify`。Fixture 使用可注入的本地 Bot API 端点或固定传输，不依赖真实 Token，至少覆盖双 Bot 并发、Token/Update/Chat/Topic 隔离、`getMe` 失败、Webhook 冲突、`409`、断线恢复、Update 排重、群聊 `@` 过滤、文本拆分、媒体限制、`429`、权限越界拒绝、Secret 脱敏、Host EOF、standalone 自动发现，以及 grammY 不进入根 CLI 和其他 Bundle。
+- [ ] 后续升级采用人工同步：发现 Telegram Bot API、grammY 或选用的官方 grammY 插件新版本后，先冻结版本与 commit，审计协议、类型、错误语义、依赖和 Bundle 变化，只移植当前产品范围需要的行为并更新 Fixture；验证通过后再更新本地兼容元数据。不得因为 grammY 提供 Webhook、Runner、Conversations 或其他插件就隐式扩大本项目能力。
 
-完成条件：Telegram 机器人作为可删除的独立本地插件分发，不向主 CLI 增加供应商 SDK、专用命令或静态注册；生产使用 standalone 同级 `plugins` 自动发现，源码开发使用显式 `--plugin-dir`。插件必须具备独立类型检查、Manifest/MCP 生命周期、鉴权失败、断线恢复、消息路由、敏感凭据脱敏及生产 Host 构建验证；平台不支持的能力必须明确降级或拒绝，不能伪造成功。
+完成条件：至少两个 Telegram Bot 可由 `telegram-host` 同时长轮询运行，且不会串 Token、Update、Chat、Topic、附件、权限或 Secret；源码开发使用显式 `--plugin-dir plugins/telegram`，生产使用 standalone 同级 `plugins/telegram` 自动发现，删除插件目录即可完整移除能力；`typecheck:telegram-host`、`build:telegram-host`、依赖边界、分发验证和 `bun run verify -- --ci` 全部通过。固定 Fixture 通过后，再使用真实 BotFather Token 验收私聊、群聊、Topic、断线恢复、图片和文件收发。
 
 ### P3：可选产品能力
 
