@@ -102,18 +102,35 @@
 - 官方 MCP Registry 预取、远端插件市场、远端插件下载和插件自动更新。
 - Anthropic 云端浏览器桥接、已移除的 `mcp-chrome`、Artifact 工具和 VS Code 插件路线。
 - 官方大型测试体系；项目只维护独立的 `scripts/validation` 轻量验证脚本。
+- 企业微信 `wxwork` 只实现 API 模式智能机器人的 Bot WebSocket 长连接；不实现 Bot Webhook、Agent/自建应用 XML 回调、公网回调服务、Bot→Agent 回退或多连接模式切换，后续官方同步也不得扩大这一边界。
 
 ## 可选后续路线图（不影响当前验收）
 
-### P0：多平台机器人 Channel 插件
+### P0：企业微信 `wxwork` 长连接 Channel 插件
+
+- [ ] 固定企业微信官方“API 模式智能机器人”的 Bot WebSocket 长连接协议为唯一产品边界，连接地址默认为 `wss://openws.work.weixin.qq.com`。`@wecom/wecom-openclaw-cli` 只作为官方安装/更新/诊断流程参考，其默认安装的 `@wecom/wecom-openclaw-plugin` 才是 OpenClaw Channel 实现；首个兼容基线必须同时记录官方协议文档更新时间、CLI/插件/`@wecom/aibot-node-sdk` 精确版本以及插件仓库 commit，不能只记录安装器版本。
+- [ ] 插件 ID、目录、MCP Server 与 Host 分别固定为 `wxwork`、`plugins/wxwork`、`wxwork` 和 `wxwork-host`，不得与个人微信 `weixin` 混用。参照 `weixin` 的边界自行实现选定的 Bot WebSocket 协议、状态和 Channel 转换，不安装、不导入、不打包或运行 `@wecom/wecom-openclaw-cli`、`@wecom/wecom-openclaw-plugin`、`@wecom/aibot-node-sdk` 或 OpenClaw Runtime；这些上游包只用于差异审计和 Fixture 对照。
+- [ ] 建立标准本地 Plugin Manifest、独立 TypeScript/Bun workspace、stdio MCP Host 和 standalone 构建；全部运行时代码和依赖只能位于 `plugins/wxwork` 和独立 Host，不得向主 CLI 增加企业微信 SDK、专用命令、静态注册或业务实现。依赖边界验证必须阻止上述官方 OpenClaw/SDK 包进入根包、workspace 依赖和三类生产 Bundle。
+- [ ] 实现多机器人索引和逐机器人私有状态目录。每个别名绑定唯一 Bot ID，保存独立 Secret 来源、允许列表、排重状态和体验配置；Secret 优先读取指定环境变量，交互录入不得出现在命令历史或进程参数中，状态文件按私有权限原子写入，日志、诊断和 Channel 消息禁止泄露 Secret。
+- [ ] 实现 `wxwork-host bot add|remove|list|doctor` 和 `mcp` 生命周期。每个 Bot 同时只能有一个有效 WebSocket 连接；订阅认证、`req_id` 请求关联、约 30 秒心跳、超时清理、带抖动指数退避、服务端踢下线、连接代次隔离和正常退出必须完整处理，一个 Bot 失败不得终止其他 Bot，也不得形成双连接互相踢出的循环。
+- [ ] 将 `aibot_msg_callback` 转换为标准 Channel 通知，覆盖单聊和群聊中的文本、图片、图文混排、语音、视频及文件；`chat_id` 固定编码为 `bot-alias::single::userid` 或 `bot-alias::group::chatid`，保留发送者和消息 ID，userid 即使为企业加密标识也只按不透明字符串处理。多 Bot、跨群或目标不唯一时 fail-closed，不默认选择第一个 Bot。
+- [ ] 实现最终 Markdown 被动回复以及图片、文件、语音和视频上传/回复。临时素材按官方初始化、最大 512 KiB 分片和完成合并流程执行，校验 MD5、`media_id`、30 分钟上传会话、3 天素材有效期及图片 10 MiB、语音 2 MiB、视频 10 MiB、文件 20 MiB 上限；断线后的重传只能复用仍有效且属于同一 Bot 的上传会话。
+- [ ] 复用 `weixin` 已验收的 Channel 权限边界，但状态必须按 Bot、会话类型、会话 ID 和发送者隔离；群内其他成员不得批准不属于自己的请求。主动发送默认关闭并要求独立工具权限；外部群/客户群、企业文档/审批/打卡 API 和官方 MCP/Skill 自动安装不在产品范围，平台不支持时必须明确拒绝。
+- [ ] 当前主程序只在完整 MCP Tool 调用后取得回复，因此本阶段只发送一次 `finish=true` 的最终结果，不伪造模型流式输出。欢迎语、模板卡片、卡片更新、用户反馈、主动推送和真实流式 Markdown 只有在各自事件、权限与验收边界明确后才能作为后续可选能力加入。
+- [ ] 官方插件同时包含 Bot WebSocket/Webhook、Agent XML 回调、OpenClaw Gateway、动态 Agent、内置 MCP/Skill 和 Bot→Agent 回退；本项目只同步 Bot WebSocket 长连接中适用的协议与可靠性行为。Webhook 不作为备用方式，长连接不可用时必须明确失败，禁止回退到 Bot Webhook、Agent HTTP API 或其他连接模式；禁止把官方更大产品范围误写为当前能力，也禁止为追随上游而引入自动安装、自动更新或隐式模式回退。
+- [ ] 在 `scripts/validation` 增加 `wxwork` 插件边界、官方依赖禁入、配置、协议、路由、重连、媒体、权限和分发脚本，并统一并入 `bun run verify`；固定 Fixture 至少覆盖双 Bot 并发、单 Bot 双连接拒绝、心跳/断线/踢下线、`req_id` 关联、`msgid` 排重、单聊/群聊隔离、跨 Bot/跨群/跨用户权限拒绝、媒体分片与限制、Secret 脱敏、Host EOF 和 standalone 自动发现。
+- [ ] 后续升级采用与 `weixin` 相同的人工同步流程：发现官方文档、CLI、插件或 SDK 新版本后，先冻结新版本和 commit，审计协议、修复与产品范围差异，只移植本项目适用行为并更新独立 Fixture；验证通过后再更新本地兼容元数据。官方发布不得自动下载、覆盖本地插件或触发 CLI 自更新。
+
+完成条件：两个 Bot 可通过 `wxwork-host` 同时运行且不会串连接、会话、回复、媒体、权限或 Secret；源码开发使用显式 `--plugin-dir`，生产使用 standalone 同级 `plugins/wxwork` 自动发现，删除插件目录即可移除全部企业微信能力；`typecheck:wxwork-host`、`build:wxwork-host`、分发验证和 `bun run verify -- --ci` 全部通过。真实企业微信账号环境下的 Bot ID/Secret 认证、单聊、群聊和媒体收发作为固定 Fixture 之后的附加验收。
+
+### P1：多平台机器人 Channel 插件
 
 - [ ] 增加 QQ 机器人插件，代码与依赖全部位于 `plugins/qq`，通过标准 Plugin Manifest、独立 MCP Host 和 Channel 通知接入主程序；开发前固定采用的 QQ 官方机器人接口、鉴权方式、事件回调/轮询方式及支持的消息类型。
-- [ ] 增加企业微信机器人插件，代码与依赖全部位于 `plugins/wecom`，明确群机器人 Webhook 与企业应用回调的产品范围，按选定范围实现入站消息、回复、媒体和权限请求转发。
 - [ ] 增加 Telegram 机器人插件，代码与依赖全部位于 `plugins/telegram`，通过 Telegram Bot API 实现登录配置、入站更新、文本/媒体回复、会话路由和权限请求转发。
 
-完成条件：三个机器人均作为可删除的独立本地插件分发，不向主 CLI 增加供应商 SDK、专用命令或静态注册；生产使用 standalone 同级 `plugins` 自动发现，源码开发使用显式 `--plugin-dir`。每个插件必须具备独立类型检查、Manifest/MCP 生命周期、鉴权失败、断线恢复、消息路由、敏感凭据脱敏及生产 Host 构建验证；平台不支持的能力必须明确降级或拒绝，不能伪造成功。
+完成条件：两个机器人均作为可删除的独立本地插件分发，不向主 CLI 增加供应商 SDK、专用命令或静态注册；生产使用 standalone 同级 `plugins` 自动发现，源码开发使用显式 `--plugin-dir`。每个插件必须具备独立类型检查、Manifest/MCP 生命周期、鉴权失败、断线恢复、消息路由、敏感凭据脱敏及生产 Host 构建验证；平台不支持的能力必须明确降级或拒绝，不能伪造成功。
 
-### P1：可选产品能力
+### P2：可选产品能力
 
 - [ ] 支持 macOS 专用、默认关闭的 `sandbox.allowAppleEvents`，并确保该例外不会放宽文件系统、网络或其他平台的边界。
 
