@@ -44,7 +44,7 @@ export async function runClaudeInChromeMcpServer(): Promise<void> {
     serverName: 'claude-in-chrome',
     logger,
     getEndpoints: getAvailableSocketEndpoints,
-    clientTypeId: 'claude-code-best',
+    clientTypeId: 'claude-code',
     onAuthenticationError: () => {
       logger.warn('Unexpected authentication error from local Chrome bridge')
     },

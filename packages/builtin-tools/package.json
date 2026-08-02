@@ -1,5 +1,5 @@
 {
-  "name": "@claude-code-best/builtin-tools",
+  "name": "@claude-code/builtin-tools",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -21,6 +21,6 @@
     }
   },
   "dependencies": {
-    "@claude-code-best/agent-tools": "workspace:*"
+    "@claude-code/agent-tools": "workspace:*"
   }
 }

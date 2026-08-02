@@ -37,12 +37,12 @@ assert(
 )
 
 assert(
-  pkg.devDependencies['@claude-code-best/workflow-engine'] === 'workspace:*',
+  pkg.devDependencies['@claude-code/workflow-engine'] === 'workspace:*',
   'root workflow-engine import must be declared',
 )
 
 for (const removed of [
-  '@claude-code-best/mcp-chrome-bridge',
+  '@claude-code/mcp-chrome-bridge',
   '@smithy/core',
   '@types/sharp',
   '@types/shell-quote',

@@ -103,7 +103,7 @@ export function getManifestPath(): string {
       process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local')
     return join(
       localAppData,
-      'claude-code-best',
+      'claude-code',
       'claudeinchrome',
       NATIVE_HOST_MANIFEST_NAME,
     )

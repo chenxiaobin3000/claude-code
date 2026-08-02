@@ -17,8 +17,6 @@ import { asSystemPrompt } from 'src/utils/systemPromptType.js'
 import { isPreapprovedHost } from './preapproved.js'
 import { makeSecondaryModelPrompt } from './prompt.js'
 
-const DEFAULT_TAVILY_EXTRACT_URL = 'https://tavily.claude-code-best.win/extract'
-
 // Custom error class for egress proxy blocks
 class EgressBlockedError extends Error {
   constructor(public readonly domain: string) {
@@ -433,109 +431,6 @@ export async function getURLMarkdownContent(
     persistedSize,
   }
   // lru-cache requires positive integers; clamp to 1 for empty responses.
-  URL_CACHE.set(url, entry, { size: Math.max(1, contentBytes) })
-  return entry
-}
-
-/**
- * Fetch URL content via Tavily Extract API, which directly returns Markdown.
- * This skips the HTML→Markdown conversion (turndown) and the secondary
- * model call (queryHaiku) — Tavily already delivers clean Markdown.
- */
-export async function fetchContentWithTavily(
-  url: string,
-  abortController: AbortController,
-): Promise<FetchedContent | RedirectInfo> {
-  if (!validateURL(url)) {
-    throw new Error('Invalid URL')
-  }
-
-  // Check cache (LRUCache handles TTL automatically)
-  const cachedEntry = URL_CACHE.get(url)
-  if (cachedEntry) {
-    return {
-      bytes: cachedEntry.bytes,
-      code: cachedEntry.code,
-      codeText: cachedEntry.codeText,
-      content: cachedEntry.content,
-      contentType: cachedEntry.contentType,
-      persistedPath: cachedEntry.persistedPath,
-      persistedSize: cachedEntry.persistedSize,
-    }
-  }
-
-  let parsedUrl: URL
-  try {
-    parsedUrl = new URL(url)
-  } catch {
-    throw new Error('Invalid URL')
-  }
-
-  // Upgrade http to https if needed
-  if (parsedUrl.protocol === 'http:') {
-    parsedUrl.protocol = 'https:'
-    url = parsedUrl.toString()
-  }
-
-  const abortSignal = abortController.signal
-
-  const settings = getSettings_DEPRECATED() as Record<string, unknown> & {
-    tavilyEndpointUrl?: string
-  }
-  const baseUrl = settings.tavilyEndpointUrl || DEFAULT_TAVILY_EXTRACT_URL
-  // Derive extract URL from the base Tavily endpoint
-  const extractUrl = baseUrl.endsWith('/search')
-    ? baseUrl.replace(/\/search$/, '/extract')
-    : baseUrl.endsWith('/extract')
-      ? baseUrl
-      : `${baseUrl.replace(/\/$/, '')}/extract`
-
-  const response = await axios.post<{ url: string; raw_content: string }>(
-    extractUrl,
-    {
-      urls: [url],
-    },
-    {
-      signal: abortSignal,
-      timeout: getFetchTimeoutMs(),
-      headers: { 'Content-Type': 'application/json' },
-    },
-  )
-
-  if (abortSignal.aborted) {
-    throw new AbortError()
-  }
-
-  const rawContent = response.data?.raw_content ?? ''
-  // If raw_content is a JSON string (extract may return {url:..., raw_content:...}
-  // per URL), unwrap it.
-  let markdownContent = rawContent
-  if (!markdownContent.trim()) {
-    // Try to extract from results array
-    const resp = response.data as unknown as {
-      results?: Array<{ raw_content?: string }>
-    }
-    const results = resp.results ?? []
-    if (results.length > 0 && results[0].raw_content) {
-      markdownContent = results[0].raw_content
-    }
-  }
-
-  if (!markdownContent.trim()) {
-    throw new Error(
-      `Tavily Extract returned empty content for ${url}. The page may require authentication or JavaScript rendering.`,
-    )
-  }
-
-  const contentBytes = Buffer.byteLength(markdownContent)
-
-  const entry: CacheEntry = {
-    bytes: contentBytes,
-    code: 200,
-    codeText: 'OK',
-    content: markdownContent,
-    contentType: 'text/markdown',
-  }
   URL_CACHE.set(url, entry, { size: Math.max(1, contentBytes) })
   return entry
 }

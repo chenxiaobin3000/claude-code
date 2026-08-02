@@ -1,6 +1,6 @@
 import { Text } from '@anthropic/ink';
 import { useCallback } from 'react';
-import { resumeAgentBackground } from '@claude-code-best/builtin-tools/tools/AgentTool/resumeAgent.js';
+import { resumeAgentBackground } from '@claude-code/builtin-tools/tools/AgentTool/resumeAgent.js';
 import type { useNotifications } from '../../../context/notifications.js';
 import type { CanUseToolFn } from '../../../hooks/useCanUseTool.js';
 import type { useSetAppState } from '../../../state/AppState.js';

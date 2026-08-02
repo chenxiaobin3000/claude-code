@@ -1,4 +1,4 @@
-import { FORK_SUBAGENT_TYPE } from '@claude-code-best/builtin-tools/tools/AgentTool/forkSubagent.js'
+import { FORK_SUBAGENT_TYPE } from '@claude-code/builtin-tools/tools/AgentTool/forkSubagent.js'
 import { FORK_BOILERPLATE_TAG } from '../../../constants/xml.js'
 import {
   isLocalAgentTask,

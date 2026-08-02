@@ -1,5 +1,5 @@
-import { clearAgentDefinitionsCache } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
-import { clearPromptCache } from '@claude-code-best/builtin-tools/tools/SkillTool/prompt.js'
+import { clearAgentDefinitionsCache } from '@claude-code/builtin-tools/tools/AgentTool/loadAgentsDir.js'
+import { clearPromptCache } from '@claude-code/builtin-tools/tools/SkillTool/prompt.js'
 import { clearCommandsCache } from '../../commands.js'
 import { clearAllOutputStylesCache } from '../../constants/outputStyles.js'
 import { resetSentSkillNames } from '../attachments.js'

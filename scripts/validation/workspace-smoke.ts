@@ -110,7 +110,7 @@ switch (packageName) {
   case 'acp-link':
     await smokeAcpLink()
     break
-  case '@claude-code-best/workflow-engine':
+  case '@claude-code/workflow-engine':
     await smokeWorkflowEngine()
     break
   case '@anthropic/remote-control-server':

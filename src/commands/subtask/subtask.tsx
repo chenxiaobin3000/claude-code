@@ -1,4 +1,4 @@
-import { AgentTool } from '@claude-code-best/builtin-tools/tools/AgentTool/AgentTool.js'
+import { AgentTool } from '@claude-code/builtin-tools/tools/AgentTool/AgentTool.js'
 import React from 'react'
 import type {
   LocalJSXCommandContext,

@@ -15,7 +15,7 @@ import type { ToolInputJSONSchema } from '../../Tool.js';
 import {
   createSyntheticOutputTool,
   isSyntheticOutputToolEnabled,
-} from '@claude-code-best/builtin-tools/tools/SyntheticOutputTool/SyntheticOutputTool.js';
+} from '@claude-code/builtin-tools/tools/SyntheticOutputTool/SyntheticOutputTool.js';
 import { getAllBaseTools, getTools } from '../../tools.js';
 import {
   canUserConfigureAdvisor,
@@ -82,14 +82,14 @@ import {
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { getMcpToolsCommandsAndResources, prefetchAllMcpResources } from '../../services/mcp/client.js';
 import { initBundledSkills } from '../../skills/bundled/index.js';
-import type { AgentColorName } from '@claude-code-best/builtin-tools/tools/AgentTool/agentColorManager.js';
+import type { AgentColorName } from '@claude-code/builtin-tools/tools/AgentTool/agentColorManager.js';
 import {
   getActiveAgentsFromList,
   getAgentDefinitionsWithOverrides,
   isBuiltInAgent,
   isCustomAgent,
   parseAgentsFromJson,
-} from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js';
+} from '@claude-code/builtin-tools/tools/AgentTool/loadAgentsDir.js';
 import type { LogOption } from '../../types/logs.js';
 import type { Message as MessageType } from '../../types/message.js';
 import { loadConversationForResume } from '../../utils/conversationRecovery.js';
@@ -818,9 +818,9 @@ export async function runDefaultMode(
   if ((feature('KAIROS') || feature('KAIROS_BRIEF')) && baseTools.length > 0) {
     /* eslint-disable @typescript-eslint/no-require-imports */
     const { BRIEF_TOOL_NAME, LEGACY_BRIEF_TOOL_NAME } =
-      require('@claude-code-best/builtin-tools/tools/BriefTool/prompt.js') as typeof import('@claude-code-best/builtin-tools/tools/BriefTool/prompt.js');
+      require('@claude-code/builtin-tools/tools/BriefTool/prompt.js') as typeof import('@claude-code/builtin-tools/tools/BriefTool/prompt.js');
     const { isBriefEntitled } =
-      require('@claude-code-best/builtin-tools/tools/BriefTool/BriefTool.js') as typeof import('@claude-code-best/builtin-tools/tools/BriefTool/BriefTool.js');
+      require('@claude-code/builtin-tools/tools/BriefTool/BriefTool.js') as typeof import('@claude-code/builtin-tools/tools/BriefTool/BriefTool.js');
     /* eslint-enable @typescript-eslint/no-require-imports */
     const parsed = parseToolListFromCLI(baseTools);
     if ((parsed.includes(BRIEF_TOOL_NAME) || parsed.includes(LEGACY_BRIEF_TOOL_NAME)) && isBriefEntitled()) {
@@ -1304,7 +1304,7 @@ export async function runDefaultMode(
   ) {
     /* eslint-disable @typescript-eslint/no-require-imports */
     const { isBriefEntitled } =
-      require('@claude-code-best/builtin-tools/tools/BriefTool/BriefTool.js') as typeof import('@claude-code-best/builtin-tools/tools/BriefTool/BriefTool.js');
+      require('@claude-code/builtin-tools/tools/BriefTool/BriefTool.js') as typeof import('@claude-code/builtin-tools/tools/BriefTool/BriefTool.js');
     /* eslint-enable @typescript-eslint/no-require-imports */
     if (isBriefEntitled()) {
       setUserMsgOptIn(true);
@@ -1322,7 +1322,7 @@ export async function runDefaultMode(
     const briefVisibility =
       feature('KAIROS') || feature('KAIROS_BRIEF')
         ? (
-            require('@claude-code-best/builtin-tools/tools/BriefTool/BriefTool.js') as typeof import('@claude-code-best/builtin-tools/tools/BriefTool/BriefTool.js')
+            require('@claude-code/builtin-tools/tools/BriefTool/BriefTool.js') as typeof import('@claude-code/builtin-tools/tools/BriefTool/BriefTool.js')
           ).isBriefEnabled()
           ? 'Call SendUserMessage at checkpoints to mark where things stand.'
           : 'The user will see any text you output.'

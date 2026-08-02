@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import type { BetaToolUnion } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
-import { FILE_WRITE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/FileWriteTool/prompt.js'
+import { FILE_WRITE_TOOL_NAME } from '@claude-code/builtin-tools/tools/FileWriteTool/prompt.js'
 import { getModelProfile } from '../../utils/model/modelProfiles.js'
 import { isENOENT } from '../../utils/errors.js'
 import { getFsImplementation } from '../../utils/fsOperations.js'

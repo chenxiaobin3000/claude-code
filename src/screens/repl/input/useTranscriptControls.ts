@@ -40,9 +40,9 @@ import type {
 } from '../../../types/message.js'
 import type { MCPServerConnection } from '../../../services/mcp/types.js'
 import type { ScopedMcpServerConfig } from '../../../services/mcp/types.js'
-import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
+import type { AgentDefinition } from '@claude-code/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import { type ContentReplacementRecord } from '../../../utils/toolResultStorage.js'
-import type { AgentColorName } from '@claude-code-best/builtin-tools/tools/AgentTool/agentColorManager.js'
+import type { AgentColorName } from '@claude-code/builtin-tools/tools/AgentTool/agentColorManager.js'
 import { type FileHistorySnapshot } from '../../../utils/fileHistory.js'
 // Dead code elimination: conditional import for loop mode
 /* eslint-disable @typescript-eslint/no-require-imports */

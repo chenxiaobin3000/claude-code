@@ -23,7 +23,6 @@ export const REMOVED_CLOUD_ARTIFACT_MARKERS = Object.freeze([
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_AUTH_TOKEN',
   'CLAUDE_CODE_OAUTH',
-  'cloud-artifacts.claude-code-best.win',
   'CLAUDE_ARTIFACTS_TOKEN',
   'CLAUDE_ARTIFACTS_URL',
   'ArtifactTool',
@@ -61,4 +60,3 @@ export const REMOVED_CLOUD_ARTIFACT_MARKERS = Object.freeze([
   'feedbackSurveyRate',
   'Anthropic server-side search',
 ] as const)
-

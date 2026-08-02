@@ -12,7 +12,7 @@ import type { Root } from '@anthropic/ink';
 import { renderAndRun, showSetupDialog } from './interactiveHelpers.js';
 import { KeybindingSetup } from './keybindings/KeybindingProviderSetup.js';
 import type { AppState } from './state/AppStateStore.js';
-import type { AgentMemoryScope } from '@claude-code-best/builtin-tools/tools/AgentTool/agentMemory.js';
+import type { AgentMemoryScope } from '@claude-code/builtin-tools/tools/AgentTool/agentMemory.js';
 import type { FpsMetrics } from './utils/fpsTracker.js';
 import type { ValidationError } from './utils/settings/validation.js';
 

@@ -8,7 +8,7 @@ import type {
 import {
   SEARCH_EXTRA_TOOLS_TOOL_NAME,
   isDeferredTool,
-} from '@claude-code-best/builtin-tools/tools/SearchExtraToolsTool/prompt.js'
+} from '@claude-code/builtin-tools/tools/SearchExtraToolsTool/prompt.js'
 import type { Tools } from '../../Tool.js'
 import { toolMatchesName } from '../../Tool.js'
 import type {

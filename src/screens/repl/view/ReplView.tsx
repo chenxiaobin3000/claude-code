@@ -50,7 +50,7 @@ import {
   applyPermissionUpdates,
   persistPermissionUpdate,
 } from '../../../utils/permissions/PermissionUpdate.js';
-import { WEB_FETCH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/WebFetchTool/prompt.js';
+import { WEB_FETCH_TOOL_NAME } from '@claude-code/builtin-tools/tools/WebFetchTool/prompt.js';
 import { getGlobalConfig, saveGlobalConfig, getGlobalConfigWriteCount } from '../../../utils/config.js';
 import {
   logEvent,
@@ -125,7 +125,7 @@ import {
   getAutoRunCommand,
   type AutoRunIssueReason,
 } from '../../../utils/autoRunIssue.js';
-import { TungstenLiveMonitor } from '@claude-code-best/builtin-tools/tools/TungstenTool/TungstenLiveMonitor.js';
+import { TungstenLiveMonitor } from '@claude-code/builtin-tools/tools/TungstenTool/TungstenLiveMonitor.js';
 import { IssueFlagBanner } from '../../../components/PromptInput/IssueFlagBanner.js';
 import { CompanionSprite, CompanionFloatingBubble, MIN_COLS_FOR_FULL_SPRITE } from '../../../buddy/CompanionSprite.js';
 import { DevBar } from '../../../components/DevBar.js';

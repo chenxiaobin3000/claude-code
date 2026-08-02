@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { getClaudeConfigHomeDir } from './envUtils.js'
 
 const embeddedRipgrepSymbol = Symbol.for(
-  'claude-code-best.extracted-ripgrep-path',
+  'claude-code.extracted-ripgrep-path',
 )
 const expectedEmbeddedHash = process.env.CCB_EMBEDDED_RIPGREP_SHA256
 

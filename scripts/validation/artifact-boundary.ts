@@ -28,7 +28,6 @@ for (const path of removedPaths) {
 
 const scanRoots = ['src', 'packages/builtin-tools', 'scripts']
 const forbidden = [
-  'cloud-artifacts.claude-code-best.win',
   'CLAUDE_ARTIFACTS_TOKEN',
   'CLAUDE_ARTIFACTS_URL',
   'ARTIFACTS_DEFAULT_TOKEN',

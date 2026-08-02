@@ -91,8 +91,8 @@ for (const removed of [
 }
 
 const forbiddenByFile: Record<string, string[]> = {
-  'src/entrypoints/cli.tsx': ['cli_weixin_path', '@claude-code-best/weixin'],
-  'package.json': ['"@claude-code-best/weixin": "workspace:*"'],
+  'src/entrypoints/cli.tsx': ['cli_weixin_path', '@claude-code/weixin'],
+  'package.json': ['"@claude-code/weixin": "workspace:*"'],
   'tsconfig.json': ['packages/weixin/src'],
 }
 for (const [file, markers] of Object.entries(forbiddenByFile)) {

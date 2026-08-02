@@ -4,14 +4,13 @@
  * Priority (highest first):
  *   1. WEB_SEARCH_ADAPTER environment variable (explicit override)
  *   2. settings.webSearchAdapter (user-configurable via /web-tools)
- *   3. Default: tavily
+ *   3. Fail with a clear configuration error
  */
 
 import { getSettings_DEPRECATED } from 'src/utils/settings/settings.js'
 import { BingSearchAdapter } from './bingAdapter.js'
 import { BraveSearchAdapter } from './braveAdapter.js'
 import { ExaSearchAdapter } from './exaAdapter.js'
-import { TavilySearchAdapter } from './tavilyAdapter.js'
 import type { WebSearchAdapter } from './types.js'
 
 export type {
@@ -21,7 +20,7 @@ export type {
   WebSearchAdapter,
 } from './types.js'
 
-export type SearchAdapterKey = 'bing' | 'brave' | 'exa' | 'tavily'
+export type SearchAdapterKey = 'bing' | 'brave' | 'exa'
 
 let cachedAdapter: WebSearchAdapter | null = null
 let cachedAdapterKey: SearchAdapterKey | null = null
@@ -32,18 +31,22 @@ export function createAdapter(): WebSearchAdapter {
   // 2. Settings preference (set via /web-tools panel)
   const settingsAdapter = getSettings_DEPRECATED().webSearchAdapter
 
-  const adapterKey: SearchAdapterKey =
+  const adapterKey: SearchAdapterKey | undefined =
     envAdapter === 'bing' ||
     envAdapter === 'brave' ||
-    envAdapter === 'exa' ||
-    envAdapter === 'tavily'
+    envAdapter === 'exa'
       ? envAdapter
       : settingsAdapter === 'bing' ||
           settingsAdapter === 'brave' ||
-          settingsAdapter === 'exa' ||
-          settingsAdapter === 'tavily'
+          settingsAdapter === 'exa'
         ? settingsAdapter
-        : 'tavily' // 3. Default
+        : undefined
+
+  if (!adapterKey) {
+    throw new Error(
+      'WebSearch requires WEB_SEARCH_ADAPTER or settings.webSearchAdapter to be configured as bing, brave, or exa',
+    )
+  }
 
   if (cachedAdapter && cachedAdapterKey === adapterKey) return cachedAdapter
 
@@ -56,10 +59,6 @@ export function createAdapter(): WebSearchAdapter {
       break
     case 'exa':
       cachedAdapter = new ExaSearchAdapter()
-      break
-    case 'tavily':
-    default:
-      cachedAdapter = new TavilySearchAdapter()
       break
   }
 

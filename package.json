@@ -3,7 +3,7 @@
   "version": "2.1.220",
   "description": "Claude Code CLI — interactive AI coding assistant in the terminal",
   "type": "module",
-  "author": "claude-code-best <claude-code-best@proton.me>",
+  "author": "claude-code",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/chenxiaobin3000/claude-code.git"
@@ -26,7 +26,7 @@
   "bin": {
     "ccb": "dist/cli-node.js",
     "ccb-bun": "dist/cli-bun.js",
-    "claude-code-best": "dist/cli-node.js"
+    "claude-code": "dist/cli-node.js"
   },
   "workspaces": [
     "plugins/*",
@@ -93,10 +93,10 @@
     "@anthropic/ink": "workspace:*",
     "@aws-sdk/credential-provider-node": "^3.972.36",
     "@biomejs/biome": "2.5.4",
-    "@claude-code-best/agent-tools": "workspace:*",
-    "@claude-code-best/builtin-tools": "workspace:*",
-    "@claude-code-best/mcp-client": "workspace:*",
-    "@claude-code-best/workflow-engine": "workspace:*",
+    "@claude-code/agent-tools": "workspace:*",
+    "@claude-code/builtin-tools": "workspace:*",
+    "@claude-code/mcp-client": "workspace:*",
+    "@claude-code/workflow-engine": "workspace:*",
     "@commander-js/extra-typings": "^14.0.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@smithy/node-http-handler": "^4.5.3",

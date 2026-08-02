@@ -4,14 +4,14 @@ const MODEL_EMAIL_MAP: Array<{ keywords: string[]; email: string }> = [
   // github 组织是不能用 co author 的
   {
     keywords: ['gpt', 'dall-e', 'o1-', 'o3-', 'o4-'],
-    email: 'openai@claude-code-best.win',
+    email: 'openai@claude-code.win',
   },
-  { keywords: ['glm'], email: 'zai-org@claude-code-best.win' },
-  { keywords: ['deepseek'], email: 'deepseek-ai@claude-code-best.win' },
-  { keywords: ['qwen'], email: 'QwenLM@claude-code-best.win' },
-  { keywords: ['minimax'], email: 'MiniMax-AI@claude-code-best.win' },
-  { keywords: ['mimo'], email: 'XiaomiMiMo@claude-code-best.win' },
-  { keywords: ['kimi'], email: 'MoonshotAI@claude-code-best.win' },
+  { keywords: ['glm'], email: 'zai-org@claude-code.win' },
+  { keywords: ['deepseek'], email: 'deepseek-ai@claude-code.win' },
+  { keywords: ['qwen'], email: 'QwenLM@claude-code.win' },
+  { keywords: ['minimax'], email: 'MiniMax-AI@claude-code.win' },
+  { keywords: ['mimo'], email: 'XiaomiMiMo@claude-code.win' },
+  { keywords: ['kimi'], email: 'MoonshotAI@claude-code.win' },
 ]
 
 export function getAttributionEmail(modelName: string): string {

@@ -1,5 +1,5 @@
 {
-  "name": "@claude-code-best/weixin-plugin",
+  "name": "@claude-code/weixin-plugin",
   "version": "1.0.0",
   "private": true,
   "type": "module",

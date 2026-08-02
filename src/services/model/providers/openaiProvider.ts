@@ -7,7 +7,7 @@ import {
   anthropicToolChoiceToOpenAI,
   anthropicToolsToOpenAI,
 } from '@ant/model-provider'
-import { formatDeferredToolLine } from '@claude-code-best/builtin-tools/tools/SearchExtraToolsTool/prompt.js'
+import { formatDeferredToolLine } from '@claude-code/builtin-tools/tools/SearchExtraToolsTool/prompt.js'
 import type {
   AssistantMessage,
   Message,

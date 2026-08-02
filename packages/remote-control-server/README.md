@@ -10,19 +10,6 @@ Remote Control Server 是 Claude Code 的远程控制后端，允许你通过浏
 - **多环境管理** — 注册多个运行环境，支持心跳和断线重连
 - **认证安全** — API Key + JWT 双层认证
 
-## 快速开始
-
-### Docker 部署（推荐）
-
-```bash
-docker run -d \
-  --name rcs \
-  -p 3000:3000 \
-  -e RCS_API_KEYS=your-api-key-here \
-  -v rcs-data:/app/data \
-  ghcr.io/claude-code-best/remote-control-server:latest
-```
-
 ## 环境变量
 
 ### 服务器配置

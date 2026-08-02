@@ -9,8 +9,8 @@ import type { LocalJSXCommandCall, LocalJSXCommandContext } from '../../types/co
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-type SearchAdapterKey = 'tavily' | 'bing' | 'brave' | 'exa';
-type FetchAdapterKey = 'tavily' | 'http';
+type SearchAdapterKey = 'bing' | 'brave' | 'exa';
+type FetchAdapterKey = 'http';
 
 interface AdapterMeta {
   key: SearchAdapterKey | FetchAdapterKey;
@@ -20,9 +20,7 @@ interface AdapterMeta {
 }
 
 type SettingsJson = Record<string, unknown> & {
-  webSearchAdapter?: 'bing' | 'brave' | 'exa' | 'tavily';
-  webFetchAdapter?: 'tavily' | 'http';
-  tavilyEndpointUrl?: string;
+  webSearchAdapter?: 'bing' | 'brave' | 'exa';
   braveApiKey?: string;
   webFetchHttpTimeoutMs?: number;
   exaApiKey?: string;
@@ -34,14 +32,12 @@ type ViewState = { kind: 'main' } | { kind: 'config'; adapter: AdapterMeta };
 // ── Data ───────────────────────────────────────────────────────────────────
 
 const SEARCH_ADAPTERS: AdapterMeta[] = [
-  { key: 'tavily', label: 'Tavily', description: 'Tavily Search API (default)', hasConfig: true },
   { key: 'bing', label: 'Bing', description: 'Scrape Bing HTML results', hasConfig: false },
   { key: 'brave', label: 'Brave', description: 'Brave Search API (needs API key)', hasConfig: true },
   { key: 'exa', label: 'Exa', description: 'Exa AI search (MCP endpoint)', hasConfig: true },
 ];
 
 const FETCH_ADAPTERS: AdapterMeta[] = [
-  { key: 'tavily', label: 'Tavily Extract', description: 'Use Tavily /extract (default)', hasConfig: true },
   { key: 'http', label: 'HTTP Direct', description: 'Fetch URL directly via HTTP', hasConfig: true },
 ];
 
@@ -155,16 +151,6 @@ function MainView({
 function getConfigFields(adapter: AdapterMeta): ConfigField[] {
   const fields: ConfigField[] = [];
   switch (adapter.key) {
-    case 'tavily':
-      fields.push({
-        key: 'tavilyEndpointUrl',
-        label: 'Endpoint URL',
-        placeholder: 'https://tavily.claude-code-best.win',
-        maskInput: false,
-        getValue: s => s.tavilyEndpointUrl ?? 'https://tavily.claude-code-best.win',
-        setValue: (s, v) => ({ ...s, tavilyEndpointUrl: v || undefined }),
-      });
-      break;
     case 'brave':
       fields.push({
         key: 'braveApiKey',
@@ -476,8 +462,8 @@ function WebToolsPanel({
   const [view, setView] = useState<ViewState>({ kind: 'main' });
 
   const settings = getSettings_DEPRECATED() as unknown as SettingsJson;
-  const currentSearch = settings.webSearchAdapter ?? 'tavily';
-  const currentFetch = settings.webFetchAdapter ?? 'tavily';
+  const currentSearch = settings.webSearchAdapter ?? '';
+  const currentFetch = 'http';
 
   const insideModal = useIsInsideModal();
   const { rows } = useTerminalSize();
@@ -487,12 +473,13 @@ function WebToolsPanel({
 
   const handleSelectAdapter = useCallback(
     (key: string) => {
-      const t = currentTab;
-      const field = t === 'search' ? 'webSearchAdapter' : ('webFetchAdapter' as keyof SettingsJson);
-      updateSettingsForSource('userSettings', { [field]: key } as SettingsJson);
-      const adapters = t === 'search' ? SEARCH_ADAPTERS : FETCH_ADAPTERS;
-      const label = adapters.find(a => a.key === key)?.label ?? key;
-      onClose(`${t === 'search' ? 'Web search' : 'Web fetch'} backend set to ${label}.`);
+      if (currentTab === 'search') {
+        updateSettingsForSource('userSettings', { webSearchAdapter: key } as SettingsJson);
+        const label = SEARCH_ADAPTERS.find(a => a.key === key)?.label ?? key;
+        onClose(`Web search backend set to ${label}.`);
+        return;
+      }
+      onClose('Web fetch uses the built-in HTTP backend.');
     },
     [currentTab, onClose],
   );
@@ -518,8 +505,9 @@ function WebToolsPanel({
       const adapter = (view as Extract<ViewState, { kind: 'config' }>).adapter;
       const tab =
         view.kind === 'config' ? (SEARCH_ADAPTERS.some(a => a.key === adapter.key) ? 'search' : 'fetch') : currentTab;
-      const field = tab === 'search' ? ('webSearchAdapter' as const) : ('webFetchAdapter' as const);
-      updateSettingsForSource('userSettings', { [field]: adapter.key } as SettingsJson);
+      if (tab === 'search') {
+        updateSettingsForSource('userSettings', { webSearchAdapter: adapter.key } as SettingsJson);
+      }
       onClose(msg);
     },
     [onClose, view, currentTab],

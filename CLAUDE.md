@@ -31,10 +31,10 @@
 
 ```yaml
 # 自定义包（在 packages/ 下）
-@claude-code-best/agent-tools:  子代理工具（Explore/Plan/Verification 等）
-@claude-code-best/builtin-tools: 内置工具（Read、Write、Bash、Glob、Grep 等）
-@claude-code-best/mcp-client:    MCP（Model Context Protocol）客户端
-@claude-code-best/workflow-engine: 工作流编排引擎
+@claude-code/agent-tools:  子代理工具（Explore/Plan/Verification 等）
+@claude-code/builtin-tools: 内置工具（Read、Write、Bash、Glob、Grep 等）
+@claude-code/mcp-client:    MCP（Model Context Protocol）客户端
+@claude-code/workflow-engine: 工作流编排引擎
 
 # 本地插件（在 plugins/ 下）
 chrome:         Chrome MCP、Skill、Native Host 与扩展
@@ -208,7 +208,7 @@ claude-code/
 │   ├── utils/                # 工具函数
 │   └── ...
 ├── packages/                 # 工作空间包
-│   ├── @claude-code-best/    # 自定义包
+│   ├── @claude-code/    # 自定义包
 │   └── @ant/                 # Ant 工具包
 ├── scripts/                  # 构建/开发/验证脚本
 │   ├── defines.ts            # MACRO 定义

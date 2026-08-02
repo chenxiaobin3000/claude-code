@@ -45,6 +45,7 @@ const removedPaths = [
   'packages/builtin-tools/src/tools/SubscribePRTool/SubscribePRTool.ts',
   'src/components/messages/UserGitHubWebhookMessage.tsx',
   'packages/builtin-tools/src/tools/WebSearchTool/adapters/apiAdapter.ts',
+  'packages/builtin-tools/src/tools/WebSearchTool/adapters/tavilyAdapter.ts',
 ]
 for (const path of removedPaths) {
   if (await exists(path)) fail(`removed interface path was restored: ${path}`)
@@ -65,6 +66,8 @@ const forbiddenMarkers = [
   'SubscribePRTool',
   'registry.modelcontextprotocol.io',
   'Anthropic server-side web search',
+  'tavilyEndpointUrl',
+  'fetchContentWithTavily',
 ]
 for (const dir of ['src', 'packages', 'scripts']) {
   for (const path of await sourceFiles(dir)) {

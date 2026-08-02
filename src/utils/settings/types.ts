@@ -550,25 +550,10 @@ export const SettingsSchema = lazySchema(() =>
           'Skip the WebFetch blocklist check for enterprise environments with restrictive security policies',
         ),
       webSearchAdapter: z
-        .enum(['bing', 'brave', 'exa', 'tavily'])
+        .enum(['bing', 'brave', 'exa'])
         .optional()
         .describe(
-          'Web search backend adapter. "tavily" uses Tavily Search API (default), ' +
-            '"bing" scrapes Bing HTML, "brave" uses Brave Search API, and "exa" uses Exa AI.',
-        ),
-      webFetchAdapter: z
-        .enum(['tavily', 'http'])
-        .optional()
-        .describe(
-          'Web fetch backend. "tavily" uses Tavily Extract API which returns Markdown directly (default), ' +
-            '"http" fetches the URL directly via HTTP.',
-        ),
-      tavilyEndpointUrl: z
-        .string()
-        .optional()
-        .describe(
-          'Custom Tavily API endpoint URL. Defaults to https://tavily.claude-code-best.win. ' +
-            'Used by both WebSearch and WebFetch when tavily adapter is selected.',
+          'Web search backend adapter. "bing" scrapes Bing HTML, "brave" uses Brave Search API, and "exa" uses Exa AI. No backend is selected by default.',
         ),
       braveApiKey: z
         .string()
