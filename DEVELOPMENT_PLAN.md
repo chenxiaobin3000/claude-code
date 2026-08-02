@@ -154,7 +154,40 @@
 
 完成条件：至少两个 Telegram Bot 可由 `telegram-host` 同时长轮询运行，且不会串 Token、Update、Chat、Topic、附件、权限或 Secret；源码开发使用显式 `--plugin-dir plugins/telegram`，生产使用 standalone 同级 `plugins/telegram` 自动发现，删除插件目录即可完整移除能力；`typecheck:telegram-host`、`build:telegram-host`、依赖边界、分发验证和 `bun run verify -- --ci` 全部通过。固定 Fixture 通过后，再使用真实 BotFather Token 验收私聊、群聊、Topic、断线恢复、图片和文件收发。
 
-### P3：可选产品能力
+### P3：Telegram 用户账号 Channel 插件
+
+- [ ] 新增独立的 `telegram-user` 插件，使用 TypeScript 的 GramJS（npm 包 `telegram`）连接 Telegram MTProto，不使用 grammY Bot API，也不与 `telegram` Bot 插件共享代码路径、配置、凭据、Session、路由或权限状态。GramJS 是插件内正式运行时依赖，只能进入 `plugins/telegram-user` 和独立 Host，不得进入根包、主 CLI、其他插件或非 Telegram User 生产 Bundle。
+- [ ] 实施前先冻结 GramJS、Telegram MTProto Layer 和官方 Telegram API 文档的精确版本、仓库 commit 与审计日期，并完成最小技术验证：Bun 直接运行、`api_id`/`api_hash` 登录、手机号验证码、2FA、StringSession 保存/恢复、消息与媒体收发、断线重连，以及当前支持平台的 `bun build --compile` standalone。GramJS 官方只明确支持 Node.js/浏览器，因此 Bun 与 standalone 兼容性必须以真实产物验证，不能凭接口相似性判定。
+- [ ] 技术验证通过后，在 `plugins/telegram-user` 建立标准 `telegram-user` Plugin Manifest、独立 TypeScript/Bun workspace、stdio MCP Server、`telegram-user-host` 和 standalone 分发目录。源码通过显式 `--plugin-dir plugins/telegram-user` 加载，生产通过 standalone 同级一级目录自动发现；删除插件目录即可完整移除普通 Telegram 用户账号能力。
+- [ ] 若 GramJS 无法稳定运行或打入当前支持平台的 Bun standalone，P3 必须停在不通过状态并记录具体边界，再单独决策 Node Host、Telethon/Python sidecar 或 TDLib 原生库；不得自动引入 Python、Node Runtime、C++ 动态库或静默切换实现。Telethon 只是后备评估对象，不属于当前 P3 的默认依赖与分发范围。
+- [ ] 登录需要应用级 `api_id` 与 `api_hash`，以及账号级手机号、一次性验证码和可选 2FA 密码；这些值只能从秘密环境变量、私有交互输入或私有状态读取，禁止出现在普通命令参数、Manifest、Shell 历史和日志中。提供 `telegram-user-host account add|login|logout|remove|list|doctor` 和 `mcp` 生命周期，验证码与 2FA 只在当前交互中使用，不落盘。
+- [ ] 支持多个 Telegram 用户账号并要求本地别名唯一；每个账号独立保存 MTProto Session、数据中心连接、Update 状态、允许列表、排重状态和体验配置。Session 等价于长期登录凭据，必须使用逐账号私有目录、原子写入和严格文件权限，日志与诊断不得返回 Session、Auth Key、`api_hash`、手机号、验证码、2FA、完整敏感消息或带鉴权信息的媒体地址；一个账号故障不得影响其他账号。
+- [ ] 产品范围只包含已登录账号显式允许的私聊、群组和频道消息接收，以及文本和受支持媒体的定向回复；默认不订阅全部会话，首次启用必须配置 Chat/User allowlist。P3 不实现批量群发、联系人导入、自动加群、自动私聊陌生用户、账号资料修改、删除消息、群管理、频道管理、通话、Secret Chat、账号注册或绕过 Telegram 风控；平台拒绝或权限不足时必须明确失败。
+- [ ] 将 MTProto Update 转换为标准 Channel 通知，路由固定编码账号别名、Peer 类型、Peer ID 和可选 Topic/Thread ID，保留消息 ID、发送者、引用、编辑状态和附件元数据。必须过滤本账号发出的回声、插件自己的回复和排重命中的 Update，避免模型与账号形成自激循环；Peer/access hash 只按账号作用域保存和解析，跨账号或目标不唯一时 fail-closed。
+- [ ] MCP 首版只提供绑定原入站消息的 `reply` 和受限媒体回复；主动发送默认关闭，并要求独立、高风险工具权限和明确目标。所有权限审批按账号、Peer 类型、Peer ID、Topic、发送者和 Request ID 隔离，群内其他成员、其他会话或其他账号不得批准请求；普通用户账号操作必须在 UI 和审批文本中明确标注“将以你的 Telegram 用户身份执行”，不能伪装成 Bot 操作。
+- [ ] 为网络重连、FloodWait、迁移到其他数据中心、Session 失效、验证码过期、2FA 错误和账号被限制提供有界恢复与脱敏诊断。只对 Telegram 明确要求等待且可以安全重试的请求执行有限重试；结果不确定的发送操作、批量动作和权限敏感动作不得自动重放，禁止无限重连、无限验证码请求或规避平台限制。
+- [ ] 在 `scripts/validation` 增加 GramJS/Bun 技术验证、插件与依赖边界、登录状态机、Session 安全、多账号隔离、路由、回声抑制、媒体、权限、错误恢复和分发验证，并统一并入 `bun run verify`。固定 Fixture 或可注入传输至少覆盖验证码/2FA、Session 恢复、双账号并发、Peer/access hash 隔离、Update 排重、跨账号拒绝、FloodWait、断线与 DC 迁移、敏感信息脱敏、Host EOF、standalone 自动发现，以及 GramJS 不进入根 CLI 和其他 Bundle；真实账号只作为固定 Fixture 之后的附加验收。
+- [ ] 后续升级采用人工同步：发现 Telegram MTProto Layer、GramJS 或 Telegram API 条款变化后，先冻结版本和 commit，审计协议、生成类型、Session 格式、依赖、Bundle 与产品风险，只移植当前边界需要的行为并更新 Fixture；验证通过后再更新兼容元数据，禁止自动下载、覆盖插件、更新 Session 或触发 CLI 自更新。
+
+完成条件：GramJS 在当前支持平台的 Bun 开发运行和 standalone 产物均通过真实验证；至少两个 Telegram 用户账号可以同时连接，且不会串 Session、Peer、Update、附件、权限或秘密；插件默认只处理 allowlist 会话、不会处理自身回声，也不会提供批量或账号管理型高风险操作；`typecheck:telegram-user-host`、`build:telegram-user-host`、依赖边界、分发验证和 `bun run verify -- --ci` 全部通过。随后使用专门的低权限测试账号验收登录、重启恢复、私聊、群组、频道、Topic、断线恢复及媒体收发，禁止直接使用重要主账号作为首次验收对象。
+
+### P4：X 只读 MCP 工具插件
+
+- [ ] 新增独立的 `x` 插件，首版使用 X 官方 TypeScript XDK（`@xdevplatform/xdk`）调用 X API，不引入 Python、Tweepy 或社区 Twitter SDK。官方 XDK 是插件内正式运行时依赖，只能进入 `plugins/x` 和独立 Host，不得进入根包、主 CLI、其他插件或非 X 生产 Bundle；删除插件目录即可完整移除 X 能力。
+- [ ] 实施前冻结 X API、官方 TypeScript XDK、官方鉴权文档及计费/限流说明的精确版本、仓库 commit 和审计日期，并先验证 Bun 直接运行、App-only Bearer Token、查询与分页、`429`/Rate Limit Header、AbortSignal，以及当前支持平台的 `bun build --compile` standalone。若官方 XDK 无法稳定运行或打包，再单独决策插件内直接 `fetch` 官方 API；不得自动引入 Python/Tweepy、Node Runtime 或社区 SDK。
+- [ ] 在 `plugins/x` 建立标准 `x` Plugin Manifest、独立 TypeScript/Bun workspace、stdio MCP Server、`x-host` 和 standalone 分发目录。主程序只通过现有插件发现和 MCP 生命周期接入，不增加 X SDK、静态注册、专用主 CLI 命令或业务实现；源码使用显式 `--plugin-dir plugins/x`，生产使用 standalone 同级一级目录自动发现。
+- [ ] 配置以 X Developer App 别名为核心并支持多个 App，首版每个 App 只绑定一个 App-only Bearer Token 环境变量。现有 `TWEEPY_BEARER_TOKEN` 可以作为配置中的 `bearerTokenEnv` 继续使用，但它只是环境变量名，不形成 Tweepy 依赖；新配置建议使用 `X_BEARER_TOKEN`。提供 `x-host app add|remove|list|doctor` 和 `mcp` 生命周期，Token 不得出现在普通命令参数、Manifest、配置值或日志中。
+- [ ] 首版只提供受限的公开数据读取工具：`x_get_post`、`x_get_thread`、`x_get_user`、`x_get_user_posts`、`x_search_recent` 和在当前 App 权限下可用的 `x_get_mentions`。每个工具必须固定 fields/expansions 白名单、单次结果数、自动分页页数、响应字节数、超时、并发和可接受 API 消耗上限；不得由模型无限翻页、自动扩大搜索范围或将部分结果伪装为完整结果。
+- [ ] App-only Bearer Token 只代表应用，不能当作用户登录状态。P4 不提供发布、回复、删除、点赞、转发、关注、取消关注、私信、账号修改、列表管理、媒体上传或其他用户身份写操作，也不实现 OAuth 1.0a、OAuth 2.0 PKCE 用户授权；SDK 中存在对应接口不代表本项目允许暴露。权限或订阅级别不足时必须返回明确错误，不尝试其他凭据或降级到网页抓取。
+- [ ] 首版是按需调用的 MCP 工具插件，不是 Channel，也不启动 Filtered Stream、Account Activity、Webhook、后台轮询或自动通知。实时监听涉及持续 API 消耗、Stream Rule、断线恢复、事件排重和自动响应循环，必须在后续获得独立产品决策后另行规划，不能随着只读查询实现隐式启用。
+- [ ] 实现统一的 X API 错误与费用边界，区分 `401`、`403`、`404`、`429`、套餐/Endpoint 不可用、网络失败和服务端错误；读取并返回脱敏的 Rate Limit 摘要，按 `x-rate-limit-reset` 有界等待或明确失败。默认不自动重放可能产生额外计费的请求，不跨工具共享无限重试或分页预算；诊断不得记录 Bearer Token、Authorization Header、完整敏感查询或未截断的响应正文。
+- [ ] 若后续需要代表用户发布或回复，必须作为独立增量重新规划 OAuth 2.0 PKCE 或 OAuth 1.0a User Context、Token 刷新、账号选择、写工具权限和正文预览；写能力必须默认关闭、逐次审批、禁止批量发布，并对结果不确定的发送请求禁止自动重放。该后续能力不能复用 App-only Bearer Token 冒充用户授权，也不属于当前 P4 完成条件。
+- [ ] 在 `scripts/validation` 增加 X SDK/Bun 兼容、插件与依赖边界、App-only 鉴权、只读工具、字段白名单、分页/响应/费用上限、限流、错误分类、脱敏和分发验证，并统一并入 `bun run verify`。Fixture 使用可注入本地 X API 端点或固定传输，不依赖真实 Token，至少覆盖多 App 隔离、`401`/`403`/`429`、分页截断、AbortSignal、禁止写工具、禁止后台连接、Host EOF、standalone 自动发现，以及 XDK 不进入根 CLI 和其他 Bundle。
+- [ ] 后续升级采用人工同步：发现 X API、计费、权限、官方 XDK 或鉴权政策变化后，先冻结版本与 commit，审计 Endpoint、类型、授权要求、依赖、Bundle 和成本变化，只移植当前只读边界需要的行为并更新 Fixture；验证通过后再更新兼容元数据，禁止自动下载、更新插件、扩大 scopes 或触发 CLI 自更新。
+
+完成条件：`x-host` 可使用至少两个独立 App-only Bearer Token 配置执行受限公开数据查询且不会串 Token、分页、限流或费用预算；首版不包含任何用户写操作、OAuth 用户登录、Channel、Stream、Webhook 或后台轮询；源码和 standalone 分发均可删除式移除，`typecheck:x-host`、`build:x-host`、依赖边界、分发验证和 `bun run verify -- --ci` 全部通过。固定 Fixture 通过后，再用低权限测试 App 对真实 X API 验收用户查询、Post 查询、近期搜索、分页、限流和套餐拒绝行为。
+
+### P5：可选产品能力
 
 - [ ] 支持 macOS 专用、默认关闭的 `sandbox.allowAppleEvents`，并确保该例外不会放宽文件系统、网络或其他平台的边界。
 
