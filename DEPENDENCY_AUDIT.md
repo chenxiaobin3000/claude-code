@@ -12,6 +12,8 @@ The root package publishes `dist/` plus two runtime scripts. All three supported
 
 Packages imported by `src/` and workspace source therefore belong in `devDependencies`: they are inputs to the production bundle, not modules that the installed CLI resolves from `node_modules` at runtime. Bundle integrity validation rejects unresolved third-party imports after both Bun and Vite builds.
 
+The local `plugins/weixin` workspace owns its `qrcode`, MCP SDK, and Zod dependencies. They are compiled into the independent `weixin-host` distribution and are not imported by `src/` or included through a root workspace dependency. This keeps optional WeChat networking, media, and QR code code outside the main CLI bundle and its runtime dependency boundary.
+
 ## Installed production dependencies
 
 Only packages directly resolved by scripts shipped outside the bundle remain in `dependencies`:

@@ -7,19 +7,18 @@ import {
 import { startLogin, waitForLogin } from './login.js'
 import { confirmPairing } from './pairing.js'
 import { runWeixinMcpServer } from './server.js'
-import type { WeixinServerDeps } from './server.js'
 
 function printUsage(): void {
   process.stdout.write(
     [
       'Usage:',
-      '  ccb weixin serve',
-      '  ccb weixin login',
-      '  ccb weixin login clear',
-      '  ccb weixin access pair <code>',
+      '  weixin-host mcp',
+      '  weixin-host login',
+      '  weixin-host login clear',
+      '  weixin-host access pair <code>',
       '',
       'Session enablement:',
-      '  ccb --channels plugin:weixin@builtin',
+      '  claude --channels plugin:weixin@local',
     ].join('\n') + '\n',
   )
 }
@@ -39,9 +38,9 @@ async function runLogin(clear = false): Promise<void> {
         `  User ID: ${existing.userId || 'unknown'}`,
         `  Connected since: ${existing.savedAt}`,
         '',
-        'Run `ccb weixin login clear` to disconnect.',
+        'Run `weixin-host login clear` to disconnect.',
         'Restart Claude Code with:',
-        '  ccb --channels plugin:weixin@builtin',
+        '  claude --channels plugin:weixin@local',
       ].join('\n') + '\n',
     )
     return
@@ -77,7 +76,7 @@ async function runLogin(clear = false): Promise<void> {
       `  Base URL: ${result.baseUrl || DEFAULT_BASE_URL}`,
       '',
       'Restart Claude Code with:',
-      '  ccb --channels plugin:weixin@builtin',
+      '  claude --channels plugin:weixin@local',
     ].join('\n') + '\n',
   )
 }
@@ -99,20 +98,13 @@ function runAccess(args: string[]): void {
 
 export async function handleWeixinCli(
   args: string[],
-  serverDeps?: WeixinServerDeps,
   version?: string,
 ): Promise<void> {
   const [subcommand, ...rest] = args
 
   switch (subcommand) {
-    case 'serve':
-      if (!serverDeps) {
-        process.stderr.write(
-          '[weixin] serve handler not available in this context.\n',
-        )
-        process.exit(1)
-      }
-      await runWeixinMcpServer(version ?? '0.0.0', serverDeps)
+    case 'mcp':
+      await runWeixinMcpServer(version ?? '0.0.0')
       return
     case 'login':
       await runLogin(rest[0] === 'clear')

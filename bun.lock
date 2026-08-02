@@ -26,7 +26,6 @@
         "@claude-code-best/agent-tools": "workspace:*",
         "@claude-code-best/builtin-tools": "workspace:*",
         "@claude-code-best/mcp-client": "workspace:*",
-        "@claude-code-best/weixin": "workspace:*",
         "@claude-code-best/workflow-engine": "workspace:*",
         "@commander-js/extra-typings": "^14.0.0",
         "@modelcontextprotocol/sdk": "^1.29.0",
@@ -276,13 +275,6 @@
       "name": "url-handler-napi",
       "version": "1.0.0",
     },
-    "packages/weixin": {
-      "name": "@claude-code-best/weixin",
-      "version": "1.0.0",
-      "dependencies": {
-        "qrcode": "^1.5.4",
-      },
-    },
     "packages/workflow-engine": {
       "name": "@claude-code-best/workflow-engine",
       "version": "0.1.0",
@@ -293,6 +285,15 @@
       "devDependencies": {
         "@anthropic-ai/sdk": "0.81.0",
         "bun-types": "latest",
+      },
+    },
+    "plugins/weixin": {
+      "name": "@claude-code-best/weixin-plugin",
+      "version": "1.0.0",
+      "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.29.0",
+        "qrcode": "^1.5.4",
+        "zod": "^4.3.6",
       },
     },
   },
@@ -453,7 +454,7 @@
 
     "@claude-code-best/mcp-client": ["@claude-code-best/mcp-client@workspace:packages/mcp-client"],
 
-    "@claude-code-best/weixin": ["@claude-code-best/weixin@workspace:packages/weixin"],
+    "@claude-code-best/weixin-plugin": ["@claude-code-best/weixin-plugin@workspace:plugins/weixin"],
 
     "@claude-code-best/workflow-engine": ["@claude-code-best/workflow-engine@workspace:packages/workflow-engine"],
 

@@ -28,6 +28,7 @@ const pluginPath = join(
   'plugins',
   'claudeinchrome',
 )
+const weixinPluginPath = join(distributionRoot, 'plugins', 'weixin')
 const hiddenPluginPath = join(
   distributionRoot,
   `.claudeinchrome-validation-hidden-${process.pid}`,
@@ -53,6 +54,7 @@ function listPlugins(prefixArgs: string[] = []): ListedPlugin[] {
 
 await access(exe)
 await access(pluginPath)
+await access(weixinPluginPath)
 
 const automatic = listPlugins()
 const automaticChrome = automatic.find(
@@ -63,6 +65,14 @@ assertEqual(
   automaticChrome.source,
   'claudeinchrome@local',
   'standalone automatic source',
+)
+const automaticWeixin = automatic.find(plugin => plugin.name === 'weixin')
+assert(automaticWeixin, 'standalone must automatically discover weixin')
+assertEqual(automaticWeixin.source, 'weixin@local', 'weixin automatic source')
+assertEqual(
+  resolve(automaticWeixin.path),
+  resolve(weixinPluginPath),
+  'weixin automatic plugin path',
 )
 assertEqual(
   resolve(automaticChrome.path),
@@ -97,6 +107,10 @@ try {
       plugin => plugin.name === 'claudeinchrome',
     ),
     'removing the automatic plugin directory must remove its MCP and Skill entry point',
+  )
+  assert(
+    withoutAutomaticPlugin.some(plugin => plugin.name === 'weixin'),
+    'removing claudeinchrome must not remove the independent weixin plugin',
   )
 } finally {
   if (moved) await rename(hiddenPluginPath, pluginPath)

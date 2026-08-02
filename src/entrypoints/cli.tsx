@@ -117,28 +117,6 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (args[0] === 'weixin') {
-    profileCheckpoint('cli_weixin_path');
-    const { handleWeixinCli } = await import('@claude-code-best/weixin');
-    const { enableConfigs } = await import('../utils/config.js');
-    const { logForDebugging } = await import('../utils/debug.js');
-    const { ChannelPermissionRequestNotificationSchema } = await import('../services/mcp/channelNotification.js');
-    await handleWeixinCli(
-      args.slice(1),
-      {
-        enableConfigs,
-        logForDebugging,
-        registerPermissionHandler(server, handler) {
-          server.setNotificationHandler(ChannelPermissionRequestNotificationSchema(), async notification =>
-            handler(notification.params),
-          );
-        },
-      },
-      MACRO.VERSION,
-    );
-    return;
-  }
-
   // Fast-path for `claude daemon [subcommand]`: unified daemon + session management.
   // Handles both supervisor (start/stop) and background session (bg/attach/logs/kill)
   // subcommands under one namespace.

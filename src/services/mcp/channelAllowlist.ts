@@ -16,7 +16,6 @@
  */
 
 import { z } from 'zod/v4'
-import { BUILTIN_MARKETPLACE_NAME } from '../../plugins/builtinPlugins.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 import { parsePluginIdentifier } from '../../utils/plugins/pluginIdentifier.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../analytics/growthbook.js'
@@ -59,9 +58,9 @@ export function isChannelsEnabled(): boolean {
  * but standalone (no session/marketplace coupling — those are tautologies
  * when the entry is derived from pluginSource).
  *
- * Returns false for undefined pluginSource (non-plugin server — can never
- * match the {marketplace, plugin}-keyed ledger) and for @-less sources
- * (builtin/inline — same reason).
+ * The packaged local `weixin` Plugin is trusted as a shipped channel
+ * boundary. Explicit `--plugin-dir` copies remain development plugins and
+ * require the development-channel flow.
  */
 export function isChannelAllowlisted(
   pluginSource: string | undefined,
@@ -69,7 +68,7 @@ export function isChannelAllowlisted(
   if (!pluginSource) return false
   const { name, marketplace } = parsePluginIdentifier(pluginSource)
   if (!marketplace) return false
-  if (marketplace === BUILTIN_MARKETPLACE_NAME && name === 'weixin') {
+  if (marketplace === 'local' && name === 'weixin') {
     return true
   }
   return getChannelAllowlist().some(

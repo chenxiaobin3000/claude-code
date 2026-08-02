@@ -30,6 +30,7 @@ const validationScripts = [
   'scripts/validation/extension-api-compat.ts',
   'scripts/validation/mcp-lifecycle.ts',
   'scripts/validation/claudeinchrome-plugin-boundary.ts',
+  'scripts/validation/weixin-plugin-boundary.ts',
   'scripts/validation/claudeinchrome-protocol.ts',
   'scripts/validation/claudeinchrome-profiles.ts',
   'scripts/validation/claudeinchrome-host.ts',
@@ -332,6 +333,11 @@ async function main(): Promise<void> {
     'run',
     'typecheck:chrome-host',
   ])
+  await runStep('weixin Host typecheck', [
+    bunExecutable,
+    'run',
+    'typecheck:weixin-host',
+  ])
   await runStep('Biome lint', [bunExecutable, 'run', 'lint'])
   await runStep('workspace contract, checks, builds, and smoke', [
     bunExecutable,
@@ -400,6 +406,16 @@ async function main(): Promise<void> {
       'run',
       'scripts/validation/claudeinchrome-distribution.ts',
     ])
+    await runStep('weixin standalone Host build', [
+      bunExecutable,
+      'run',
+      'build:weixin-host',
+    ])
+    await runStep('weixin distributable Plugin validation', [
+      bunExecutable,
+      'run',
+      'scripts/validation/weixin-distribution.ts',
+    ])
     await runStep('standalone automatic Plugin lifecycle', [
       bunExecutable,
       'run',
@@ -421,6 +437,23 @@ async function main(): Promise<void> {
     if (chromeHostVersion.stdout.trim() !== '1.0.0') {
       throw new Error(
         `claudeinchrome Host version mismatch: ${chromeHostVersion.stdout.trim()}`,
+      )
+    }
+    const weixinHost = resolve(
+      projectRoot,
+      'dist',
+      'plugins',
+      'weixin',
+      'weixin-host.exe',
+    )
+    const weixinHostVersion = await runStep(
+      'weixin standalone Host version',
+      [weixinHost, '--version'],
+      { capture: true },
+    )
+    if (weixinHostVersion.stdout.trim() !== '1.0.0') {
+      throw new Error(
+        `weixin Host version mismatch: ${weixinHostVersion.stdout.trim()}`,
       )
     }
     await runStep('claudeinchrome Native Host EOF lifecycle', [chromeHost], {

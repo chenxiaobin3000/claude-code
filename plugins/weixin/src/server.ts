@@ -5,6 +5,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
+import { z } from 'zod/v4'
 import {
   CDN_BASE_URL,
   DEFAULT_BASE_URL,
@@ -22,13 +23,24 @@ import {
 import type { ParsedMessage } from './monitor.js'
 import type { ChannelPermissionRequestParams } from './permissions.js'
 
-export interface WeixinServerDeps {
-  enableConfigs(): void
-  logForDebugging(message: string): void
-  registerPermissionHandler(
-    server: Server,
-    handler: (request: ChannelPermissionRequestParams) => Promise<void>,
-  ): void
+const ChannelPermissionRequestNotificationSchema = z.object({
+  method: z.literal('notifications/claude/channel/permission_request'),
+  params: z.object({
+    request_id: z.string(),
+    tool_name: z.string(),
+    description: z.string(),
+    input_preview: z.string(),
+    channel_context: z
+      .object({
+        source_server: z.string().optional(),
+        chat_id: z.string().optional(),
+      })
+      .optional(),
+  }),
+})
+
+function logForDebugging(message: string): void {
+  process.stderr.write(`${message}\n`)
 }
 
 function formatPermissionRequestMessage(
@@ -107,7 +119,7 @@ export function createWeixinMcpServer(version: string): Server {
         content: [
           {
             type: 'text',
-            text: 'WeChat not connected. Run `ccb weixin login` first.',
+            text: 'WeChat not connected. Run `weixin-host login` first.',
           },
         ],
         isError: true,
@@ -231,24 +243,21 @@ export function createWeixinMcpServer(version: string): Server {
   return server
 }
 
-export async function runWeixinMcpServer(
-  version: string,
-  deps: WeixinServerDeps,
-): Promise<void> {
-  deps.enableConfigs()
-
+export async function runWeixinMcpServer(version: string): Promise<void> {
   const account = loadAccount()
   if (!account) {
     process.stderr.write(
-      '[weixin] No account configured. Run `ccb weixin login` to connect your WeChat account.\n',
+      '[weixin] No account configured. Run `weixin-host login` to connect your WeChat account.\n',
     )
     process.exit(1)
   }
 
   const server = createWeixinMcpServer(version)
   const transport = new StdioServerTransport()
+  const baseUrl = account.baseUrl || DEFAULT_BASE_URL
 
-  deps.registerPermissionHandler(server, async request => {
+  server.setNotificationHandler(ChannelPermissionRequestNotificationSchema, async notification => {
+    const request: ChannelPermissionRequestParams = notification.params
     const targetChatId = request.channel_context?.chat_id
     const targetChat = targetChatId
       ? {
@@ -258,7 +267,7 @@ export async function runWeixinMcpServer(
       : getActivePermissionChat()
 
     if (!targetChat) {
-      deps.logForDebugging(
+      logForDebugging(
         `[Weixin MCP] No active chat available for permission request ${request.request_id}`,
       )
       return
@@ -282,7 +291,6 @@ export async function runWeixinMcpServer(
 
   await server.connect(transport)
 
-  const baseUrl = account.baseUrl || DEFAULT_BASE_URL
   const controller = new AbortController()
 
   let exiting = false
@@ -312,7 +320,7 @@ export async function runWeixinMcpServer(
     }
   }, 5000)
 
-  deps.logForDebugging('[Weixin MCP] Starting poll loop')
+  logForDebugging('[Weixin MCP] Starting poll loop')
   await startPollLoop({
     baseUrl,
     cdnBaseUrl: CDN_BASE_URL,

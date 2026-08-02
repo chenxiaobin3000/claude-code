@@ -1,4 +1,4 @@
-// @claude-code-best/weixin — WeChat channel integration
+// weixin local Plugin — WeChat channel integration
 
 // Types
 export {
@@ -109,7 +109,6 @@ export type {
 
 // Server (MCP)
 export { createWeixinMcpServer, runWeixinMcpServer } from './server.js'
-export type { WeixinServerDeps } from './server.js'
 
 // CLI
 export { handleWeixinCli } from './cli.js'

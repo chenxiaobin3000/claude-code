@@ -11,6 +11,10 @@
   ],
   "ignoreBinaries": ["bun"],
   "workspaces": {
+    "plugins/weixin": {
+      "entry": ["host/entry.ts"],
+      "project": ["src/**/*.ts", "host/**/*.ts"]
+    },
     "packages/*": {
       "entry": ["src/index.ts"],
       "project": ["src/**/*.ts"]

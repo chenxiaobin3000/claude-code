@@ -1,5 +1,5 @@
 {
-  "name": "@claude-code-best/weixin",
+  "name": "@claude-code-best/weixin-plugin",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -12,10 +12,12 @@
   "workspaceValidation": {
     "build": {
       "applicable": false,
-      "reason": "Source-only internal package; bundled by the root CLI build."
+      "reason": "The root build:weixin-host script compiles this local Plugin into a standalone distribution."
     }
   },
   "dependencies": {
-    "qrcode": "^1.5.4"
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "qrcode": "^1.5.4",
+    "zod": "^4.3.6"
   }
 }

@@ -29,6 +29,7 @@
     "claude-code-best": "dist/cli-node.js"
   },
   "workspaces": [
+    "plugins/*",
     "packages/*",
     "packages/@ant/*",
     "packages/@anthropic-ai/*"
@@ -42,7 +43,8 @@
   "scripts": {
     "build": "bun run build.ts",
     "build:chrome-host": "bun run scripts/build-chrome-host.ts",
-    "build:production": "bun run build:exe && bun run build:chrome-host",
+    "build:weixin-host": "bun run scripts/build-weixin-host.ts",
+    "build:production": "bun run build:exe && bun run build:chrome-host && bun run build:weixin-host",
     "chrome:fixture": "bun run scripts/validation/claudeinchrome-browser-e2e.ts --serve-fixture",
     "chrome:verify": "bun run scripts/validation/claudeinchrome-browser-e2e.ts --connection",
     "chrome:verify:tools": "bun run scripts/validation/claudeinchrome-browser-e2e.ts --matrix",
@@ -68,6 +70,7 @@
     "docs:dev": "npx mintlify dev",
     "typecheck": "tsc --noEmit",
     "typecheck:chrome-host": "tsc -p plugins/claudeinchrome/tsconfig.json --noEmit --pretty false",
+    "typecheck:weixin-host": "tsc -p plugins/weixin/tsconfig.json --noEmit --pretty false",
     "precheck": "bun run typecheck && bun run check:fix",
     "rcs": "bun run scripts/rcs.ts"
   },
@@ -93,7 +96,6 @@
     "@claude-code-best/agent-tools": "workspace:*",
     "@claude-code-best/builtin-tools": "workspace:*",
     "@claude-code-best/mcp-client": "workspace:*",
-    "@claude-code-best/weixin": "workspace:*",
     "@claude-code-best/workflow-engine": "workspace:*",
     "@commander-js/extra-typings": "^14.0.0",
     "@modelcontextprotocol/sdk": "^1.29.0",

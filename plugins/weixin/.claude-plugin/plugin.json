@@ -1,0 +1,17 @@
+{
+  "name": "weixin",
+  "version": "1.0.0",
+  "apiVersion": "^1.0.0",
+  "description": "Local WeChat channel integration with inbound messages, replies, typing notifications, attachments, and permission relay.",
+  "author": {
+    "name": "claude-code-best"
+  },
+  "keywords": ["wechat", "weixin", "channel", "local"],
+  "mcpServers": {
+    "weixin": {
+      "type": "stdio",
+      "command": "bun",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/host/entry.ts", "mcp"]
+    }
+  }
+}

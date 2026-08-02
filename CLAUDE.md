@@ -34,8 +34,11 @@
 @claude-code-best/agent-tools:  子代理工具（Explore/Plan/Verification 等）
 @claude-code-best/builtin-tools: 内置工具（Read、Write、Bash、Glob、Grep 等）
 @claude-code-best/mcp-client:    MCP（Model Context Protocol）客户端
-@claude-code-best/weixin:        微信集成
 @claude-code-best/workflow-engine: 工作流编排引擎
+
+# 本地插件（在 plugins/ 下）
+claudeinchrome: Chrome MCP、Skill、Native Host 与扩展
+weixin:         微信 Channel、独立 MCP Host 与登录工具
 
 # Ant 包（在 packages/@ant/ 下）
 @ant/*:          Ant 相关工具（Chrome MCP、Computer Use 等）
@@ -52,7 +55,6 @@
   - `--version`：立即输出版本号，零模块加载
   - `--dump-system-prompt`：输出渲染后的系统提示
   - `--acp`：ACP（Agent Client Protocol）代理模式
-  - `weixin`：微信 CLI 模式
   - `--daemon-worker`：守护进程 worker 模式
   - `remote-control` / `rc`：远程控制/Bridge 模式
   - `daemon`：守护进程管理（start/stop/status/bg/attach/logs/kill）
@@ -73,6 +75,7 @@
 | `dist/cli-node.js` | `bun run build:vite` | `node dist/cli-node.js` |
 | `dist/claude.exe` | `bun run build:exe` | Windows 独立可执行文件 |
 | `dist/plugins/claudeinchrome/` | `bun run build:chrome-host` | 可选 Chrome 插件完整分发目录；内含独立 Native Messaging/MCP Host |
+| `dist/plugins/weixin/` | `bun run build:weixin-host` | 可选微信 Channel 插件完整分发目录；内含独立 MCP Host |
 
 ### 构建流程（`build.ts`）
 

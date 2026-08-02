@@ -18,8 +18,8 @@
 以下是以官方 `2.1.220` 为基线的产品差异，不应把上游功能说明误认为本项目能力。
 
 - **模型与登录**：官方的 Anthropic 登录、官方模型、组织默认/限制模型、Claude API Provider 与相关云端模型能力不适用。本项目只从 `models.json` 加载 OpenAI-compatible 模型；模型 Profile 静态声明，不做服务端模型发现或自动模型替换。
-- **云端与远程产品**：官方的 Web/Desktop/Mobile、Remote Control、GitHub App、Cloud Code Review、Routines、Channels、Artifacts、语音与账户/用量产品均不提供。本项目也不包含官方自动更新、安装器或远端遥测。
-- **插件与浏览器**：官方插件市场、远端安装/更新和插件自动重命名不提供。主程序本身不实现 Chrome 操作；生产 standalone 自动发现同级 `plugins` 一级目录中的本地 `claudeinchrome`，源码开发通过 `--plugin-dir` 加载。插件的标准 MCP、Skill、独立 Host、免运行时分发结构及真实 Chrome 工具矩阵已经验收。
+- **云端与远程产品**：官方的 Web/Desktop/Mobile、Remote Control、GitHub App、Cloud Code Review、Routines、云端 Channels、Artifacts、语音与账户/用量产品均不提供。本项目也不包含官方自动更新、安装器或远端遥测；可选的本地 `weixin` Channel 插件不依赖 Anthropic 云服务。
+- **插件与浏览器**：官方插件市场、远端安装/更新和插件自动重命名不提供。主程序不实现 Chrome 或微信业务；生产 standalone 自动发现同级 `plugins` 一级目录中的本地 `claudeinchrome` 与 `weixin`，源码开发通过 `--plugin-dir` 加载。两个插件均以独立 Host 分发，删除对应目录即可移除能力。
 - **Sandbox**：Windows 上启用 Sandbox 时，Shell 会在 Windows Sandbox VM 内执行，默认只映射启动工作区和只读 Shell 运行时，且固定断网、不传递用户主目录或凭据。`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands` 保持上层语义；Windows 不能精确落实域名白名单、代理和目录内文件 allow/deny 规则，配置这些规则时会 fail-closed，而不会回退宿主执行。
 - **会话路径**：官方 `/cd` 可迁移会话；本项目有意保持临时 cwd 语义，只改变主会话后续工具的当前目录，不迁移项目身份、会话存储、权限根、配置或扩展作用域。
 - **Agent、Hook、MCP 与 Skill**：本地 Agent、后台任务、Hook、Plugin、Skill 与 MCP 已固化为当前基线；嵌套 Skill 使用相对启动项目根的限定名，连续 inline Skill 可在同一条输入中组合。`/cd` 的临时 cwd、OpenAI-compatible Provider、本地安全增强和不提供云端 Agent 产品仍是明确差异。本地 `/mcp login`/`logout` 仅管理用户配置的 MCP OAuth 凭据。
@@ -182,6 +182,30 @@ Profile 冲突时都会拒绝执行，不会回退到第一个账户。
 4. 多账户使用时，在每个 Chrome 个人资料中分别加载扩展并从弹窗设置可辨识别名；
    Native Host 只需按操作系统用户注册一次，每个已打开的个人资料会建立独立端点。
 
+### weixin 插件
+
+微信 Channel 的登录、轮询、媒体、二维码、配对、回复和权限转发实现全部位于
+[`plugins/weixin`](plugins/weixin)。主程序不再包含 `ccb weixin` 专用命令、内置
+`weixin@builtin` 注册或微信 workspace 依赖。
+
+源码开发使用：
+
+```powershell
+bun plugins/weixin/host/entry.ts login
+bun run dev -- --plugin-dir plugins/weixin --dangerously-load-development-channels plugin:weixin@inline
+```
+
+生产分发使用：
+
+```powershell
+.\dist\plugins\weixin\weixin-host.exe login
+.\dist\claude.exe --channels plugin:weixin@local
+```
+
+生产来源 `weixin@local` 是已验收的本地 Channel 边界；显式 `--plugin-dir` 加载的
+`weixin@inline` 仍按开发插件处理。账号与配对状态保存在用户目录
+`.claude/channels/weixin`，不随插件目录复制。
+
 ## 构建与验证
 
 ```powershell
@@ -192,6 +216,7 @@ bun run build
 bun run build:node
 bun run build:exe
 bun run build:chrome-host
+bun run build:weixin-host
 bun run build:production
 bun run verify
 ```
@@ -203,9 +228,11 @@ bun run verify
 - Bun standalone EXE：Windows standalone EXE 单文件 `claude.exe`；内置 ripgrep 首次启动时按 SHA-256 校验并提取到用户配置缓存，不依赖系统 `rg` 或 EXE 同级文件。
 - claudeinchrome Plugin：`dist/plugins/claudeinchrome` 是完整分发目录，其中
   Host 为独立 Native Messaging/MCP 单文件，目标机器无需 Bun 或 Node.js。
+- weixin Plugin：`dist/plugins/weixin` 是完整分发目录，其中 Host 为独立 Channel
+  MCP 单文件，目标机器无需 Bun 或 Node.js。
 
 `bun run build:production` 一次生成 `dist/claude.exe` 和
-`dist/plugins/claudeinchrome`。整个 `dist` 是 Windows 生产分发单元：standalone
+`dist/plugins/claudeinchrome`、`dist/plugins/weixin`。整个 `dist` 是 Windows 生产分发单元：standalone
 启动时只自动加载同级 `plugins` 下的一级插件目录；`--plugin-dir <path>` 仍可加载
 临时插件或覆盖同名自动插件。自动发现不会安装 Chrome 扩展、注册 Native Host、
 下载插件或更新任何产物。
