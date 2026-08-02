@@ -30,7 +30,7 @@ const profiles: ChromeSocketEndpoint[] = [
 function expect(label: string, actual: unknown, expected: unknown): void {
   if (actual !== expected) {
     throw new Error(
-      `[claudeinchrome-profiles] ${label}: expected ${String(expected)}, received ${String(actual)}`,
+      `[chrome-profiles] ${label}: expected ${String(expected)}, received ${String(actual)}`,
     )
   }
 }
@@ -46,7 +46,7 @@ function expectFailure(
     if (error instanceof Error && error.message.includes(text)) return
     throw error
   }
-  throw new Error(`[claudeinchrome-profiles] ${label}: expected failure`)
+  throw new Error(`[chrome-profiles] ${label}: expected failure`)
 }
 
 expect(
@@ -117,4 +117,4 @@ expect(
   'endpoint-b',
 )
 
-console.log('[claudeinchrome-profiles] PASS')
+console.log('[chrome-profiles] PASS')

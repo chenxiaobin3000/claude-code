@@ -29,11 +29,11 @@ const validationScripts = [
   'scripts/validation/plugin-skill-lifecycle.ts',
   'scripts/validation/extension-api-compat.ts',
   'scripts/validation/mcp-lifecycle.ts',
-  'scripts/validation/claudeinchrome-plugin-boundary.ts',
+  'scripts/validation/chrome-plugin-boundary.ts',
   'scripts/validation/weixin-plugin-boundary.ts',
-  'scripts/validation/claudeinchrome-protocol.ts',
-  'scripts/validation/claudeinchrome-profiles.ts',
-  'scripts/validation/claudeinchrome-host.ts',
+  'scripts/validation/chrome-protocol.ts',
+  'scripts/validation/chrome-profiles.ts',
+  'scripts/validation/chrome-host.ts',
   'scripts/validation/product-surface-boundary.ts',
   'scripts/validation/observability-boundary.ts',
   'scripts/validation/performance-baseline.ts',
@@ -328,7 +328,7 @@ async function main(): Promise<void> {
     '--frozen-lockfile',
   ])
   await runStep('TypeScript typecheck', [bunExecutable, 'run', 'typecheck'])
-  await runStep('claudeinchrome Host typecheck', [
+  await runStep('chrome Host typecheck', [
     bunExecutable,
     'run',
     'typecheck:chrome-host',
@@ -396,15 +396,15 @@ async function main(): Promise<void> {
       'scripts/validation/standalone-markdown-config.ts',
       resolve(projectRoot, 'dist', 'claude.exe'),
     ])
-    await runStep('claudeinchrome standalone Host build', [
+    await runStep('chrome standalone Host build', [
       bunExecutable,
       'run',
       'build:chrome-host',
     ])
-    await runStep('claudeinchrome distributable Plugin validation', [
+    await runStep('chrome distributable Plugin validation', [
       bunExecutable,
       'run',
-      'scripts/validation/claudeinchrome-distribution.ts',
+      'scripts/validation/chrome-distribution.ts',
     ])
     await runStep('weixin standalone Host build', [
       bunExecutable,
@@ -430,13 +430,13 @@ async function main(): Promise<void> {
       'chrome-host.exe',
     )
     const chromeHostVersion = await runStep(
-      'claudeinchrome standalone Host version',
+      'chrome standalone Host version',
       [chromeHost, '--version'],
       { capture: true },
     )
     if (chromeHostVersion.stdout.trim() !== '1.0.0') {
       throw new Error(
-        `claudeinchrome Host version mismatch: ${chromeHostVersion.stdout.trim()}`,
+        `chrome Host version mismatch: ${chromeHostVersion.stdout.trim()}`,
       )
     }
     const weixinHost = resolve(
@@ -456,15 +456,15 @@ async function main(): Promise<void> {
         `weixin Host version mismatch: ${weixinHostVersion.stdout.trim()}`,
       )
     }
-    await runStep('claudeinchrome Native Host EOF lifecycle', [chromeHost], {
+    await runStep('chrome Native Host EOF lifecycle', [chromeHost], {
       capture: true,
       timeoutMs: 10_000,
       env: {
-        CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX: `verify-${process.pid}`,
+        CHROME_VALIDATION_SOCKET_SUFFIX: `verify-${process.pid}`,
       },
     })
     await runStep(
-      'claudeinchrome MCP Host EOF lifecycle',
+      'chrome MCP Host EOF lifecycle',
       [chromeHost, 'mcp'],
       { capture: true, timeoutMs: 10_000 },
     )

@@ -24,7 +24,7 @@ import {
 import { ChromeNativeHost } from '../../plugins/chrome/host/nativeHost.js'
 import {
   CHROME_NATIVE_HOST_NAME,
-  CLAUDEINCHROME_EXTENSION_ID,
+  CHROME_EXTENSION_ID,
 } from '../../plugins/chrome/protocol/index.js'
 
 const root = resolve(import.meta.dir, '../..')
@@ -41,7 +41,7 @@ const sources = await Promise.all(
 const combinedSource = sources.join('\n')
 if (!sources[2]!.includes('listen({ host: CHROME_SOCKET_HOST, port: 0 }')) {
   throw new Error(
-    '[claudeinchrome-host] Native Host must use a dynamic loopback TCP socket',
+    '[chrome-host] Native Host must use a dynamic loopback TCP socket',
   )
 }
 for (const forbiddenTransport of [
@@ -51,7 +51,7 @@ for (const forbiddenTransport of [
 ]) {
   if (combinedSource.includes(forbiddenTransport)) {
     throw new Error(
-      `[claudeinchrome-host] platform-specific transport remains: ${forbiddenTransport}`,
+      `[chrome-host] platform-specific transport remains: ${forbiddenTransport}`,
     )
   }
 }
@@ -65,13 +65,13 @@ for (const forbidden of [
 ]) {
   if (combinedSource.includes(forbidden)) {
     throw new Error(
-      `[claudeinchrome-host] plugin Host retained forbidden main/internal dependency: ${forbidden}`,
+      `[chrome-host] plugin Host retained forbidden main/internal dependency: ${forbidden}`,
     )
   }
 }
 for (const command of ['mcp', 'register', 'unregister', 'doctor']) {
   if (!sources[0]!.includes(`command === '${command}'`)) {
-    throw new Error(`[claudeinchrome-host] missing Host command: ${command}`)
+    throw new Error(`[chrome-host] missing Host command: ${command}`)
   }
 }
 for (const marker of [
@@ -81,7 +81,7 @@ for (const marker of [
 ]) {
   if (!sources[0]!.includes(marker)) {
     throw new Error(
-      `[claudeinchrome-host] Chrome Native Messaging launch boundary is missing: ${marker}`,
+      `[chrome-host] Chrome Native Messaging launch boundary is missing: ${marker}`,
     )
   }
 }
@@ -94,13 +94,13 @@ for (const marker of [
 ]) {
   if (!combinedSource.includes(marker)) {
     throw new Error(
-      `[claudeinchrome-host] missing lifecycle/message boundary: ${marker}`,
+      `[chrome-host] missing lifecycle/message boundary: ${marker}`,
     )
   }
 }
 
 const temporaryDirectory = await mkdtemp(
-  join(tmpdir(), 'claudeinchrome-host-validation-'),
+  join(tmpdir(), 'chrome-host-validation-'),
 )
 const fakeHost = join(
   temporaryDirectory,
@@ -117,20 +117,20 @@ const options = {
 }
 
 const originalValidationSuffix =
-  process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX
-delete process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX
+  process.env.CHROME_VALIDATION_SOCKET_SUFFIX
+delete process.env.CHROME_VALIDATION_SOCKET_SUFFIX
 const productionSocketDirectory = getSocketDirectory()
-process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX = `verify_${process.pid}`
+process.env.CHROME_VALIDATION_SOCKET_SUFFIX = `verify_${process.pid}`
 const validationSocketDirectory = getSocketDirectory()
 if (
   validationSocketDirectory === productionSocketDirectory ||
   !validationSocketDirectory.includes(`verify_${process.pid}`)
 ) {
   throw new Error(
-    '[claudeinchrome-host] validation socket suffix did not isolate the endpoint',
+    '[chrome-host] validation socket suffix did not isolate the endpoint',
   )
 }
-process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX = '../escape'
+process.env.CHROME_VALIDATION_SOCKET_SUFFIX = '../escape'
 let rejectedUnsafeSuffix = false
 try {
   getSocketDirectory()
@@ -139,11 +139,11 @@ try {
 }
 if (!rejectedUnsafeSuffix) {
   throw new Error(
-    '[claudeinchrome-host] unsafe validation socket suffix was accepted',
+    '[chrome-host] unsafe validation socket suffix was accepted',
   )
 }
 
-process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX = `verify_${process.pid}`
+process.env.CHROME_VALIDATION_SOCKET_SUFFIX = `verify_${process.pid}`
 try {
   await mkdir(getSocketDirectory(), { recursive: true })
   const endpoint = {
@@ -167,20 +167,20 @@ try {
     discovered[0]?.token !== endpoint.token
   ) {
     throw new Error(
-      '[claudeinchrome-host] loopback TCP endpoint discovery failed',
+      '[chrome-host] loopback TCP endpoint discovery failed',
     )
   }
 } finally {
   await rm(getSocketDirectory(), { recursive: true, force: true })
   if (originalValidationSuffix === undefined) {
-    delete process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX
+    delete process.env.CHROME_VALIDATION_SOCKET_SUFFIX
   } else {
-    process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX =
+    process.env.CHROME_VALIDATION_SOCKET_SUFFIX =
       originalValidationSuffix
   }
 }
 
-process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX = `runtime_${process.pid}`
+process.env.CHROME_VALIDATION_SOCKET_SUFFIX = `runtime_${process.pid}`
 const runtimeHost = new ChromeNativeHost()
 let stoppedEndpointCount = -1
 try {
@@ -200,7 +200,7 @@ try {
     runtimeEndpoints[0]?.profileName !== 'Runtime Validation'
   ) {
     throw new Error(
-      '[claudeinchrome-host] live loopback TCP endpoint was not published',
+      '[chrome-host] live loopback TCP endpoint was not published',
     )
   }
 } finally {
@@ -208,15 +208,15 @@ try {
   stoppedEndpointCount = getAvailableSocketEndpoints().length
   await rm(getSocketDirectory(), { recursive: true, force: true })
   if (originalValidationSuffix === undefined) {
-    delete process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX
+    delete process.env.CHROME_VALIDATION_SOCKET_SUFFIX
   } else {
-    process.env.CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX =
+    process.env.CHROME_VALIDATION_SOCKET_SUFFIX =
       originalValidationSuffix
   }
 }
 if (stoppedEndpointCount !== 0) {
   throw new Error(
-    '[claudeinchrome-host] stopped Host left a TCP endpoint record',
+    '[chrome-host] stopped Host left a TCP endpoint record',
   )
 }
 
@@ -235,21 +235,21 @@ try {
     manifest.name !== CHROME_NATIVE_HOST_NAME ||
     manifest.allowed_origins.length !== 1 ||
     manifest.allowed_origins[0] !==
-      `chrome-extension://${CLAUDEINCHROME_EXTENSION_ID}/`
+      `chrome-extension://${CHROME_EXTENSION_ID}/`
   ) {
-    throw new Error('[claudeinchrome-host] unsafe Native Host manifest')
+    throw new Error('[chrome-host] unsafe Native Host manifest')
   }
 
   const healthy = await doctorNativeHost(fakeHost, options)
   if (!healthy.ok) {
     throw new Error(
-      `[claudeinchrome-host] registered Host failed doctor: ${JSON.stringify(healthy.checks)}`,
+      `[chrome-host] registered Host failed doctor: ${JSON.stringify(healthy.checks)}`,
     )
   }
   const mismatch = await doctorNativeHost(otherHost, options)
   if (mismatch.ok) {
     throw new Error(
-      '[claudeinchrome-host] doctor accepted a mismatched installed wrapper',
+      '[chrome-host] doctor accepted a mismatched installed wrapper',
     )
   }
 
@@ -265,7 +265,7 @@ try {
   )
   const malformed = await doctorNativeHost(fakeHost, options)
   if (malformed.ok) {
-    throw new Error('[claudeinchrome-host] doctor accepted malformed manifest')
+    throw new Error('[chrome-host] doctor accepted malformed manifest')
   }
 
   await registerNativeHost(fakeHost, options)
@@ -274,10 +274,10 @@ try {
     .then(() => false)
     .catch(() => true)
   if (!removed) {
-    throw new Error('[claudeinchrome-host] unregister left its manifest behind')
+    throw new Error('[chrome-host] unregister left its manifest behind')
   }
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true })
 }
 
-console.log('[claudeinchrome-host] PASS')
+console.log('[chrome-host] PASS')

@@ -48,12 +48,12 @@ for (const path of [
 try {
   await access(join(root, 'plugins', 'claudeinchrome'))
   throw new Error(
-    '[claudeinchrome-plugin-boundary] legacy claudeinchrome Plugin directory still exists',
+    '[chrome-plugin-boundary] legacy claudeinchrome Plugin directory still exists',
   )
 } catch (error) {
   if (
     error instanceof Error &&
-    error.message.startsWith('[claudeinchrome-plugin-boundary]')
+    error.message.startsWith('[chrome-plugin-boundary]')
   ) {
     throw error
   }
@@ -64,7 +64,7 @@ const manifest = PluginManifestSchema().parse(
 )
 if (manifest.name !== 'chrome') {
   throw new Error(
-    `[claudeinchrome-plugin-boundary] unexpected plugin name: ${manifest.name}`,
+    `[chrome-plugin-boundary] unexpected plugin name: ${manifest.name}`,
   )
 }
 const mcpSpec = manifest.mcpServers
@@ -75,7 +75,7 @@ if (
   !('claude-in-chrome' in mcpSpec)
 ) {
   throw new Error(
-    '[claudeinchrome-plugin-boundary] standard claude-in-chrome MCP server is missing',
+    '[chrome-plugin-boundary] standard claude-in-chrome MCP server is missing',
   )
 }
 const declaredServer = mcpSpec['claude-in-chrome']
@@ -86,12 +86,12 @@ if (
   declaredServer.args.at(-1) !== 'mcp'
 ) {
   throw new Error(
-    '[claudeinchrome-plugin-boundary] source plugin MCP entry is not the local Host development entry',
+    '[chrome-plugin-boundary] source plugin MCP entry is not the local Host development entry',
   )
 }
 if (manifest.skills) {
   throw new Error(
-    '[claudeinchrome-plugin-boundary] standard skills/ discovery must not be duplicated in manifest.skills',
+    '[chrome-plugin-boundary] standard skills/ discovery must not be duplicated in manifest.skills',
   )
 }
 
@@ -103,7 +103,7 @@ const loaded = await createPluginFromPath(
 )
 if (loaded.errors.length > 0 || !loaded.plugin.skillsPath) {
   throw new Error(
-    `[claudeinchrome-plugin-boundary] plugin lifecycle load failed: ${JSON.stringify(loaded.errors)}`,
+    `[chrome-plugin-boundary] plugin lifecycle load failed: ${JSON.stringify(loaded.errors)}`,
   )
 }
 const loadErrors: Parameters<typeof loadPluginMcpServers>[1] = []
@@ -113,11 +113,11 @@ if (
   Object.keys(rawServers ?? {}).join(',') !== 'claude-in-chrome'
 ) {
   throw new Error(
-    `[claudeinchrome-plugin-boundary] plugin MCP load failed: ${JSON.stringify(loadErrors)}`,
+    `[chrome-plugin-boundary] plugin MCP load failed: ${JSON.stringify(loadErrors)}`,
   )
 }
 const pluginCache = await mkdtemp(
-  join(tmpdir(), 'claudeinchrome-plugin-cache-'),
+  join(tmpdir(), 'chrome-plugin-cache-'),
 )
 process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR = pluginCache
 const scopedServers = await extractMcpServersFromPlugins(
@@ -135,7 +135,7 @@ if (
     resolve(pluginRoot, 'host', 'entry.ts')
 ) {
   throw new Error(
-    '[claudeinchrome-plugin-boundary] plugin MCP environment was not resolved inside the plugin root',
+    '[chrome-plugin-boundary] plugin MCP environment was not resolved inside the plugin root',
   )
 }
 const skillSource = await readFile(
@@ -157,7 +157,7 @@ if (
   JSON.stringify([...skillTools].sort()) !== JSON.stringify(expectedSkillTools)
 ) {
   throw new Error(
-    '[claudeinchrome-plugin-boundary] Chrome Skill permissions do not exactly match its scoped MCP tools',
+    '[chrome-plugin-boundary] Chrome Skill permissions do not exactly match its scoped MCP tools',
   )
 }
 
@@ -172,7 +172,7 @@ const extensionManifest = JSON.parse(
 }
 if (extensionManifest.manifest_version !== 3 || !extensionManifest.key) {
   throw new Error(
-    '[claudeinchrome-plugin-boundary] extension must be Manifest V3 with a fixed key',
+    '[chrome-plugin-boundary] extension must be Manifest V3 with a fixed key',
   )
 }
 const digest = createHash('sha256')
@@ -185,7 +185,7 @@ const extensionId = [...digest]
   .join('')
 if (extensionId !== expectedExtensionId) {
   throw new Error(
-    `[claudeinchrome-plugin-boundary] extension ID changed: ${extensionId}`,
+    `[chrome-plugin-boundary] extension ID changed: ${extensionId}`,
   )
 }
 
@@ -209,12 +209,12 @@ for (const relative of removedMainPaths) {
   try {
     await access(join(root, relative))
     throw new Error(
-      `[claudeinchrome-plugin-boundary] main-tree Chrome entry restored: ${relative}`,
+      `[chrome-plugin-boundary] main-tree Chrome entry restored: ${relative}`,
     )
   } catch (error) {
     if (
       error instanceof Error &&
-      error.message.startsWith('[claudeinchrome-plugin-boundary]')
+      error.message.startsWith('[chrome-plugin-boundary]')
     ) {
       throw error
     }
@@ -258,7 +258,7 @@ for (const [relative, forbidden] of Object.entries(forbiddenByFile)) {
   for (const marker of forbidden) {
     if (source.includes(marker)) {
       throw new Error(
-        `[claudeinchrome-plugin-boundary] ${relative} restored main-tree marker ${marker}`,
+        `[chrome-plugin-boundary] ${relative} restored main-tree marker ${marker}`,
       )
     }
   }
@@ -278,7 +278,7 @@ if (
   extensionManifest.optional_host_permissions !== undefined
 ) {
   throw new Error(
-    '[claudeinchrome-plugin-boundary] browser Host access must remain fixed to all pages without a local authorization layer',
+    '[chrome-plugin-boundary] browser Host access must remain fixed to all pages without a local authorization layer',
   )
 }
 const extensionSource = await readFile(
@@ -300,7 +300,7 @@ for (const marker of [
 ]) {
   if (!screenshotSource.includes(marker)) {
     throw new Error(
-      `[claudeinchrome-plugin-boundary] screenshot boundary is missing: ${marker}`,
+      `[chrome-plugin-boundary] screenshot boundary is missing: ${marker}`,
     )
   }
 }
@@ -314,7 +314,7 @@ for (const marker of [
 ]) {
   if (!extensionSource.includes(marker)) {
     throw new Error(
-      `[claudeinchrome-plugin-boundary] bridge recovery boundary is missing: ${marker}`,
+      `[chrome-plugin-boundary] bridge recovery boundary is missing: ${marker}`,
     )
   }
 }
@@ -324,7 +324,7 @@ const contentSource = await readFile(
 )
 if (!contentSource.includes('element.focus({ preventScroll: true })')) {
   throw new Error(
-    '[claudeinchrome-plugin-boundary] computer click must preserve browser focus semantics',
+    '[chrome-plugin-boundary] computer click must preserve browser focus semantics',
   )
 }
 const popupSource = await readFile(
@@ -338,20 +338,20 @@ for (const marker of [
 ]) {
   if (popupSource.includes(marker) || extensionSource.includes(marker)) {
     throw new Error(
-      `[claudeinchrome-plugin-boundary] removed page authorization marker was restored: ${marker}`,
+      `[chrome-plugin-boundary] removed page authorization marker was restored: ${marker}`,
     )
   }
 }
 for (const marker of [
-  "const PROFILE_STORAGE_KEY = 'claudeinchromeProfile'",
+  "const PROFILE_STORAGE_KEY = 'chromeProfile'",
   'chrome.storage.local.get(PROFILE_STORAGE_KEY)',
   'chrome.storage.local.set({ [PROFILE_STORAGE_KEY]: profileIdentity })',
 ]) {
   if (!extensionSource.includes(marker)) {
     throw new Error(
-      `[claudeinchrome-plugin-boundary] profile-local identity storage is missing: ${marker}`,
+      `[chrome-plugin-boundary] profile-local identity storage is missing: ${marker}`,
     )
   }
 }
 
-console.log('[claudeinchrome-plugin-boundary] PASS')
+console.log('[chrome-plugin-boundary] PASS')

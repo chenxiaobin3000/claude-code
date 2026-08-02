@@ -1,6 +1,6 @@
 export const CHROME_NATIVE_HOST_NAME =
   'com.anthropic.claude_code_browser_extension'
-export const CLAUDEINCHROME_EXTENSION_ID = 'dlpofjonbnceelbmpelkfblmnghclmkm'
+export const CHROME_EXTENSION_ID = 'dlpofjonbnceelbmpelkfblmnghclmkm'
 
 export const MAX_CHROME_BRIDGE_MESSAGE_BYTES = 1024 * 1024
 export const CHROME_TOOL_TIMEOUT_MS = 30_000

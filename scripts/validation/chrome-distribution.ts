@@ -32,12 +32,12 @@ for (const path of [
 try {
   await access(join(root, 'dist', 'plugins', 'claudeinchrome'))
   throw new Error(
-    '[claudeinchrome-distribution] legacy Plugin distribution still exists',
+    '[chrome-distribution] legacy Plugin distribution still exists',
   )
 } catch (error) {
   if (
     error instanceof Error &&
-    error.message.startsWith('[claudeinchrome-distribution]')
+    error.message.startsWith('[chrome-distribution]')
   ) {
     throw error
   }
@@ -54,7 +54,7 @@ if (
   !('claude-in-chrome' in mcpSpec)
 ) {
   throw new Error(
-    '[claudeinchrome-distribution] distributable MCP declaration is missing',
+    '[chrome-distribution] distributable MCP declaration is missing',
   )
 }
 const server = mcpSpec['claude-in-chrome']
@@ -64,7 +64,7 @@ if (
   JSON.stringify(server.args) !== JSON.stringify(['mcp'])
 ) {
   throw new Error(
-    '[claudeinchrome-distribution] distributable MCP still depends on a source runtime',
+    '[chrome-distribution] distributable MCP still depends on a source runtime',
   )
 }
 
@@ -77,7 +77,7 @@ const loaded = await createPluginFromPath(
 const errors = [...loaded.errors]
 const rawServers = await loadPluginMcpServers(loaded.plugin, errors)
 const pluginCache = await mkdtemp(
-  join(tmpdir(), 'claudeinchrome-distribution-cache-'),
+  join(tmpdir(), 'chrome-distribution-cache-'),
 )
 process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR = pluginCache
 const scopedServers = await extractMcpServersFromPlugins(
@@ -95,8 +95,8 @@ if (
   resolve(scoped.command) !== resolve(hostPath)
 ) {
   throw new Error(
-    `[claudeinchrome-distribution] standard Plugin lifecycle failed: ${JSON.stringify(errors)}`,
+    `[chrome-distribution] standard Plugin lifecycle failed: ${JSON.stringify(errors)}`,
   )
 }
 
-console.log('[claudeinchrome-distribution] PASS')
+console.log('[chrome-distribution] PASS')

@@ -1,6 +1,6 @@
 const NATIVE_HOST = 'com.anthropic.claude_code_browser_extension'
 const MAX_BRIDGE_MESSAGE_BYTES = 1024 * 1024
-const PROFILE_STORAGE_KEY = 'claudeinchromeProfile'
+const PROFILE_STORAGE_KEY = 'chromeProfile'
 
 let nativePort = null
 let nativeConnecting = false

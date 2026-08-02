@@ -67,7 +67,7 @@ async function resolveHostPath(hostPath: string): Promise<string> {
 function createManifest(hostPath: string): NativeHostManifest {
   return {
     name: CHROME_NATIVE_HOST_NAME,
-    description: 'claudeinchrome local Native Messaging Host',
+    description: 'chrome local Native Messaging Host',
     path: hostPath,
     type: 'stdio',
     allowed_origins: [ALLOWED_EXTENSION_ORIGIN],

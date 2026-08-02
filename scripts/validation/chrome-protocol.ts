@@ -44,7 +44,7 @@ function assertSame(label: string, actual: string[], expected: string[]): void {
   const expectedSorted = sorted(expected)
   if (JSON.stringify(actualSorted) !== JSON.stringify(expectedSorted)) {
     throw new Error(
-      `[claudeinchrome-protocol] ${label} mismatch\nexpected: ${expectedSorted.join(', ')}\nactual: ${actualSorted.join(', ')}`,
+      `[chrome-protocol] ${label} mismatch\nexpected: ${expectedSorted.join(', ')}\nactual: ${actualSorted.join(', ')}`,
     )
   }
 }
@@ -55,7 +55,7 @@ const executeComputerStart = extensionSource.indexOf(
 )
 if (executeToolStart < 0 || executeComputerStart <= executeToolStart) {
   throw new Error(
-    '[claudeinchrome-protocol] cannot locate extension tool dispatcher',
+    '[chrome-protocol] cannot locate extension tool dispatcher',
   )
 }
 const executeToolSource = extensionSource.slice(
@@ -79,7 +79,7 @@ for (const tool of BROWSER_TOOLS) {
     | undefined
   if (profileId?.type !== 'string') {
     throw new Error(
-      `[claudeinchrome-protocol] ${tool.name} does not accept profileId`,
+      `[chrome-protocol] ${tool.name} does not accept profileId`,
     )
   }
 }
@@ -92,7 +92,7 @@ const computerActions = (
 )?.enum
 if (!computerActions || computerActions.includes('zoom')) {
   throw new Error(
-    '[claudeinchrome-protocol] computer schema advertises unsupported zoom',
+    '[chrome-protocol] computer schema advertises unsupported zoom',
   )
 }
 
@@ -107,12 +107,12 @@ const unsupportedTools = [
 for (const name of unsupportedTools) {
   if (advertisedTools.includes(name)) {
     throw new Error(
-      `[claudeinchrome-protocol] unsupported MCP tool advertised: ${name}`,
+      `[chrome-protocol] unsupported MCP tool advertised: ${name}`,
     )
   }
   if (promptSource.includes(`__${name}`)) {
     throw new Error(
-      `[claudeinchrome-protocol] prompt advertises unsupported tool: ${name}`,
+      `[chrome-protocol] prompt advertises unsupported tool: ${name}`,
     )
   }
 }
@@ -122,14 +122,14 @@ const nativeHostLiteral = extensionSource.match(
 )?.[1]
 if (nativeHostLiteral !== CHROME_NATIVE_HOST_NAME) {
   throw new Error(
-    `[claudeinchrome-protocol] native host mismatch: ${nativeHostLiteral}`,
+    `[chrome-protocol] native host mismatch: ${nativeHostLiteral}`,
   )
 }
 if (MAX_CHROME_BRIDGE_MESSAGE_BYTES !== 1024 * 1024) {
-  throw new Error('[claudeinchrome-protocol] message limit changed')
+  throw new Error('[chrome-protocol] message limit changed')
 }
 if (CHROME_TOOL_TIMEOUT_MS !== 30_000) {
-  throw new Error('[claudeinchrome-protocol] tool timeout changed')
+  throw new Error('[chrome-protocol] tool timeout changed')
 }
 
 for (const [label, source, markers] of [
@@ -164,10 +164,10 @@ for (const [label, source, markers] of [
   for (const marker of markers) {
     if (!source.includes(marker)) {
       throw new Error(
-        `[claudeinchrome-protocol] ${label} does not enforce ${marker}`,
+        `[chrome-protocol] ${label} does not enforce ${marker}`,
       )
     }
   }
 }
 
-console.log('[claudeinchrome-protocol] PASS')
+console.log('[chrome-protocol] PASS')

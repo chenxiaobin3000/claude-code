@@ -4,13 +4,13 @@ import { join } from 'node:path'
 import type { ChromeSocketEndpoint } from '../protocol/index.js'
 import {
   CHROME_NATIVE_HOST_NAME,
-  CLAUDEINCHROME_EXTENSION_ID,
+  CHROME_EXTENSION_ID,
 } from '../protocol/index.js'
 
 export const NATIVE_HOST_MANIFEST_NAME = `${CHROME_NATIVE_HOST_NAME}.json`
-export const ALLOWED_EXTENSION_ORIGIN = `chrome-extension://${CLAUDEINCHROME_EXTENSION_ID}/`
+export const ALLOWED_EXTENSION_ORIGIN = `chrome-extension://${CHROME_EXTENSION_ID}/`
 export const CHROME_SOCKET_HOST = '127.0.0.1' as const
-const VALIDATION_SOCKET_SUFFIX_ENV = 'CLAUDEINCHROME_VALIDATION_SOCKET_SUFFIX'
+const VALIDATION_SOCKET_SUFFIX_ENV = 'CHROME_VALIDATION_SOCKET_SUFFIX'
 
 function username(): string {
   let value = 'default'
@@ -37,13 +37,13 @@ function validationSocketSuffix(): string {
 export function getSocketDirectory(): string {
   return join(
     tmpdir(),
-    `claudeinchrome-${username()}${validationSocketSuffix()}`,
+    `chrome-${username()}${validationSocketSuffix()}`,
   )
 }
 
 export function getEndpointDescriptorPath(instanceId: string): string {
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(instanceId)) {
-    throw new Error('Invalid claudeinchrome instance ID')
+    throw new Error('Invalid chrome instance ID')
   }
   return join(getSocketDirectory(), `${instanceId}.json`)
 }
@@ -104,7 +104,7 @@ export function getManifestPath(): string {
     return join(
       localAppData,
       'claude-code',
-      'claudeinchrome',
+      'chrome',
       NATIVE_HOST_MANIFEST_NAME,
     )
   }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { runClaudeInChromeMcpServer } from './mcpServer.js'
+import { runChromeMcpServer } from './mcpServer.js'
 import { runChromeNativeHost } from './nativeHost.js'
 import {
   doctorNativeHost,
@@ -12,7 +12,7 @@ import { ALLOWED_EXTENSION_ORIGIN } from './paths.js'
 const VERSION = '1.0.0'
 
 function printHelp(): void {
-  console.log(`claudeinchrome Host ${VERSION}
+  console.log(`chrome Host ${VERSION}
 
 Usage:
   chrome-host                  Run as Chrome Native Messaging Host
@@ -40,17 +40,17 @@ async function main(): Promise<void> {
   }
   const command = args[0]
   if (command === 'mcp') {
-    await runClaudeInChromeMcpServer()
+    await runChromeMcpServer()
     return
   }
   if (command === 'register') {
     const manifestPath = await registerNativeHost(process.execPath)
-    console.log(`Registered claudeinchrome Native Host: ${manifestPath}`)
+    console.log(`Registered chrome Native Host: ${manifestPath}`)
     return
   }
   if (command === 'unregister') {
     await unregisterNativeHost()
-    console.log('Unregistered claudeinchrome Native Host')
+    console.log('Unregistered chrome Native Host')
     return
   }
   if (command === 'doctor') {

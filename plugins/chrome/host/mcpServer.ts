@@ -34,11 +34,11 @@ class StderrLogger implements Logger {
     detail?: LoggerDetail,
   ): void {
     const suffix = detail ? ` ${format(detail)}` : ''
-    console.error(`[claudeinchrome:${level}] ${message}${suffix}`)
+    console.error(`[chrome:${level}] ${message}${suffix}`)
   }
 }
 
-export async function runClaudeInChromeMcpServer(): Promise<void> {
+export async function runChromeMcpServer(): Promise<void> {
   const logger = new StderrLogger()
   const server = createClaudeForChromeMcpServer({
     serverName: 'claude-in-chrome',
@@ -49,7 +49,7 @@ export async function runClaudeInChromeMcpServer(): Promise<void> {
       logger.warn('Unexpected authentication error from local Chrome bridge')
     },
     onToolCallDisconnected: () =>
-      'Chrome extension is not connected. Register the claudeinchrome Native Host, load the local extension, and try again.',
+      'Chrome extension is not connected. Register the chrome Native Host, load the local extension, and try again.',
   })
   const transport = new StdioServerTransport()
 

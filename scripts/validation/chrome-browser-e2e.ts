@@ -8,7 +8,7 @@ import { IMPLEMENTED_CHROME_TOOL_NAMES } from '../../plugins/chrome/protocol/ind
 
 const root = resolve(import.meta.dir, '../..')
 const hostPath =
-  process.env.CLAUDEINCHROME_HOST?.trim() ||
+  process.env.CHROME_HOST?.trim() ||
   join(
     root,
     'dist',
@@ -19,7 +19,7 @@ const hostPath =
       : 'chrome-host',
   )
 const fixturePort = Number.parseInt(
-  process.env.CLAUDEINCHROME_FIXTURE_PORT ?? '17381',
+  process.env.CHROME_FIXTURE_PORT ?? '17381',
   10,
 )
 const fixtureOrigin = `http://127.0.0.1:${fixturePort}`
@@ -41,13 +41,13 @@ interface ToolResult {
 }
 
 function fail(message: string): never {
-  throw new Error(`[claudeinchrome-browser-e2e] ${message}`)
+  throw new Error(`[chrome-browser-e2e] ${message}`)
 }
 
 function progress(message: string): void {
-  const line = `[claudeinchrome-browser-e2e] ${message}`
+  const line = `[chrome-browser-e2e] ${message}`
   console.log(line)
-  const logPath = process.env.CLAUDEINCHROME_E2E_LOG?.trim()
+  const logPath = process.env.CHROME_E2E_LOG?.trim()
   if (logPath) appendFileSync(logPath, `${line}\n`, 'utf8')
 }
 
@@ -94,7 +94,7 @@ function fixtureHtml(): string {
 <html>
   <head>
     <meta charset="utf-8">
-    <title>claudeinchrome E2E fixture</title>
+    <title>chrome E2E fixture</title>
     <style>
       body { font-family: sans-serif; min-height: 1600px; margin: 24px; }
       label, button, a { display: block; margin: 16px 0; }
@@ -103,7 +103,7 @@ function fixtureHtml(): string {
   </head>
   <body>
     <main>
-      <h1>claudeinchrome E2E fixture</h1>
+      <h1>chrome E2E fixture</h1>
       <p id="fixture-marker">CHROME_E2E_FIXTURE_READY</p>
       <label>Fixture input <input aria-label="Fixture input" value=""></label>
       <button id="fixture-button" type="button">Fixture action</button>
@@ -139,9 +139,9 @@ async function serveFixture(): Promise<void> {
       })
     },
   })
-  console.log(`[claudeinchrome-browser-e2e] fixture: ${server.url}`)
+  console.log(`[chrome-browser-e2e] fixture: ${server.url}`)
   console.log(
-    '[claudeinchrome-browser-e2e] keep this process running while executing --matrix',
+    '[chrome-browser-e2e] keep this process running while executing --matrix',
   )
   await new Promise<void>(resolve => {
     const close = () => {
@@ -162,7 +162,7 @@ async function withClient(
     stderr: 'ignore',
   })
   const client = new Client({
-    name: 'claudeinchrome-browser-e2e',
+    name: 'chrome-browser-e2e',
     version: '1.0.0',
   })
   try {
@@ -257,7 +257,7 @@ async function verifyConnection(client: Client): Promise<{
     fail('tabs_context_mcp omitted availableTabs')
   }
   console.log(
-    `[claudeinchrome-browser-e2e] PASS connection (${context.availableTabs.length} visible tabs)`,
+    `[chrome-browser-e2e] PASS connection (${context.availableTabs.length} visible tabs)`,
   )
   return context
 }
@@ -269,7 +269,7 @@ async function verifyDeniedPaths(client: Client): Promise<void> {
   if (!invalidTab.isError) {
     fail('invalid Tab ID was not rejected')
   }
-  console.log('[claudeinchrome-browser-e2e] PASS inaccessible-page paths')
+  console.log('[chrome-browser-e2e] PASS inaccessible-page paths')
 }
 
 async function verifyMatrix(client: Client): Promise<void> {
@@ -278,7 +278,7 @@ async function verifyMatrix(client: Client): Promise<void> {
     'update_plan',
     await call(client, 'update_plan', {
       domains: ['127.0.0.1'],
-      approach: ['Run the local claudeinchrome browser acceptance fixture'],
+      approach: ['Run the local chrome browser acceptance fixture'],
     }),
   )
   const fixtureTab = parseJsonText<{
@@ -311,7 +311,7 @@ async function verifyMatrix(client: Client): Promise<void> {
       filter: 'interactive',
     }),
   )
-  if (page.title !== 'claudeinchrome E2E fixture') {
+  if (page.title !== 'chrome E2E fixture') {
     fail(`unexpected fixture title: ${page.title}`)
   }
   const input = page.elements.find(item => item.label === 'Fixture input')
@@ -556,7 +556,7 @@ async function verifyMatrix(client: Client): Promise<void> {
   )
 
   await verifyDeniedPaths(client)
-  console.log('[claudeinchrome-browser-e2e] PASS core tool matrix')
+  console.log('[chrome-browser-e2e] PASS core tool matrix')
 }
 
 const mode = process.argv[2] ?? '--connection'

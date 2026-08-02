@@ -43,7 +43,7 @@ const result = await Bun.build({
     ...(process.platform === 'win32'
       ? {
           windows: {
-            title: 'claudeinchrome Host',
+            title: 'chrome Host',
             description: 'Local Chrome MCP and Native Messaging Host',
             version: '1.0.0.0',
           },
@@ -56,7 +56,7 @@ const result = await Bun.build({
 })
 
 if (!result.success) {
-  console.error('claudeinchrome Host build failed:')
+  console.error('chrome Host build failed:')
   for (const log of result.logs) console.error(log)
   process.exit(1)
 }
