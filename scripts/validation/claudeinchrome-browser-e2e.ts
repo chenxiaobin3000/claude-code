@@ -77,12 +77,16 @@ function assertRejected(name: string, result: ToolResult): string {
 }
 
 function parseJsonText<T>(name: string, result: ToolResult): T {
-  const text = assertSuccessful(name, result)
-  try {
-    return JSON.parse(text) as T
-  } catch {
-    fail(`${name} did not return JSON: ${text}`)
+  const combinedText = assertSuccessful(name, result)
+  for (const item of result.content ?? []) {
+    if (item.type !== 'text') continue
+    try {
+      return JSON.parse(item.text) as T
+    } catch {
+      // Tool results may include a second human-readable context block.
+    }
   }
+  fail(`${name} did not return a JSON text block: ${combinedText}`)
 }
 
 function fixtureHtml(): string {
@@ -165,9 +169,7 @@ async function withClient(
     await client.connect(transport)
     await action(client)
   } catch (error) {
-    progress(
-      `ERROR ${error instanceof Error ? error.message : String(error)}`,
-    )
+    progress(`ERROR ${error instanceof Error ? error.message : String(error)}`)
     throw error
   } finally {
     progress('CLOSE MCP client')
@@ -206,7 +208,9 @@ async function waitForLocation(
         text: 'location.href',
       })
       if (!result.isError) {
-        lastLocation = JSON.parse(assertSuccessful(description, result)) as string
+        lastLocation = JSON.parse(
+          assertSuccessful(description, result),
+        ) as string
         if (expected(lastLocation)) return lastLocation
       } else {
         lastError = textFrom(result)
@@ -312,7 +316,9 @@ async function verifyMatrix(client: Client): Promise<void> {
   }
   const input = page.elements.find(item => item.label === 'Fixture input')
   const button = page.elements.find(item => item.label === 'Fixture action')
-  const historyLink = page.elements.find(item => item.label === 'Fixture target')
+  const historyLink = page.elements.find(
+    item => item.label === 'Fixture target',
+  )
   if (!input || !button || !historyLink) {
     fail('read_page omitted fixture controls')
   }
