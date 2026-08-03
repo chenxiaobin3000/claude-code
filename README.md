@@ -18,8 +18,8 @@
 以下是以官方 `2.1.220` 为基线的产品差异，不应把上游功能说明误认为本项目能力。
 
 - **模型与登录**：官方的 Anthropic 登录、官方模型、组织默认/限制模型、Claude API Provider 与相关云端模型能力不适用。本项目只从 `models.json` 加载 OpenAI-compatible 模型；模型 Profile 静态声明，不做服务端模型发现或自动模型替换。
-- **云端与远程产品**：官方的 Web/Desktop/Mobile、Remote Control、GitHub App、Cloud Code Review、Routines、云端 Channels、Artifacts、语音与账户/用量产品均不提供。本项目也不包含官方自动更新、安装器或远端遥测；可选的本地 `weixin`、`wxwork` 与 `qq` Channel 插件不依赖 Anthropic 云服务。
-- **插件与浏览器**：官方插件市场、远端安装/更新和插件自动重命名不提供。主程序不实现 Chrome、微信、企业微信或 QQ 业务；生产 standalone 自动发现同级 `plugins` 一级目录中的本地 `chrome`、`weixin`、`wxwork` 与 `qq`，源码开发通过 `--plugin-dir` 加载。插件均以独立 Host 分发，删除对应目录即可移除能力。
+- **云端与远程产品**：官方的 Web/Desktop/Mobile、Remote Control、GitHub App、Cloud Code Review、Routines、云端 Channels、Artifacts、语音与账户/用量产品均不提供。本项目也不包含官方自动更新、安装器或远端遥测；可选的本地 `weixin`、`wxwork`、`qq` 与 `telegram` Channel 插件不依赖 Anthropic 云服务。
+- **插件与浏览器**：官方插件市场、远端安装/更新和插件自动重命名不提供。主程序不实现 Chrome、微信、企业微信、QQ 或 Telegram 业务；生产 standalone 自动发现同级 `plugins` 一级目录中的本地 `chrome`、`weixin`、`wxwork`、`qq` 与 `telegram`，源码开发通过 `--plugin-dir` 加载。插件均以独立 Host 分发，删除对应目录即可移除能力。
 - **Sandbox**：Windows 上启用 Sandbox 时，Shell 会在 Windows Sandbox VM 内执行，默认只映射启动工作区和只读 Shell 运行时，且固定断网、不传递用户主目录或凭据。`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands` 保持上层语义；Windows 不能精确落实域名白名单、代理和目录内文件 allow/deny 规则，配置这些规则时会 fail-closed，而不会回退宿主执行。
 - **会话路径**：官方 `/cd` 可迁移会话；本项目有意保持临时 cwd 语义，只改变主会话后续工具的当前目录，不迁移项目身份、会话存储、权限根、配置或扩展作用域。
 - **Agent、Hook、MCP 与 Skill**：本地 Agent、后台任务、Hook、Plugin、Skill 与 MCP 已固化为当前基线；嵌套 Skill 使用相对启动项目根的限定名，连续 inline Skill 可在同一条输入中组合。`/cd` 的临时 cwd、OpenAI-compatible Provider、本地安全增强和不提供云端 Agent 产品仍是明确差异。本地 `/mcp login`/`logout` 仅管理用户配置的 MCP OAuth 凭据。
@@ -301,6 +301,38 @@ bun run dev -- --plugin-dir plugins/qq --dangerously-load-development-channels p
 发送要求通过 `QQ_ALLOWED_FILE_ROOTS` 显式限定允许目录，单次上限 20 MiB。完整配置、
 路由、媒体与安全边界见 [`plugins/qq/README.md`](plugins/qq/README.md)。
 
+### telegram 机器人插件
+
+Telegram Bot Channel 位于 [`plugins/telegram`](plugins/telegram)，使用固定的
+`grammy@1.45.1`（commit `f9f7578d82ef127507aeb6902de8537b02ac994e`）连接
+Telegram Bot API 10.2。只使用 `getUpdates` 长轮询，不建立 Webhook，也不会删除或
+抢占已有 Webhook；grammY `bot.start()` 内部的删除调用会在本地确认而不发送到网络，
+启动前仍通过 `getWebhookInfo` 明确拒绝冲突配置。
+
+Token 只从环境变量读取，配置文件仅保存环境变量名。可使用唯一别名配置多个 Bot，
+Token、Update 排重、Chat/Topic 路由、媒体、配对、权限和连接租约逐 Bot 隔离：
+
+```powershell
+$env:TELEGRAM_PRIMARY_TOKEN = "123456:your-secret-token"
+bun plugins/telegram/host/entry.ts bot add primary TELEGRAM_PRIMARY_TOKEN
+bun plugins/telegram/host/entry.ts bot doctor primary
+bun run dev -- --plugin-dir plugins/telegram --dangerously-load-development-channels plugin:telegram@inline
+```
+
+生产分发使用：
+
+```powershell
+.\dist\plugins\telegram\telegram-host.exe bot add primary TELEGRAM_PRIMARY_TOKEN
+.\dist\plugins\telegram\telegram-host.exe bot doctor primary
+.\dist\claude.exe --channels plugin:telegram@local
+```
+
+首版覆盖私聊、明确 `@`/回复/定向命令的群聊、Forum Topic、文本、图片、文档、音频、
+语音和视频；提供绑定 15 分钟内原消息的 `reply` 与 `send_typing`，不提供主动发送、
+Webhook、广播、Cron、Mini App 或 Bot 管理面板。文本按 4096 个 Unicode 字符拆分；
+单文件上限 20 MiB，本地出站文件必须位于 `TELEGRAM_ALLOWED_FILE_ROOTS`。完整边界见
+[`plugins/telegram/README.md`](plugins/telegram/README.md)。
+
 ## 构建与验证
 
 ```powershell
@@ -314,6 +346,7 @@ bun run build:chrome-host
 bun run build:weixin-host
 bun run build:wxwork-host
 bun run build:qq-host
+bun run build:telegram-host
 bun run build:production
 bun run verify
 ```
@@ -331,9 +364,11 @@ bun run verify
   Channel MCP 单文件，目标机器无需 Bun 或 Node.js。
 - qq Plugin：`dist/plugins/qq` 是完整分发目录，其中 Host 为独立 QQ Channel MCP
   单文件，目标机器无需 Bun 或 Node.js。
+- telegram Plugin：`dist/plugins/telegram` 是完整分发目录，其中 grammY 与独立
+  Telegram Channel MCP Host 已打入 standalone，目标机器无需 Bun 或 Node.js。
 
 `bun run build:production` 一次生成 `dist/claude.exe` 和
-`dist/plugins/chrome`、`dist/plugins/weixin`、`dist/plugins/wxwork`、`dist/plugins/qq`。整个 `dist` 是 Windows 生产分发单元：standalone
+`dist/plugins/chrome`、`dist/plugins/weixin`、`dist/plugins/wxwork`、`dist/plugins/qq`、`dist/plugins/telegram`。整个 `dist` 是 Windows 生产分发单元：standalone
 启动时只自动加载同级 `plugins` 下的一级插件目录；`--plugin-dir <path>` 仍可加载
 临时插件或覆盖同名自动插件。自动发现不会安装 Chrome 扩展、注册 Native Host、
 下载插件或更新任何产物。

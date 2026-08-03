@@ -46,7 +46,8 @@
     "build:weixin-host": "bun run scripts/build-weixin-host.ts",
     "build:wxwork-host": "bun run scripts/build-wxwork-host.ts",
     "build:qq-host": "bun run scripts/build-qq-host.ts",
-    "build:production": "bun run build:exe && bun run build:chrome-host && bun run build:weixin-host && bun run build:wxwork-host && bun run build:qq-host",
+    "build:telegram-host": "bun run scripts/build-telegram-host.ts",
+    "build:production": "bun run build:exe && bun run build:chrome-host && bun run build:weixin-host && bun run build:wxwork-host && bun run build:qq-host && bun run build:telegram-host",
     "chrome:fixture": "bun run scripts/validation/chrome-browser-e2e.ts --serve-fixture",
     "chrome:verify": "bun run scripts/validation/chrome-browser-e2e.ts --connection",
     "chrome:verify:tools": "bun run scripts/validation/chrome-browser-e2e.ts --matrix",
@@ -75,6 +76,7 @@
     "typecheck:weixin-host": "tsc -p plugins/weixin/tsconfig.json --noEmit --pretty false",
     "typecheck:wxwork-host": "tsc -p plugins/wxwork/tsconfig.json --noEmit --pretty false",
     "typecheck:qq-host": "tsc -p plugins/qq/tsconfig.json --noEmit --pretty false",
+    "typecheck:telegram-host": "tsc -p plugins/telegram/tsconfig.json --noEmit --pretty false",
     "precheck": "bun run typecheck && bun run check:fix",
     "rcs": "bun run scripts/rcs.ts"
   },

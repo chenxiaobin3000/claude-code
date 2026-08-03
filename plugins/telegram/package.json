@@ -1,0 +1,30 @@
+{
+  "name": "@claude-code/telegram-plugin",
+  "version": "1.0.0",
+  "telegramCompatibility": {
+    "botApi": "10.2",
+    "documentation": "https://core.telegram.org/bots/api",
+    "grammy": "1.45.1",
+    "grammyCommit": "f9f7578d82ef127507aeb6902de8537b02ac994e",
+    "auditedAt": "2026-08-04"
+  },
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
+    "test:smoke": "bun run ../../scripts/validation/workspace-smoke.ts"
+  },
+  "workspaceValidation": {
+    "build": {
+      "applicable": false,
+      "reason": "The root build:telegram-host script compiles this local Plugin into a standalone distribution."
+    }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "grammy": "1.45.1",
+    "zod": "^4.3.6"
+  }
+}

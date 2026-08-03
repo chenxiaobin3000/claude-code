@@ -1,0 +1,20 @@
+{
+  "name": "telegram",
+  "version": "1.0.0",
+  "telegramCompatibility": {
+    "botApi": "10.2",
+    "grammy": "1.45.1",
+    "grammyCommit": "f9f7578d82ef127507aeb6902de8537b02ac994e"
+  },
+  "apiVersion": "^1.0.0",
+  "description": "Local multi-bot Telegram Channel over grammY long polling.",
+  "author": { "name": "claude-code" },
+  "keywords": ["telegram", "bot", "channel", "long-polling", "local"],
+  "mcpServers": {
+    "telegram": {
+      "type": "stdio",
+      "command": "bun",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/host/entry.ts", "mcp"]
+    }
+  }
+}

@@ -19,6 +19,9 @@ const wxworkPackageJson = JSON.parse(
 const qqPackageJson = JSON.parse(
   await readFile(join(projectRoot, 'plugins', 'qq', 'package.json'), 'utf8'),
 ) as { version: string }
+const telegramPackageJson = JSON.parse(
+  await readFile(join(projectRoot, 'plugins', 'telegram', 'package.json'), 'utf8'),
+) as { version: string }
 const expectedVersion = `${packageJson.version} (Claude Code)`
 const commandTimeoutMs = 120_000
 const modelTimeoutMs = 180_000
@@ -56,6 +59,11 @@ const validationScripts = [
   'scripts/validation/qq-protocol-api.ts',
   'scripts/validation/qq-media.ts',
   'scripts/validation/qq-gateway.ts',
+  'scripts/validation/telegram-plugin-boundary.ts',
+  'scripts/validation/telegram-config-routing-permissions.ts',
+  'scripts/validation/telegram-protocol.ts',
+  'scripts/validation/telegram-media.ts',
+  'scripts/validation/telegram-long-polling.ts',
   'scripts/validation/chrome-protocol.ts',
   'scripts/validation/chrome-profiles.ts',
   'scripts/validation/chrome-host.ts',
@@ -373,6 +381,11 @@ async function main(): Promise<void> {
     'run',
     'typecheck:qq-host',
   ])
+  await runStep('Telegram Host typecheck', [
+    bunExecutable,
+    'run',
+    'typecheck:telegram-host',
+  ])
   await runStep('Biome lint', [bunExecutable, 'run', 'lint'])
   await runStep('workspace contract, checks, builds, and smoke', [
     bunExecutable,
@@ -471,6 +484,16 @@ async function main(): Promise<void> {
       'run',
       'scripts/validation/qq-distribution.ts',
     ])
+    await runStep('Telegram standalone Host build', [
+      bunExecutable,
+      'run',
+      'build:telegram-host',
+    ])
+    await runStep('Telegram distributable Plugin validation', [
+      bunExecutable,
+      'run',
+      'scripts/validation/telegram-distribution.ts',
+    ])
     await runStep('standalone automatic Plugin lifecycle', [
       bunExecutable,
       'run',
@@ -543,6 +566,23 @@ async function main(): Promise<void> {
     if (qqHostVersion.stdout.trim() !== qqPackageJson.version) {
       throw new Error(
         `QQ Host version mismatch: ${qqHostVersion.stdout.trim()}`,
+      )
+    }
+    const telegramHost = resolve(
+      projectRoot,
+      'dist',
+      'plugins',
+      'telegram',
+      'telegram-host.exe',
+    )
+    const telegramHostVersion = await runStep(
+      'Telegram standalone Host version',
+      [telegramHost, '--version'],
+      { capture: true },
+    )
+    if (telegramHostVersion.stdout.trim() !== telegramPackageJson.version) {
+      throw new Error(
+        `Telegram Host version mismatch: ${telegramHostVersion.stdout.trim()}`,
       )
     }
     await runStep('chrome Native Host EOF lifecycle', [chromeHost], {

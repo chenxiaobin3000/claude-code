@@ -58,7 +58,7 @@ export function isChannelsEnabled(): boolean {
  * but standalone (no session/marketplace coupling — those are tautologies
  * when the entry is derived from pluginSource).
  *
- * The packaged local `weixin`, `wxwork`, and `qq` Plugins are trusted as shipped
+ * The packaged local `weixin`, `wxwork`, `qq`, and `telegram` Plugins are trusted as shipped
  * channel boundaries. Explicit `--plugin-dir` copies remain development
  * plugins and require the development-channel flow.
  */
@@ -70,7 +70,7 @@ export function isChannelAllowlisted(
   if (!marketplace) return false
   if (
     marketplace === 'local' &&
-    (name === 'weixin' || name === 'wxwork' || name === 'qq')
+    (name === 'weixin' || name === 'wxwork' || name === 'qq' || name === 'telegram')
   ) {
     return true
   }
