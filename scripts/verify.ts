@@ -13,6 +13,12 @@ const packageJson = JSON.parse(
 const weixinPackageJson = JSON.parse(
   await readFile(join(projectRoot, 'plugins', 'weixin', 'package.json'), 'utf8'),
 ) as { version: string }
+const wxworkPackageJson = JSON.parse(
+  await readFile(join(projectRoot, 'plugins', 'wxwork', 'package.json'), 'utf8'),
+) as { version: string }
+const qqPackageJson = JSON.parse(
+  await readFile(join(projectRoot, 'plugins', 'qq', 'package.json'), 'utf8'),
+) as { version: string }
 const expectedVersion = `${packageJson.version} (Claude Code)`
 const commandTimeoutMs = 120_000
 const modelTimeoutMs = 180_000
@@ -40,6 +46,16 @@ const validationScripts = [
   'scripts/validation/weixin-media-protocol.ts',
   'scripts/validation/weixin-multi-account.ts',
   'scripts/validation/weixin-channel-features.ts',
+  'scripts/validation/wxwork-plugin-boundary.ts',
+  'scripts/validation/wxwork-protocol.ts',
+  'scripts/validation/wxwork-routing-permissions.ts',
+  'scripts/validation/wxwork-media.ts',
+  'scripts/validation/wxwork-connection.ts',
+  'scripts/validation/qq-plugin-boundary.ts',
+  'scripts/validation/qq-config-routing-permissions.ts',
+  'scripts/validation/qq-protocol-api.ts',
+  'scripts/validation/qq-media.ts',
+  'scripts/validation/qq-gateway.ts',
   'scripts/validation/chrome-protocol.ts',
   'scripts/validation/chrome-profiles.ts',
   'scripts/validation/chrome-host.ts',
@@ -347,6 +363,16 @@ async function main(): Promise<void> {
     'run',
     'typecheck:weixin-host',
   ])
+  await runStep('wxwork Host typecheck', [
+    bunExecutable,
+    'run',
+    'typecheck:wxwork-host',
+  ])
+  await runStep('QQ Host typecheck', [
+    bunExecutable,
+    'run',
+    'typecheck:qq-host',
+  ])
   await runStep('Biome lint', [bunExecutable, 'run', 'lint'])
   await runStep('workspace contract, checks, builds, and smoke', [
     bunExecutable,
@@ -425,6 +451,26 @@ async function main(): Promise<void> {
       'run',
       'scripts/validation/weixin-distribution.ts',
     ])
+    await runStep('wxwork standalone Host build', [
+      bunExecutable,
+      'run',
+      'build:wxwork-host',
+    ])
+    await runStep('wxwork distributable Plugin validation', [
+      bunExecutable,
+      'run',
+      'scripts/validation/wxwork-distribution.ts',
+    ])
+    await runStep('QQ standalone Host build', [
+      bunExecutable,
+      'run',
+      'build:qq-host',
+    ])
+    await runStep('QQ distributable Plugin validation', [
+      bunExecutable,
+      'run',
+      'scripts/validation/qq-distribution.ts',
+    ])
     await runStep('standalone automatic Plugin lifecycle', [
       bunExecutable,
       'run',
@@ -463,6 +509,40 @@ async function main(): Promise<void> {
     if (weixinHostVersion.stdout.trim() !== weixinPackageJson.version) {
       throw new Error(
         `weixin Host version mismatch: ${weixinHostVersion.stdout.trim()}`,
+      )
+    }
+    const wxworkHost = resolve(
+      projectRoot,
+      'dist',
+      'plugins',
+      'wxwork',
+      'wxwork-host.exe',
+    )
+    const wxworkHostVersion = await runStep(
+      'wxwork standalone Host version',
+      [wxworkHost, '--version'],
+      { capture: true },
+    )
+    if (wxworkHostVersion.stdout.trim() !== wxworkPackageJson.version) {
+      throw new Error(
+        `wxwork Host version mismatch: ${wxworkHostVersion.stdout.trim()}`,
+      )
+    }
+    const qqHost = resolve(
+      projectRoot,
+      'dist',
+      'plugins',
+      'qq',
+      'qq-host.exe',
+    )
+    const qqHostVersion = await runStep(
+      'QQ standalone Host version',
+      [qqHost, '--version'],
+      { capture: true },
+    )
+    if (qqHostVersion.stdout.trim() !== qqPackageJson.version) {
+      throw new Error(
+        `QQ Host version mismatch: ${qqHostVersion.stdout.trim()}`,
       )
     }
     await runStep('chrome Native Host EOF lifecycle', [chromeHost], {

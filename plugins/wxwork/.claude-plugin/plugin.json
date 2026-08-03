@@ -1,0 +1,22 @@
+{
+  "name": "wxwork",
+  "version": "1.0.0",
+  "wxworkCompatibility": {
+    "protocol": "WeCom API-mode intelligent bot WebSocket",
+    "upstreamSdk": "@wecom/aibot-node-sdk@1.0.7",
+    "upstreamSdkCommit": "80615b987ef69c6028ad764924609247c0725955"
+  },
+  "apiVersion": "^1.0.0",
+  "description": "Local multi-bot WeCom API-mode intelligent bot Channel over WebSocket.",
+  "author": {
+    "name": "claude-code"
+  },
+  "keywords": ["wecom", "wxwork", "channel", "websocket", "local"],
+  "mcpServers": {
+    "wxwork": {
+      "type": "stdio",
+      "command": "bun",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/host/entry.ts", "mcp"]
+    }
+  }
+}

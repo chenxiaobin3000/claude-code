@@ -2,7 +2,7 @@
 
 ## 基线
 
-项目当前发行版本为 `2.1.220`，官方功能对照基线固定为 Claude Code `2.1.220`。截至 `2026-08-01`，当前产品范围内的功能、差异边界、安全约束、构建和验证矩阵均已完成验收；可选后续能力不影响当前基线成立。
+项目当前发行版本为 `2.1.220`，官方功能对照基线固定为 Claude Code `2.1.220`。截至 `2026-08-04`，当前产品范围内的功能、差异边界、安全约束、构建和验证矩阵均已完成验收；可选后续能力不影响当前基线成立。
 
 “功能对齐”仅表示以该官方版本为审计目标，并完成本项目适用范围的实现与验证，不表示源码、二进制或产品集合与官方发行版完全相同。明确裁剪、替代或不开发的能力继续以下文边界为准。上游功能与行为以 [Claude Code 官方文档](https://code.claude.com/docs/en/overview)和[官方 Changelog](https://code.claude.com/docs/en/changelog)为准。升级对照版本前必须先更新差异审计和对应验收矩阵，不能使用滚动的“最新版本”作为未冻结的验收目标。
 
@@ -62,6 +62,14 @@
 - 微信账号使用索引和逐账号私有目录；凭据、游标、上下文 Token、允许列表、配对状态、体验配置与 Token 失效暂停互相隔离。Host 并发轮询全部账号，入站 `chat_id` 固定为 `account-id::user-id`；未限定账号且路由不唯一时 fail-closed，旧单账号状态一次性迁移为 `default`。
 - 微信引用文本默认开启；远程 HTTP 媒体、脱敏 Channel 诊断和 Host 本地 `/echo` 按账号配置且默认关闭。远程媒体保持 HTTP(S) 协议和 100 MiB 限制，诊断禁止返回 Token 或消息正文。流式 Markdown 与工具进度依赖当前 MCP Channel 不提供的生成中事件，明确不支持，开启对应配置会报错退出。
 - 微信协议通过 `scripts/validation/weixin-*.ts` 固定 Fixture 验证并并入 `bun run verify`，不依赖测试框架或真实账号；验证覆盖双账号并发轮询、状态/权限/回复隔离、歧义路由拒绝以及全部体验开关。
+- 企业微信能力位于独立 `plugins/wxwork`，只实现“API 模式智能机器人”的 Bot WebSocket 长连接，不实现 Webhook、Agent/自建应用 XML 回调、OpenClaw Runtime、Bot→Agent 回退或自动安装/更新。当前人工同步基线为 `@wecom/wecom-openclaw-cli@1.1.0`、`@wecom/wecom-openclaw-plugin@20206.7.201`（commit `1a91ef7300de7274de8d74e4a566cf3b6e569a25`）和 `@wecom/aibot-node-sdk@1.0.7`（commit `80615b987ef69c6028ad764924609247c0725955`）；这些包只用于审计，没有安装、导入或打入产物。
+- `wxwork-host` 支持多个 Bot 别名和独立 Secret 环境变量，逐 Bot 保存私有配对、权限、排重与连接状态；进程级租约禁止同一 Bot 被两个 Host 同时连接。订阅认证、`req_id` 关联、心跳、踢下线、带抖动重连和连接代次隔离由独立 Host 处理，一个 Bot 故障不终止其他 Bot。
+- 企业微信入站路由固定为 `bot-alias::single::userid` 或 `bot-alias::group::chatid`，覆盖文本、图片、图文混排、语音识别文本、视频和文件；仅允许绑定未过期入站请求的最终 Markdown 与媒体被动回复。媒体按官方 AES-256-CBC、512 KiB 分片及图片 10 MiB、语音 2 MiB、视频 10 MiB、文件 20 MiB 边界处理；主动发送、欢迎语、卡片和伪流式输出不提供。
+- 企业微信访问默认使用配对，审批状态按 Bot、会话、发送者和 Request ID 隔离，群内其他成员不得代为批准。生产来源为 `wxwork@local`，开发显式加载为 `wxwork@inline`；固定 Fixture 覆盖协议、双 Bot/单 Bot 租约、重连/踢下线、路由、媒体、权限、依赖禁入和 standalone 分发，并统一并入 `bun run verify`。
+- QQ 能力位于独立 `plugins/qq`，只实现 QQ 开放平台 Bot API v2 的 AppID/AppSecret 鉴权、WebSocket Gateway 入站和 REST 被动回复，支持 C2C 私聊与明确 `@` 机器人的群聊；不实现 Webhook、个人 QQ 登录、Guild、主动发送、Cron、OpenClaw Runtime、远程安装或自动更新。当前人工同步基线为 `@tencent-connect/openclaw-qqbot@2.0.0`（commit `47142c997bdbc9e72d92b817ff378941b3be7d4c`）、`@tencent-connect/qqbot-connector@1.2.0` 与 `@tencent-connect/qqbot-nodejs@1.0.4`（gitHead `589597a6cb5a24dce8230ba53bfba5390e13c073`）；这些包只用于审计，没有安装、导入或打入产物。
+- `qq-host` 支持多个唯一 Bot 别名和 AppID，Secret 只从配置指定的环境变量读取；Access Token、Gateway Session/Seq、心跳、排重、配对、允许列表、权限和连接租约逐 Bot 隔离。Gateway 覆盖 HELLO、Identify、Heartbeat/ACK、Resume、失效会话重建、带抖动退避与连接代次隔离；单个 Bot 故障不会停止其他 Bot。
+- QQ 入站路由固定为 `bot-alias::c2c::user-openid` 或 `bot-alias::group::group-openid`，OpenID 只作为 Bot 作用域内不透明标识；文本与媒体被动回复绑定 15 分钟内的原消息 ID，并使用确定性 `msg_seq`。远端媒体仅允许 QQ HTTPS 域名，本地文件必须位于 `QQ_ALLOWED_FILE_ROOTS`，单次上限 20 MiB；权限按 Bot、会话和发送者隔离，日志不得记录 Secret、Token、完整消息或媒体地址。
+- QQ 固定 Fixture 已覆盖官方依赖禁入、双 Bot 配置与租约、Token/API、HELLO/心跳/ACK、Resume/重建、代次隔离、路由、群聊 `@`、排重、权限、媒体/SSRF、Secret 脱敏、Host EOF、standalone 分发和自动发现，并统一并入 `bun run verify`。生产来源为 `qq@local`，开发显式加载为 `qq@inline`；后续上游同步只允许人工冻结版本、审计差异并更新 Fixture。
 - 本地 Plugin Manifest 使用可选 `apiVersion` SemVer 范围协商声明式扩展 API；当前版本为 `1.0.0`，缺省按旧 v1 契约兼容。显式不兼容时整插件及其组件不可达，依赖降级继续按固定点传播；MCP 与 ACP 保持各自协议协商。
 - `/cd` 有意保持为本项目的临时 cwd 命令，不对齐官方的跨项目会话迁移：它只改变主会话后续工具使用的当前目录，不改变启动项目根、Session ID、Transcript/Resume 归属、权限根、Settings、CLAUDE.md、Hook、Skill、Plugin、MCP、Memory、Plan 或 Checkpoint 作用域。
 - `/cd` 不改变已运行子 Agent 的 cwd；新建 Agent 从稳定的会话/工作树根启动，不继承主会话的临时 `/cd`，子 Agent 的 cwd 变化也不得回写主会话。`/clear` 和进程重启恢复到启动项目目录；无参数只报告当前 cwd，失败不得改变现有 cwd。
@@ -74,7 +82,7 @@
 - `plugins/chrome/host` 已提供与主程序解耦的 MCP/Native Messaging Host 入口、路径、注册、卸载和 doctor，实现不依赖主程序 Settings、模型调用、Anthropic 账号或内部 `USER_TYPE` 分支。Windows 可构建独立 `chrome-host.exe`；默认无参数运行 Native Host，`mcp` 运行 stdio MCP，`register`/`unregister`/`doctor` 由用户显式执行。
 - MCP 引擎、TCP Socket 生命周期、多实例端点池和工具声明已经迁入 `plugins/chrome/mcp`；旧 `packages/@ant/claude-for-chrome-mcp` workspace 包和 `src/utils/claudeInChrome` 主程序兼容层已经删除，并由防回归验证阻止恢复。
 - 插件 Manifest 已通过标准本地 stdio MCP 声明启动 Host，`skills/claude-in-chrome/SKILL.md` 只随插件加载；插件未加载时，主程序的系统提示、Skill 和工具列表均不宣传 Chrome 能力。
-- `bun run build:chrome-host` 与 `bun run build:weixin-host` 分别生成完整插件分发目录；`bun run build:production` 同时生成 `dist/claude.exe`、`dist/plugins/chrome` 和 `dist/plugins/weixin`，整个 `dist` 可作为固定路径的 Windows 生产分发单元。分发 Manifest 直接启动包含 Bun Runtime 的独立 Host，目标机器无需 Bun 或 Node.js。
+- `bun run build:chrome-host`、`bun run build:weixin-host`、`bun run build:wxwork-host` 与 `bun run build:qq-host` 分别生成完整插件分发目录；`bun run build:production` 同时生成 `dist/claude.exe` 及四个 `dist/plugins/*` 插件目录，整个 `dist` 可作为固定路径的 Windows 生产分发单元。分发 Manifest 直接启动包含 Bun Runtime 的独立 Host，目标机器无需 Bun 或 Node.js。
 - 标准 Plugin Manifest、MCP 环境展开、名称作用域、Skill 发现、自动目录约束、三层优先级、`--bare`、重载裁剪、standalone 插件移除、独立 Host EOF、分发目录生命周期和真实 Chrome 端到端矩阵均已验收。扩展固定声明 `<all_urls>`，不提供页面授权或本地站点白名单；所有 HTTP/HTTPS 页面均可操作，Chrome 内部页、扩展页、文件页和无效 Tab 继续拒绝。真实矩阵覆盖固定扩展 ID、Native Host 注册/doctor/自动重连、拒绝路径、页面刷新和错误恢复。
 - 真实 Chrome 工具矩阵覆盖 11 个广告工具的连接与核心行为，包括标签页枚举/创建、导航及前进后退、页面读取、查找、表单输入、JavaScript、点击/滚动/键盘、截图、窗口缩放、Unicode URL、Chrome 内部页拒绝、非法/已失效 Tab ID 和 1 MiB 超限结果。超限结果必须返回结构化错误并保持桥接连接；点击必须保留浏览器聚焦语义。
 
@@ -106,63 +114,31 @@
 
 ## 可选后续路线图（不影响当前验收）
 
-### P0：企业微信 `wxwork` 长连接 Channel 插件
-
-- [ ] 固定企业微信官方“API 模式智能机器人”的 Bot WebSocket 长连接协议为唯一产品边界，连接地址默认为 `wss://openws.work.weixin.qq.com`。`@wecom/wecom-openclaw-cli` 只作为官方安装/更新/诊断流程参考，其默认安装的 `@wecom/wecom-openclaw-plugin` 才是 OpenClaw Channel 实现；首个兼容基线必须同时记录官方协议文档更新时间、CLI/插件/`@wecom/aibot-node-sdk` 精确版本以及插件仓库 commit，不能只记录安装器版本。
-- [ ] 插件 ID、目录、MCP Server 与 Host 分别固定为 `wxwork`、`plugins/wxwork`、`wxwork` 和 `wxwork-host`，不得与个人微信 `weixin` 混用。参照 `weixin` 的边界自行实现选定的 Bot WebSocket 协议、状态和 Channel 转换，不安装、不导入、不打包或运行 `@wecom/wecom-openclaw-cli`、`@wecom/wecom-openclaw-plugin`、`@wecom/aibot-node-sdk` 或 OpenClaw Runtime；这些上游包只用于差异审计和 Fixture 对照。
-- [ ] 建立标准本地 Plugin Manifest、独立 TypeScript/Bun workspace、stdio MCP Host 和 standalone 构建；全部运行时代码和依赖只能位于 `plugins/wxwork` 和独立 Host，不得向主 CLI 增加企业微信 SDK、专用命令、静态注册或业务实现。依赖边界验证必须阻止上述官方 OpenClaw/SDK 包进入根包、workspace 依赖和三类生产 Bundle。
-- [ ] 实现多机器人索引和逐机器人私有状态目录。每个别名绑定唯一 Bot ID，保存独立 Secret 来源、允许列表、排重状态和体验配置；Secret 优先读取指定环境变量，交互录入不得出现在命令历史或进程参数中，状态文件按私有权限原子写入，日志、诊断和 Channel 消息禁止泄露 Secret。
-- [ ] 实现 `wxwork-host bot add|remove|list|doctor` 和 `mcp` 生命周期。每个 Bot 同时只能有一个有效 WebSocket 连接；订阅认证、`req_id` 请求关联、约 30 秒心跳、超时清理、带抖动指数退避、服务端踢下线、连接代次隔离和正常退出必须完整处理，一个 Bot 失败不得终止其他 Bot，也不得形成双连接互相踢出的循环。
-- [ ] 将 `aibot_msg_callback` 转换为标准 Channel 通知，覆盖单聊和群聊中的文本、图片、图文混排、语音、视频及文件；`chat_id` 固定编码为 `bot-alias::single::userid` 或 `bot-alias::group::chatid`，保留发送者和消息 ID，userid 即使为企业加密标识也只按不透明字符串处理。多 Bot、跨群或目标不唯一时 fail-closed，不默认选择第一个 Bot。
-- [ ] 实现最终 Markdown 被动回复以及图片、文件、语音和视频上传/回复。临时素材按官方初始化、最大 512 KiB 分片和完成合并流程执行，校验 MD5、`media_id`、30 分钟上传会话、3 天素材有效期及图片 10 MiB、语音 2 MiB、视频 10 MiB、文件 20 MiB 上限；断线后的重传只能复用仍有效且属于同一 Bot 的上传会话。
-- [ ] 复用 `weixin` 已验收的 Channel 权限边界，但状态必须按 Bot、会话类型、会话 ID 和发送者隔离；群内其他成员不得批准不属于自己的请求。主动发送默认关闭并要求独立工具权限；外部群/客户群、企业文档/审批/打卡 API 和官方 MCP/Skill 自动安装不在产品范围，平台不支持时必须明确拒绝。
-- [ ] 当前主程序只在完整 MCP Tool 调用后取得回复，因此本阶段只发送一次 `finish=true` 的最终结果，不伪造模型流式输出。欢迎语、模板卡片、卡片更新、用户反馈、主动推送和真实流式 Markdown 只有在各自事件、权限与验收边界明确后才能作为后续可选能力加入。
-- [ ] 官方插件同时包含 Bot WebSocket/Webhook、Agent XML 回调、OpenClaw Gateway、动态 Agent、内置 MCP/Skill 和 Bot→Agent 回退；本项目只同步 Bot WebSocket 长连接中适用的协议与可靠性行为。Webhook 不作为备用方式，长连接不可用时必须明确失败，禁止回退到 Bot Webhook、Agent HTTP API 或其他连接模式；禁止把官方更大产品范围误写为当前能力，也禁止为追随上游而引入自动安装、自动更新或隐式模式回退。
-- [ ] 在 `scripts/validation` 增加 `wxwork` 插件边界、官方依赖禁入、配置、协议、路由、重连、媒体、权限和分发脚本，并统一并入 `bun run verify`；固定 Fixture 至少覆盖双 Bot 并发、单 Bot 双连接拒绝、心跳/断线/踢下线、`req_id` 关联、`msgid` 排重、单聊/群聊隔离、跨 Bot/跨群/跨用户权限拒绝、媒体分片与限制、Secret 脱敏、Host EOF 和 standalone 自动发现。
-- [ ] 后续升级采用与 `weixin` 相同的人工同步流程：发现官方文档、CLI、插件或 SDK 新版本后，先冻结新版本和 commit，审计协议、修复与产品范围差异，只移植本项目适用行为并更新独立 Fixture；验证通过后再更新本地兼容元数据。官方发布不得自动下载、覆盖本地插件或触发 CLI 自更新。
-
-完成条件：两个 Bot 可通过 `wxwork-host` 同时运行且不会串连接、会话、回复、媒体、权限或 Secret；源码开发使用显式 `--plugin-dir`，生产使用 standalone 同级 `plugins/wxwork` 自动发现，删除插件目录即可移除全部企业微信能力；`typecheck:wxwork-host`、`build:wxwork-host`、分发验证和 `bun run verify -- --ci` 全部通过。真实企业微信账号环境下的 Bot ID/Secret 认证、单聊、群聊和媒体收发作为固定 Fixture 之后的附加验收。
-
-### P1：QQ 机器人 Channel 插件
-
-- [ ] 冻结 QQ 开放平台官方协议文档、Gateway/REST 接口版本，以及 `@tencent-connect/openclaw-qqbot`、`@tencent-connect/qqbot-connector` 和 `@tencent-connect/qqbot-nodejs` 的参考版本与 commit；这些包只用于人工差异审计和 Fixture 校对，不安装、不导入、不打入生产 Bundle，也不引入 OpenClaw Runtime。
-- [ ] 在 `plugins/qq` 独立实现 `qq` Plugin Manifest、MCP Server、`qq-host` 和 standalone Host。主程序只通过现有插件发现、MCP 生命周期和 Channel 通知接入，不增加 QQ SDK、静态注册、专用主 CLI 命令或供应商分支；删除插件目录即可完整移除 QQ 能力。
-- [ ] 产品范围只包含 QQ 官方机器人 AppID/AppSecret 鉴权、WebSocket Gateway 入站和 REST API 出站，支持 C2C 单聊与群聊，群聊默认要求明确 `@` 机器人。P1 不实现 Webhook、二维码/个人 QQ 登录、频道 Guild、OpenClaw Gateway、Cron、动态 Agent、内置 Skill、远程安装、热更新或自动更新；长连接不可用时必须明确失败，不得隐式切换协议。
-- [ ] 支持多个 QQ Bot 配置并要求别名唯一，Secret 优先从环境变量读取；每个 Bot 独立保存 Access Token、Gateway `session_id`/`seq`、心跳状态、排重状态、允许列表和媒体状态。提供 `qq-host bot add|remove|list|doctor` 管理入口，配置和状态采用私有权限、原子写入，单个 Bot 故障不得影响其他 Bot。
-- [ ] 实现 Access Token 获取、提前刷新、Gateway 地址发现、HELLO/Identify、Heartbeat/ACK、事件序号、断线重连、有效会话 Resume、失效会话重新 Identify、带抖动退避和连接代际隔离；认证失败、被踢下线、无 ACK、限流和不可恢复错误必须输出可脱敏的明确诊断，禁止无限快速重连。
-- [ ] 将 QQ 入站事件转换为标准 Channel 通知，`chat_id` 固定编码为 `bot-alias::c2c::user-openid` 或 `bot-alias::group::group-openid`，OpenID 只作为 Bot 作用域内的不透明标识。覆盖文本、图片、语音、视频、文件、引用关系和官方已提供的语音识别文本；模型侧不存在语音转写能力时不得伪造识别结果。按事件 ID、消息 ID 和 Bot 作用域排重，目标不唯一时 fail-closed。
-- [ ] 实现文本和受支持媒体的回复，回复绑定原始消息 ID，并按原消息/会话生成确定性的 `msg_seq`，避免超时重试造成重复发送。严格处理 REST 业务错误、HTTP 错误、`429`/Retry-After、平台消息窗口和媒体限制；不安全的出站请求不得自动重放。远程媒体 URL 默认禁用，启用时必须经过 SSRF 防护；本地文件只能来自显式允许根目录，临时文件按 Bot 和会话隔离。
-- [ ] 复用现有 Channel 权限边界，但所有审批状态必须按 Bot、会话类型、会话 ID 和发送者隔离，群内其他成员不得批准不属于自己的请求。P1 以文本确认完成权限闭环；主动发送默认关闭并要求独立工具权限。禁止提供读取运行日志、修改插件配置、自更新或升级 Host 的聊天命令，日志必须脱敏 AppSecret、Token、完整敏感消息和媒体地址。
-- [ ] 在 `scripts/validation` 增加 QQ 插件边界、官方依赖禁入、鉴权、Gateway、Resume、路由、媒体、权限和分发验证，并统一并入 `bun run verify`。固定 Fixture 至少覆盖双 Bot 并发、Token/会话/OpenID 隔离、HELLO/心跳/ACK、断线 Resume、失效会话重建、事件序号与排重、群聊 `@`、跨 Bot/跨群/跨用户权限拒绝、REST 限流和业务错误、媒体与 SSRF 边界、Secret 脱敏、Host EOF 以及 standalone 自动发现。
-- [ ] 后续升级采用人工同步：发现 QQ 官方文档、SDK 或 `@tencent-connect/openclaw-qqbot` 新版本后，先冻结版本和 commit，审计协议、缺陷修复及产品范围差异，只移植本项目适用行为并更新独立 Fixture；验证通过后再更新本地兼容元数据，禁止自动下载、覆盖插件或触发 CLI 自更新。
-
-完成条件：至少两个 QQ Bot 可由 `qq-host` 同时运行，且不会串 Token、Gateway 会话、OpenID、消息、媒体、权限或 Secret；源码开发使用显式 `--plugin-dir`，生产使用 standalone 同级 `plugins/qq` 自动发现；QQ Host 独立类型检查、构建、边界验证、分发验证和 `bun run verify -- --ci` 全部通过。固定 Fixture 通过后，再使用真实 QQ 开放平台 AppID/AppSecret 验收 C2C、群聊、断线恢复和媒体收发。
-
-### P2：Telegram 机器人 Channel 插件
+### P0：Telegram 机器人 Channel 插件
 
 - [ ] 固定 Telegram Bot API、grammY 官方文档和 `grammy@1.45.1` 为首个实施基线，并在插件包元数据中记录精确版本、仓库 commit 和审计日期；实施时使用锁文件固定实际依赖，不跟随浮动版本。grammY 是本插件允许使用的正式运行时框架，不要求像 QQ、微信和企业微信协议一样自行重写，但后续升级仍须人工审计并通过 Fixture，禁止自动下载或更新。
 - [ ] 在 `plugins/telegram` 建立独立的 `telegram` Plugin Manifest、TypeScript/Bun workspace、stdio MCP Server、`telegram-host` 和 standalone 分发目录。`grammy`、`@modelcontextprotocol/sdk`、`zod` 及后续确有必要的 Telegram 依赖只能位于该插件，不得进入根包、主 CLI、其他插件或非 Telegram 生产 Bundle；删除插件目录即可移除全部 Telegram 能力。
-- [ ] P2 只使用 grammY 的 `bot.start()` 接收 Telegram `getUpdates` 长轮询，不建立公网 HTTP 服务，不实现 Webhook，也不在发现既有 Webhook 时自动调用 `deleteWebhook`。`telegram-host bot doctor` 必须通过 `getMe` 验证 Token、通过 `getWebhookInfo` 报告互斥配置，并在同一 Token 已被其他轮询进程占用或返回 `409` 时明确失败，不抢占外部 Bot。
+- [ ] P0 只使用 grammY 的 `bot.start()` 接收 Telegram `getUpdates` 长轮询，不建立公网 HTTP 服务，不实现 Webhook，也不在发现既有 Webhook 时自动调用 `deleteWebhook`。`telegram-host bot doctor` 必须通过 `getMe` 验证 Token、通过 `getWebhookInfo` 报告互斥配置，并在同一 Token 已被其他轮询进程占用或返回 `409` 时明确失败，不抢占外部 Bot。
 - [ ] 支持多个 Telegram Bot，要求别名和 Token 唯一，Token 只能由秘密环境变量或私有状态读取，不能作为普通命令行参数、Manifest 字段或日志内容。提供 `telegram-host bot add|remove|list|doctor` 和 `mcp` 生命周期；账号索引、允许列表、Update 排重及诊断状态保存至 `.claude/channels/telegram`，按 Bot 原子写入和隔离，一个 Bot 故障不得停止其他 Bot。
 - [ ] 每个配置创建独立 grammY `Bot` 实例，显式限定 `allowed_updates`，安装 `bot.catch`，并接入 MCP EOF、父进程消失、`SIGINT`、`SIGTERM` 和 `SIGHUP` 的有界停止流程。首版入站中间件只完成过滤、消息转换和 MCP notification，不等待模型响应，因此保持 `bot.start()` 的顺序处理；不引入 `@grammyjs/runner`、Conversations、Session、数据库或第二套会话状态，只有验收证明吞吐不足时才单独规划并发 Runner。
 - [ ] 将入站消息转换为标准 Channel 通知，路由固定为 `bot-alias::private::chat-id`、`bot-alias::group::chat-id` 或带 `::topic::thread-id` 的群组 Topic；保留 Bot 别名、`update_id`、消息 ID、发送者 ID、会话类型、Topic、引用关系、Caption 和附件元数据。首版覆盖私聊、群聊、Forum Topic、文本、图片、文档、音频、语音和视频；群聊默认只接收明确 `@` Bot、回复 Bot 或发给 Bot 的命令，目标不唯一时 fail-closed。
 - [ ] 在 MCP 中提供 `reply` 和 `send_typing`，回复必须绑定原始 Chat、Topic 和可用的原消息 ID。文本首版使用纯文本，不默认启用 Markdown/HTML，并按 Telegram 限制和 Unicode 边界确定性拆分；媒体经 grammY/Bot API 的 `getFile`、`InputFile` 和对应发送方法处理，保存原始 MIME/文件名，限制大小、类型和超时，临时文件按 Bot/Chat/Message 隔离，包含 Token 的文件 URL和完整敏感媒体地址不得写入日志。
 - [ ] 不全局启用 grammY `auto-retry`。出站包装器只对 Telegram 明确返回的 `429` 按 `retry_after` 有界重试，对确定未执行的安全请求使用有限退避；对于网络断线后结果不确定的消息或媒体发送不得自动重放，必须返回可诊断错误，避免重复消息。每个出站操作记录不含敏感内容的本地操作 ID，并区分 grammY `GrammyError`、`HttpError`、权限错误和配置错误。
-- [ ] 复用现有 Channel 权限协议，但审批键必须包含 Bot 别名、会话类型、Chat ID、Topic ID、发送者 ID 和 Request ID；其他 Bot、群、Topic 或用户不得批准请求，过期请求必须拒绝。首版使用 `yes <request-id>` / `no <request-id>` 文本完成闭环，主动发送默认关闭并要求独立工具权限；Inline Keyboard、广播、定时任务、Telegram Mini App 和 Bot 管理面板不在 P2 范围。
+- [ ] 复用现有 Channel 权限协议，但审批键必须包含 Bot 别名、会话类型、Chat ID、Topic ID、发送者 ID 和 Request ID；其他 Bot、群、Topic 或用户不得批准请求，过期请求必须拒绝。首版使用 `yes <request-id>` / `no <request-id>` 文本完成闭环，主动发送默认关闭并要求独立工具权限；Inline Keyboard、广播、定时任务、Telegram Mini App 和 Bot 管理面板不在 P0 范围。
 - [ ] 在 `scripts/validation` 增加 Telegram 插件边界、grammY 依赖边界、配置、鉴权、长轮询、路由、媒体、权限、错误恢复和分发验证，并统一并入 `bun run verify`。Fixture 使用可注入的本地 Bot API 端点或固定传输，不依赖真实 Token，至少覆盖双 Bot 并发、Token/Update/Chat/Topic 隔离、`getMe` 失败、Webhook 冲突、`409`、断线恢复、Update 排重、群聊 `@` 过滤、文本拆分、媒体限制、`429`、权限越界拒绝、Secret 脱敏、Host EOF、standalone 自动发现，以及 grammY 不进入根 CLI 和其他 Bundle。
 - [ ] 后续升级采用人工同步：发现 Telegram Bot API、grammY 或选用的官方 grammY 插件新版本后，先冻结版本与 commit，审计协议、类型、错误语义、依赖和 Bundle 变化，只移植当前产品范围需要的行为并更新 Fixture；验证通过后再更新本地兼容元数据。不得因为 grammY 提供 Webhook、Runner、Conversations 或其他插件就隐式扩大本项目能力。
 
 完成条件：至少两个 Telegram Bot 可由 `telegram-host` 同时长轮询运行，且不会串 Token、Update、Chat、Topic、附件、权限或 Secret；源码开发使用显式 `--plugin-dir plugins/telegram`，生产使用 standalone 同级 `plugins/telegram` 自动发现，删除插件目录即可完整移除能力；`typecheck:telegram-host`、`build:telegram-host`、依赖边界、分发验证和 `bun run verify -- --ci` 全部通过。固定 Fixture 通过后，再使用真实 BotFather Token 验收私聊、群聊、Topic、断线恢复、图片和文件收发。
 
-### P3：Telegram 用户账号 Channel 插件
+### P1：Telegram 用户账号 Channel 插件
 
 - [ ] 新增独立的 `telegram-user` 插件，使用 TypeScript 的 GramJS（npm 包 `telegram`）连接 Telegram MTProto，不使用 grammY Bot API，也不与 `telegram` Bot 插件共享代码路径、配置、凭据、Session、路由或权限状态。GramJS 是插件内正式运行时依赖，只能进入 `plugins/telegram-user` 和独立 Host，不得进入根包、主 CLI、其他插件或非 Telegram User 生产 Bundle。
 - [ ] 实施前先冻结 GramJS、Telegram MTProto Layer 和官方 Telegram API 文档的精确版本、仓库 commit 与审计日期，并完成最小技术验证：Bun 直接运行、`api_id`/`api_hash` 登录、手机号验证码、2FA、StringSession 保存/恢复、消息与媒体收发、断线重连，以及当前支持平台的 `bun build --compile` standalone。GramJS 官方只明确支持 Node.js/浏览器，因此 Bun 与 standalone 兼容性必须以真实产物验证，不能凭接口相似性判定。
 - [ ] 技术验证通过后，在 `plugins/telegram-user` 建立标准 `telegram-user` Plugin Manifest、独立 TypeScript/Bun workspace、stdio MCP Server、`telegram-user-host` 和 standalone 分发目录。源码通过显式 `--plugin-dir plugins/telegram-user` 加载，生产通过 standalone 同级一级目录自动发现；删除插件目录即可完整移除普通 Telegram 用户账号能力。
-- [ ] 若 GramJS 无法稳定运行或打入当前支持平台的 Bun standalone，P3 必须停在不通过状态并记录具体边界，再单独决策 Node Host、Telethon/Python sidecar 或 TDLib 原生库；不得自动引入 Python、Node Runtime、C++ 动态库或静默切换实现。Telethon 只是后备评估对象，不属于当前 P3 的默认依赖与分发范围。
+- [ ] 若 GramJS 无法稳定运行或打入当前支持平台的 Bun standalone，P1 必须停在不通过状态并记录具体边界，再单独决策 Node Host、Telethon/Python sidecar 或 TDLib 原生库；不得自动引入 Python、Node Runtime、C++ 动态库或静默切换实现。Telethon 只是后备评估对象，不属于当前 P1 的默认依赖与分发范围。
 - [ ] 登录需要应用级 `api_id` 与 `api_hash`，以及账号级手机号、一次性验证码和可选 2FA 密码；这些值只能从秘密环境变量、私有交互输入或私有状态读取，禁止出现在普通命令参数、Manifest、Shell 历史和日志中。提供 `telegram-user-host account add|login|logout|remove|list|doctor` 和 `mcp` 生命周期，验证码与 2FA 只在当前交互中使用，不落盘。
 - [ ] 支持多个 Telegram 用户账号并要求本地别名唯一；每个账号独立保存 MTProto Session、数据中心连接、Update 状态、允许列表、排重状态和体验配置。Session 等价于长期登录凭据，必须使用逐账号私有目录、原子写入和严格文件权限，日志与诊断不得返回 Session、Auth Key、`api_hash`、手机号、验证码、2FA、完整敏感消息或带鉴权信息的媒体地址；一个账号故障不得影响其他账号。
-- [ ] 产品范围只包含已登录账号显式允许的私聊、群组和频道消息接收，以及文本和受支持媒体的定向回复；默认不订阅全部会话，首次启用必须配置 Chat/User allowlist。P3 不实现批量群发、联系人导入、自动加群、自动私聊陌生用户、账号资料修改、删除消息、群管理、频道管理、通话、Secret Chat、账号注册或绕过 Telegram 风控；平台拒绝或权限不足时必须明确失败。
+- [ ] 产品范围只包含已登录账号显式允许的私聊、群组和频道消息接收，以及文本和受支持媒体的定向回复；默认不订阅全部会话，首次启用必须配置 Chat/User allowlist。P1 不实现批量群发、联系人导入、自动加群、自动私聊陌生用户、账号资料修改、删除消息、群管理、频道管理、通话、Secret Chat、账号注册或绕过 Telegram 风控；平台拒绝或权限不足时必须明确失败。
 - [ ] 将 MTProto Update 转换为标准 Channel 通知，路由固定编码账号别名、Peer 类型、Peer ID 和可选 Topic/Thread ID，保留消息 ID、发送者、引用、编辑状态和附件元数据。必须过滤本账号发出的回声、插件自己的回复和排重命中的 Update，避免模型与账号形成自激循环；Peer/access hash 只按账号作用域保存和解析，跨账号或目标不唯一时 fail-closed。
 - [ ] MCP 首版只提供绑定原入站消息的 `reply` 和受限媒体回复；主动发送默认关闭，并要求独立、高风险工具权限和明确目标。所有权限审批按账号、Peer 类型、Peer ID、Topic、发送者和 Request ID 隔离，群内其他成员、其他会话或其他账号不得批准请求；普通用户账号操作必须在 UI 和审批文本中明确标注“将以你的 Telegram 用户身份执行”，不能伪装成 Bot 操作。
 - [ ] 为网络重连、FloodWait、迁移到其他数据中心、Session 失效、验证码过期、2FA 错误和账号被限制提供有界恢复与脱敏诊断。只对 Telegram 明确要求等待且可以安全重试的请求执行有限重试；结果不确定的发送操作、批量动作和权限敏感动作不得自动重放，禁止无限重连、无限验证码请求或规避平台限制。
@@ -171,23 +147,23 @@
 
 完成条件：GramJS 在当前支持平台的 Bun 开发运行和 standalone 产物均通过真实验证；至少两个 Telegram 用户账号可以同时连接，且不会串 Session、Peer、Update、附件、权限或秘密；插件默认只处理 allowlist 会话、不会处理自身回声，也不会提供批量或账号管理型高风险操作；`typecheck:telegram-user-host`、`build:telegram-user-host`、依赖边界、分发验证和 `bun run verify -- --ci` 全部通过。随后使用专门的低权限测试账号验收登录、重启恢复、私聊、群组、频道、Topic、断线恢复及媒体收发，禁止直接使用重要主账号作为首次验收对象。
 
-### P4：X 只读 MCP 工具插件
+### P2：X 只读 MCP 工具插件
 
 - [ ] 新增独立的 `x` 插件，首版使用 X 官方 TypeScript XDK（`@xdevplatform/xdk`）调用 X API，不引入 Python、Tweepy 或社区 Twitter SDK。官方 XDK 是插件内正式运行时依赖，只能进入 `plugins/x` 和独立 Host，不得进入根包、主 CLI、其他插件或非 X 生产 Bundle；删除插件目录即可完整移除 X 能力。
 - [ ] 实施前冻结 X API、官方 TypeScript XDK、官方鉴权文档及计费/限流说明的精确版本、仓库 commit 和审计日期，并先验证 Bun 直接运行、App-only Bearer Token、查询与分页、`429`/Rate Limit Header、AbortSignal，以及当前支持平台的 `bun build --compile` standalone。若官方 XDK 无法稳定运行或打包，再单独决策插件内直接 `fetch` 官方 API；不得自动引入 Python/Tweepy、Node Runtime 或社区 SDK。
 - [ ] 在 `plugins/x` 建立标准 `x` Plugin Manifest、独立 TypeScript/Bun workspace、stdio MCP Server、`x-host` 和 standalone 分发目录。主程序只通过现有插件发现和 MCP 生命周期接入，不增加 X SDK、静态注册、专用主 CLI 命令或业务实现；源码使用显式 `--plugin-dir plugins/x`，生产使用 standalone 同级一级目录自动发现。
 - [ ] 配置以 X Developer App 别名为核心并支持多个 App，首版只读取固定的 `X_BEARER_TOKEN` App-only Bearer Token 环境变量，不兼容其他旧名称，也不允许通过配置改用其他环境变量名。提供 `x-host app add|remove|list|doctor` 和 `mcp` 生命周期；Token 不得出现在普通命令参数、Manifest、配置值或日志中。
 - [ ] 首版只提供受限的公开数据读取工具：`x_get_post`、`x_get_thread`、`x_get_user`、`x_get_user_posts`、`x_search_recent` 和在当前 App 权限下可用的 `x_get_mentions`。每个工具必须固定 fields/expansions 白名单、单次结果数、自动分页页数、响应字节数、超时、并发和可接受 API 消耗上限；不得由模型无限翻页、自动扩大搜索范围或将部分结果伪装为完整结果。
-- [ ] App-only Bearer Token 只代表应用，不能当作用户登录状态。P4 不提供发布、回复、删除、点赞、转发、关注、取消关注、私信、账号修改、列表管理、媒体上传或其他用户身份写操作，也不实现 OAuth 1.0a、OAuth 2.0 PKCE 用户授权；SDK 中存在对应接口不代表本项目允许暴露。权限或订阅级别不足时必须返回明确错误，不尝试其他凭据或降级到网页抓取。
+- [ ] App-only Bearer Token 只代表应用，不能当作用户登录状态。P2 不提供发布、回复、删除、点赞、转发、关注、取消关注、私信、账号修改、列表管理、媒体上传或其他用户身份写操作，也不实现 OAuth 1.0a、OAuth 2.0 PKCE 用户授权；SDK 中存在对应接口不代表本项目允许暴露。权限或订阅级别不足时必须返回明确错误，不尝试其他凭据或降级到网页抓取。
 - [ ] 首版是按需调用的 MCP 工具插件，不是 Channel，也不启动 Filtered Stream、Account Activity、Webhook、后台轮询或自动通知。实时监听涉及持续 API 消耗、Stream Rule、断线恢复、事件排重和自动响应循环，必须在后续获得独立产品决策后另行规划，不能随着只读查询实现隐式启用。
 - [ ] 实现统一的 X API 错误与费用边界，区分 `401`、`403`、`404`、`429`、套餐/Endpoint 不可用、网络失败和服务端错误；读取并返回脱敏的 Rate Limit 摘要，按 `x-rate-limit-reset` 有界等待或明确失败。默认不自动重放可能产生额外计费的请求，不跨工具共享无限重试或分页预算；诊断不得记录 Bearer Token、Authorization Header、完整敏感查询或未截断的响应正文。
-- [ ] 若后续需要代表用户发布或回复，必须作为独立增量重新规划 OAuth 2.0 PKCE 或 OAuth 1.0a User Context、Token 刷新、账号选择、写工具权限和正文预览；写能力必须默认关闭、逐次审批、禁止批量发布，并对结果不确定的发送请求禁止自动重放。该后续能力不能复用 App-only Bearer Token 冒充用户授权，也不属于当前 P4 完成条件。
+- [ ] 若后续需要代表用户发布或回复，必须作为独立增量重新规划 OAuth 2.0 PKCE 或 OAuth 1.0a User Context、Token 刷新、账号选择、写工具权限和正文预览；写能力必须默认关闭、逐次审批、禁止批量发布，并对结果不确定的发送请求禁止自动重放。该后续能力不能复用 App-only Bearer Token 冒充用户授权，也不属于当前 P2 完成条件。
 - [ ] 在 `scripts/validation` 增加 X SDK/Bun 兼容、插件与依赖边界、App-only 鉴权、只读工具、字段白名单、分页/响应/费用上限、限流、错误分类、脱敏和分发验证，并统一并入 `bun run verify`。Fixture 使用可注入本地 X API 端点或固定传输，不依赖真实 Token，至少覆盖多 App 隔离、`401`/`403`/`429`、分页截断、AbortSignal、禁止写工具、禁止后台连接、Host EOF、standalone 自动发现，以及 XDK 不进入根 CLI 和其他 Bundle。
 - [ ] 后续升级采用人工同步：发现 X API、计费、权限、官方 XDK 或鉴权政策变化后，先冻结版本与 commit，审计 Endpoint、类型、授权要求、依赖、Bundle 和成本变化，只移植当前只读边界需要的行为并更新 Fixture；验证通过后再更新兼容元数据，禁止自动下载、更新插件、扩大 scopes 或触发 CLI 自更新。
 
 完成条件：`x-host` 可使用至少两个独立 App-only Bearer Token 配置执行受限公开数据查询且不会串 Token、分页、限流或费用预算；首版不包含任何用户写操作、OAuth 用户登录、Channel、Stream、Webhook 或后台轮询；源码和 standalone 分发均可删除式移除，`typecheck:x-host`、`build:x-host`、依赖边界、分发验证和 `bun run verify -- --ci` 全部通过。固定 Fixture 通过后，再用低权限测试 App 对真实 X API 验收用户查询、Post 查询、近期搜索、分页、限流和套餐拒绝行为。
 
-### P5：可选产品能力
+### P3：可选产品能力
 
 - [ ] 支持 macOS 专用、默认关闭的 `sandbox.allowAppleEvents`，并确保该例外不会放宽文件系统、网络或其他平台的边界。
 

@@ -287,12 +287,30 @@
         "bun-types": "latest",
       },
     },
+    "plugins/qq": {
+      "name": "@claude-code/qq-plugin",
+      "version": "1.0.0",
+      "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.29.0",
+        "ws": "^8.20.0",
+        "zod": "^4.3.6",
+      },
+    },
     "plugins/weixin": {
       "name": "@claude-code/weixin-plugin",
       "version": "1.1.0",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
         "qrcode": "^1.5.4",
+        "zod": "^4.3.6",
+      },
+    },
+    "plugins/wxwork": {
+      "name": "@claude-code/wxwork-plugin",
+      "version": "1.0.0",
+      "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.29.0",
+        "ws": "^8.20.0",
         "zod": "^4.3.6",
       },
     },
@@ -454,9 +472,13 @@
 
     "@claude-code/mcp-client": ["@claude-code/mcp-client@workspace:packages/mcp-client"],
 
+    "@claude-code/qq-plugin": ["@claude-code/qq-plugin@workspace:plugins/qq"],
+
     "@claude-code/weixin-plugin": ["@claude-code/weixin-plugin@workspace:plugins/weixin"],
 
     "@claude-code/workflow-engine": ["@claude-code/workflow-engine@workspace:packages/workflow-engine"],
+
+    "@claude-code/wxwork-plugin": ["@claude-code/wxwork-plugin@workspace:plugins/wxwork"],
 
     "@commander-js/extra-typings": ["@commander-js/extra-typings@14.0.0", "", { "peerDependencies": { "commander": "~14.0.0" } }, "sha512-hIn0ncNaJRLkZrxBIp5AsW/eXEHNKYQBh0aPdoUqNgD+Io3NIykQqpKFyKcuasZhicGaEZJX/JBSIkZ4e5x8Dg=="],
 

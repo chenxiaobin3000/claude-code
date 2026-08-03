@@ -1,0 +1,33 @@
+{
+  "name": "@claude-code/wxwork-plugin",
+  "version": "1.0.0",
+  "wxworkCompatibility": {
+    "protocol": "WeCom API-mode intelligent bot WebSocket",
+    "documentation": "https://open.work.weixin.qq.com/help2/pc/21657",
+    "upstreamCli": "@wecom/wecom-openclaw-cli@1.1.0",
+    "upstreamPlugin": "@wecom/wecom-openclaw-plugin@20206.7.201",
+    "upstreamPluginCommit": "1a91ef7300de7274de8d74e4a566cf3b6e569a25",
+    "upstreamSdk": "@wecom/aibot-node-sdk@1.0.7",
+    "upstreamSdkCommit": "80615b987ef69c6028ad764924609247c0725955",
+    "auditedAt": "2026-08-04"
+  },
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
+    "test:smoke": "bun run ../../scripts/validation/workspace-smoke.ts"
+  },
+  "workspaceValidation": {
+    "build": {
+      "applicable": false,
+      "reason": "The root build:wxwork-host script compiles this local Plugin into a standalone distribution."
+    }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "ws": "^8.20.0",
+    "zod": "^4.3.6"
+  }
+}

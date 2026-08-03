@@ -8,7 +8,7 @@
 
 - 项目发行版本：`2.1.220`
 - 官方功能对照基线：Claude Code `2.1.220`，以[官方 Changelog](https://code.claude.com/docs/en/changelog)为准。
-- 基线状态：截至 `2026-08-01`，当前产品范围内的功能、差异边界、安全约束、构建和验证矩阵均已验收；可选后续能力不阻塞本版本发布。
+- 基线状态：截至 `2026-08-04`，当前产品范围内的功能、差异边界、安全约束、构建和验证矩阵均已验收；可选后续能力不阻塞本版本发布。
 - 本项目不追踪或复述官方已有且行为一致的功能；升级官方版本时，只补充新增差异或重新评估现有差异。
 
 这里的“对齐”表示已经以官方 `2.1.220` 为功能审计基准，并在本项目适用的产品范围内完成验收；不表示源码、二进制或产品能力与官方发行版完全相同。Anthropic 账号与云服务、官方 Provider、远端产品和其他明确裁剪项仍按下文边界处理。
@@ -18,8 +18,8 @@
 以下是以官方 `2.1.220` 为基线的产品差异，不应把上游功能说明误认为本项目能力。
 
 - **模型与登录**：官方的 Anthropic 登录、官方模型、组织默认/限制模型、Claude API Provider 与相关云端模型能力不适用。本项目只从 `models.json` 加载 OpenAI-compatible 模型；模型 Profile 静态声明，不做服务端模型发现或自动模型替换。
-- **云端与远程产品**：官方的 Web/Desktop/Mobile、Remote Control、GitHub App、Cloud Code Review、Routines、云端 Channels、Artifacts、语音与账户/用量产品均不提供。本项目也不包含官方自动更新、安装器或远端遥测；可选的本地 `weixin` Channel 插件不依赖 Anthropic 云服务。
-- **插件与浏览器**：官方插件市场、远端安装/更新和插件自动重命名不提供。主程序不实现 Chrome 或微信业务；生产 standalone 自动发现同级 `plugins` 一级目录中的本地 `chrome` 与 `weixin`，源码开发通过 `--plugin-dir` 加载。两个插件均以独立 Host 分发，删除对应目录即可移除能力。
+- **云端与远程产品**：官方的 Web/Desktop/Mobile、Remote Control、GitHub App、Cloud Code Review、Routines、云端 Channels、Artifacts、语音与账户/用量产品均不提供。本项目也不包含官方自动更新、安装器或远端遥测；可选的本地 `weixin`、`wxwork` 与 `qq` Channel 插件不依赖 Anthropic 云服务。
+- **插件与浏览器**：官方插件市场、远端安装/更新和插件自动重命名不提供。主程序不实现 Chrome、微信、企业微信或 QQ 业务；生产 standalone 自动发现同级 `plugins` 一级目录中的本地 `chrome`、`weixin`、`wxwork` 与 `qq`，源码开发通过 `--plugin-dir` 加载。插件均以独立 Host 分发，删除对应目录即可移除能力。
 - **Sandbox**：Windows 上启用 Sandbox 时，Shell 会在 Windows Sandbox VM 内执行，默认只映射启动工作区和只读 Shell 运行时，且固定断网、不传递用户主目录或凭据。`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands` 保持上层语义；Windows 不能精确落实域名白名单、代理和目录内文件 allow/deny 规则，配置这些规则时会 fail-closed，而不会回退宿主执行。
 - **会话路径**：官方 `/cd` 可迁移会话；本项目有意保持临时 cwd 语义，只改变主会话后续工具的当前目录，不迁移项目身份、会话存储、权限根、配置或扩展作用域。
 - **Agent、Hook、MCP 与 Skill**：本地 Agent、后台任务、Hook、Plugin、Skill 与 MCP 已固化为当前基线；嵌套 Skill 使用相对启动项目根的限定名，连续 inline Skill 可在同一条输入中组合。`/cd` 的临时 cwd、OpenAI-compatible Provider、本地安全增强和不提供云端 Agent 产品仍是明确差异。本地 `/mcp login`/`logout` 仅管理用户配置的 MCP OAuth 凭据。
@@ -236,6 +236,71 @@ bun run dev -- --plugin-dir plugins/weixin --dangerously-load-development-channe
 进度需要当前 MCP Channel 不提供的生成中事件，因此明确不支持，配置开启会报错退出。
 完整字段与安全边界见 [`plugins/weixin/README.md`](plugins/weixin/README.md)。
 
+### wxwork 企业微信插件
+
+企业微信 Channel 位于 [`plugins/wxwork`](plugins/wxwork)，只连接企业微信后台创建的
+“API 模式智能机器人”WebSocket 长连接，不实现 Webhook、自建应用 XML 回调、
+OpenClaw Runtime 或 Bot→Agent 回退。实现独立维护；官方 CLI、OpenClaw 插件与
+`@wecom/aibot-node-sdk` 只用于人工差异审计，不是运行时依赖。
+
+Secret 只从指定环境变量读取，配置文件仅保存环境变量名。可使用不同别名配置多个
+Bot；路由、配对、排重、权限和连接租约逐 Bot 隔离，同一 Bot 被第二个 Host 启动时会
+在连接前拒绝。源码配置示例：
+
+```powershell
+$env:WXWORK_PRIMARY_SECRET = "your-secret"
+bun plugins/wxwork/host/entry.ts bot add primary your-bot-id WXWORK_PRIMARY_SECRET
+bun plugins/wxwork/host/entry.ts bot doctor primary
+bun run dev -- --plugin-dir plugins/wxwork --dangerously-load-development-channels plugin:wxwork@inline
+```
+
+生产分发使用：
+
+```powershell
+.\dist\plugins\wxwork\wxwork-host.exe bot add primary your-bot-id WXWORK_PRIMARY_SECRET
+.\dist\plugins\wxwork\wxwork-host.exe bot doctor primary
+.\dist\claude.exe --channels plugin:wxwork@local
+```
+
+新用户首次发消息后，由操作者运行 `wxwork-host access pair <alias> <code>` 完成配对。
+插件只提供绑定入站请求的最终 Markdown 和受限媒体被动回复；主动发送、欢迎语、卡片、
+企业文档/审批/打卡 API 和伪流式输出均不提供。完整协议、媒体限制和安全边界见
+[`plugins/wxwork/README.md`](plugins/wxwork/README.md)。
+
+### qq 机器人插件
+
+QQ Channel 位于 [`plugins/qq`](plugins/qq)，独立实现 QQ 开放平台 Bot API v2 的
+AppID/AppSecret 鉴权、WebSocket Gateway 入站和 REST 被动回复。当前人工同步基线为
+`@tencent-connect/openclaw-qqbot@2.0.0`（commit
+`47142c997bdbc9e72d92b817ff378941b3be7d4c`）、
+`@tencent-connect/qqbot-connector@1.2.0` 与
+`@tencent-connect/qqbot-nodejs@1.0.4`（gitHead
+`589597a6cb5a24dce8230ba53bfba5390e13c073`）；这些包只用于人工协议审计，未安装、
+导入或打入产物。
+
+插件支持多个 Bot，别名和 AppID 必须唯一；配置只保存 Secret 环境变量名，Token、
+Gateway 会话、排重、配对和权限状态逐 Bot 隔离。源码配置示例：
+
+```powershell
+$env:QQ_PRIMARY_SECRET = "your-app-secret"
+bun plugins/qq/host/entry.ts bot add primary your-app-id QQ_PRIMARY_SECRET
+bun plugins/qq/host/entry.ts bot doctor primary
+bun run dev -- --plugin-dir plugins/qq --dangerously-load-development-channels plugin:qq@inline
+```
+
+生产分发使用：
+
+```powershell
+.\dist\plugins\qq\qq-host.exe bot add primary your-app-id QQ_PRIMARY_SECRET
+.\dist\plugins\qq\qq-host.exe bot doctor primary
+.\dist\claude.exe --channels plugin:qq@local
+```
+
+首版只消费 C2C 私聊和明确 `@` 机器人的群聊事件；回复必须绑定 15 分钟内的原消息，
+不提供主动发送、Webhook、个人 QQ 登录、Guild、Cron、远程安装或自动更新。本地媒体
+发送要求通过 `QQ_ALLOWED_FILE_ROOTS` 显式限定允许目录，单次上限 20 MiB。完整配置、
+路由、媒体与安全边界见 [`plugins/qq/README.md`](plugins/qq/README.md)。
+
 ## 构建与验证
 
 ```powershell
@@ -243,10 +308,12 @@ bun install
 bun run typecheck
 bun run lint
 bun run build
-bun run build:node
+bun run build:vite
 bun run build:exe
 bun run build:chrome-host
 bun run build:weixin-host
+bun run build:wxwork-host
+bun run build:qq-host
 bun run build:production
 bun run verify
 ```
@@ -260,9 +327,13 @@ bun run verify
   Host 为独立 Native Messaging/MCP 单文件，目标机器无需 Bun 或 Node.js。
 - weixin Plugin：`dist/plugins/weixin` 是完整分发目录，其中 Host 为独立 Channel
   MCP 单文件，目标机器无需 Bun 或 Node.js。
+- wxwork Plugin：`dist/plugins/wxwork` 是完整分发目录，其中 Host 为独立企业微信
+  Channel MCP 单文件，目标机器无需 Bun 或 Node.js。
+- qq Plugin：`dist/plugins/qq` 是完整分发目录，其中 Host 为独立 QQ Channel MCP
+  单文件，目标机器无需 Bun 或 Node.js。
 
 `bun run build:production` 一次生成 `dist/claude.exe` 和
-`dist/plugins/chrome`、`dist/plugins/weixin`。整个 `dist` 是 Windows 生产分发单元：standalone
+`dist/plugins/chrome`、`dist/plugins/weixin`、`dist/plugins/wxwork`、`dist/plugins/qq`。整个 `dist` 是 Windows 生产分发单元：standalone
 启动时只自动加载同级 `plugins` 下的一级插件目录；`--plugin-dir <path>` 仍可加载
 临时插件或覆盖同名自动插件。自动发现不会安装 Chrome 扩展、注册 Native Host、
 下载插件或更新任何产物。

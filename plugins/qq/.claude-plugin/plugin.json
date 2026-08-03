@@ -1,0 +1,20 @@
+{
+  "name": "qq",
+  "version": "1.0.0",
+  "qqCompatibility": {
+    "protocol": "QQ Open Platform Bot API v2 WebSocket Gateway and REST",
+    "upstreamSdk": "@tencent-connect/qqbot-nodejs@1.0.4",
+    "upstreamSdkGitHead": "589597a6cb5a24dce8230ba53bfba5390e13c073"
+  },
+  "apiVersion": "^1.0.0",
+  "description": "Local multi-bot QQ Open Platform C2C/group Channel over WebSocket.",
+  "author": { "name": "claude-code" },
+  "keywords": ["qq", "bot", "channel", "websocket", "local"],
+  "mcpServers": {
+    "qq": {
+      "type": "stdio",
+      "command": "bun",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/host/entry.ts", "mcp"]
+    }
+  }
+}

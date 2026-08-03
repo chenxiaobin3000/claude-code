@@ -1,0 +1,33 @@
+{
+  "name": "@claude-code/qq-plugin",
+  "version": "1.0.0",
+  "qqCompatibility": {
+    "protocol": "QQ Open Platform Bot API v2 WebSocket Gateway and REST",
+    "documentation": "https://bot.q.qq.com/wiki/develop/api-v2/",
+    "upstreamPlugin": "@tencent-connect/openclaw-qqbot@2.0.0",
+    "upstreamPluginCommit": "47142c997bdbc9e72d92b817ff378941b3be7d4c",
+    "upstreamConnector": "@tencent-connect/qqbot-connector@1.2.0",
+    "upstreamSdk": "@tencent-connect/qqbot-nodejs@1.0.4",
+    "upstreamSdkGitHead": "589597a6cb5a24dce8230ba53bfba5390e13c073",
+    "auditedAt": "2026-08-04"
+  },
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
+    "test:smoke": "bun run ../../scripts/validation/workspace-smoke.ts"
+  },
+  "workspaceValidation": {
+    "build": {
+      "applicable": false,
+      "reason": "The root build:qq-host script compiles this local Plugin into a standalone distribution."
+    }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "ws": "^8.20.0",
+    "zod": "^4.3.6"
+  }
+}

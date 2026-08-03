@@ -29,6 +29,8 @@ const pluginPath = join(
   'chrome',
 )
 const weixinPluginPath = join(distributionRoot, 'plugins', 'weixin')
+const wxworkPluginPath = join(distributionRoot, 'plugins', 'wxwork')
+const qqPluginPath = join(distributionRoot, 'plugins', 'qq')
 const hiddenPluginPath = join(
   distributionRoot,
   `.chrome-validation-hidden-${process.pid}`,
@@ -55,6 +57,8 @@ function listPlugins(prefixArgs: string[] = []): ListedPlugin[] {
 await access(exe)
 await access(pluginPath)
 await access(weixinPluginPath)
+await access(wxworkPluginPath)
+await access(qqPluginPath)
 
 const automatic = listPlugins()
 assert(
@@ -78,6 +82,18 @@ assertEqual(
   resolve(weixinPluginPath),
   'weixin automatic plugin path',
 )
+const automaticWxwork = automatic.find(plugin => plugin.name === 'wxwork')
+assert(automaticWxwork, 'standalone must automatically discover wxwork')
+assertEqual(automaticWxwork.source, 'wxwork@local', 'wxwork automatic source')
+assertEqual(
+  resolve(automaticWxwork.path),
+  resolve(wxworkPluginPath),
+  'wxwork automatic plugin path',
+)
+const automaticQq = automatic.find(plugin => plugin.name === 'qq')
+assert(automaticQq, 'standalone must automatically discover qq')
+assertEqual(automaticQq.source, 'qq@local', 'qq automatic source')
+assertEqual(resolve(automaticQq.path), resolve(qqPluginPath), 'qq automatic plugin path')
 assertEqual(
   resolve(automaticChrome.path),
   resolve(pluginPath),
@@ -115,6 +131,14 @@ try {
   assert(
     withoutAutomaticPlugin.some(plugin => plugin.name === 'weixin'),
     'removing chrome must not remove the independent weixin plugin',
+  )
+  assert(
+    withoutAutomaticPlugin.some(plugin => plugin.name === 'wxwork'),
+    'removing chrome must not remove the independent wxwork plugin',
+  )
+  assert(
+    withoutAutomaticPlugin.some(plugin => plugin.name === 'qq'),
+    'removing chrome must not remove the independent qq plugin',
   )
 } finally {
   if (moved) await rename(hiddenPluginPath, pluginPath)
