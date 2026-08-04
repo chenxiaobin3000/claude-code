@@ -124,7 +124,14 @@
 
 ## 可选后续路线图（不影响当前验收）
 
-### P0：Telegram 用户账号 Channel 插件
+### P0：Telegram Bot / User 代理支持与用户账号验收
+
+- [ ] 为 `telegram` Bot 插件增加显式 `TELEGRAM_PROXY_URL`，为 `telegram-user` 插件增加显式 `TELEGRAM_USER_PROXY_URL`；两项均为可选用户级环境配置，未配置时保持现有直连行为。代理值只允许来自 Host 进程环境或用户级 `settings.json.env`，项目和管理级设置不得为外部 Channel 注入代理。配置了代理但代理不可用时必须明确失败，禁止静默回退直连造成网络出口或 DNS 泄漏。
+- [ ] 实施前冻结 Bun standalone、grammY/底层 `fetch`、GramJS/MTProto 与候选代理实现的兼容矩阵，至少覆盖 HTTP/HTTPS CONNECT 和 SOCKS5；某类协议不能在当前 Bun standalone 稳定工作时应明确报“不支持”，不得把普通代理 URL 当作 `TELEGRAM_API_ROOT`。代理 URL 的用户名、密码和查询参数按凭据处理，禁止进入索引、列表、错误、日志、诊断或模型上下文。
+- [ ] Telegram Bot 的代理必须统一覆盖 `bot doctor`、`getMe`、`getWebhookInfo`、`getUpdates` 长轮询、回复、typing、上传以及 Telegram 文件下载；`TELEGRAM_API_ROOT` 继续只表示 Bot API 替代根地址，与传输代理保持正交。超时、取消、`429`、Webhook/长轮询冲突和发送结果不确定边界保持现有语义，禁止因代理断线自动重放可能已成功的发送。
+- [ ] Telegram User 的代理必须覆盖 GramJS 初次鉴权、验证码/2FA、既有 StringSession 恢复、DC 发现与迁移、Update、消息和媒体收发及重连；所有账号共享 Host 级代理出口，但 Session、Peer、Update、权限和连接状态继续逐账号隔离。代理变化只在 Host 重启后生效，不在线迁移连接，不通过代理绕过 FloodWait、平台限制或账号风控。
+- [ ] 扩展 `telegram-host bot doctor` 与 `telegram-user-host account doctor`，分别报告脱敏的代理模式、代理连接阶段、Telegram API/MTProto 阶段和明确错误分类；不得把 DNS/TCP/TLS/代理认证/Telegram 鉴权统一折叠为普通网络失败。诊断仅显示协议和脱敏地址，不显示代理凭据、Bot Token、API Hash、手机号或 Session。
+- [ ] 在 `scripts/validation` 增加可注入的本地 HTTP CONNECT/SOCKS5 Fixture，覆盖直连基线、代理成功、代理认证、代理拒绝、超时、取消、DNS 不直连、禁止失败回退、Bot API/文件链路、MTProto 登录/恢复/DC 迁移、双账号隔离、秘密脱敏、Host EOF 和 Windows standalone 分发；统一并入 `bun run verify`，不依赖真实 Telegram、真实代理或测试框架。完成固定 Fixture 后，再使用低权限 Bot 和测试用户账号通过真实本地代理验收。
 
 - [x] 新增独立的 `telegram-user` 插件，使用 TypeScript 的 GramJS（npm 包 `telegram`）连接 Telegram MTProto，不使用 grammY Bot API，也不与 `telegram` Bot 插件共享代码路径、配置、凭据、Session、路由或权限状态。GramJS 是插件内正式运行时依赖，只能进入 `plugins/telegram-user` 和独立 Host，不得进入根包、主 CLI、其他插件或非 Telegram User 生产 Bundle。
 - [ ] 已冻结 GramJS `2.26.22`、commit `3aedb2e6ef216d307607f3d0f3f5b0ace6701378`、生成 MTProto Layer 198、Telegram API/Auth 文档和 `2026-08-04` 审计日期；Bun 直接加载和 Windows `bun build --compile` standalone 已通过。仍需使用低权限真实账号完成 `api_id`/`api_hash`、手机号验证码、2FA、StringSession 重启恢复、私聊/群组/频道/Topic、消息与媒体收发及断线重连验收。
@@ -139,7 +146,7 @@
 - [x] `scripts/validation/telegram-user-*.ts` 已覆盖 GramJS/Bun 边界、可注入登录状态机、Session 安全、双账号隔离、路由/Topic、回声/Update 排重、媒体、权限、FloodWait/DC 分类、秘密脱敏、Host EOF、standalone 分发/自动发现和根 Bundle 依赖禁入，并统一并入 `bun run verify`；真实账号仍作为下一项附加验收。
 - [x] 后续升级固定为人工同步：先冻结 Telegram MTProto Layer、GramJS 版本/commit 和文档基线，再审计协议、生成类型、Session、依赖、Bundle 与产品风险并更新 Fixture；禁止自动下载、覆盖插件、更新 Session 或触发 CLI 自更新。
 
-完成条件：GramJS 在当前支持平台的 Bun 开发运行和 standalone 产物均通过真实验证；至少两个 Telegram 用户账号可以同时连接，且不会串 Session、Peer、Update、附件、权限或秘密；插件默认只处理 allowlist 会话、不会处理自身回声，也不会提供批量或账号管理型高风险操作；`typecheck:telegram-user-host`、`build:telegram-user-host`、依赖边界、分发验证和 `bun run verify -- --ci` 全部通过。随后使用专门的低权限测试账号验收登录、重启恢复、私聊、群组、频道、Topic、断线恢复及媒体收发，禁止直接使用重要主账号作为首次验收对象。
+完成条件：Telegram Bot 和 Telegram User 在未配置代理时保持现有直连行为，配置支持的代理时所有规定网络链路均经代理且失败不回退直连；代理凭据与 Telegram 凭据均不泄漏。GramJS 在当前支持平台的 Bun 开发运行和 standalone 产物均通过真实验证；至少两个 Telegram 用户账号可以同时连接，且不会串 Session、Peer、Update、附件、权限或秘密；插件默认只处理 allowlist 会话、不会处理自身回声，也不会提供批量或账号管理型高风险操作；`typecheck:telegram-host`、`typecheck:telegram-user-host`、两类 Host 构建、代理 Fixture、依赖边界、分发验证和 `bun run verify -- --ci` 全部通过。随后使用专门的低权限 Bot 与测试账号经真实本地代理验收 Bot API、登录、重启恢复、私聊、群组、频道、Topic、断线恢复及媒体收发，禁止直接使用重要主账号作为首次验收对象。
 
 ### P1：X 只读 MCP 工具插件
 
@@ -147,15 +154,17 @@
 - [ ] 实施前冻结 X API、官方 TypeScript XDK、官方鉴权文档及计费/限流说明的精确版本、仓库 commit 和审计日期，并先验证 Bun 直接运行、App-only Bearer Token、查询与分页、`429`/Rate Limit Header、AbortSignal，以及当前支持平台的 `bun build --compile` standalone。若官方 XDK 无法稳定运行或打包，再单独决策插件内直接 `fetch` 官方 API；不得自动引入 Python/Tweepy、Node Runtime 或社区 SDK。
 - [ ] 在 `plugins/x` 建立标准 `x` Plugin Manifest、独立 TypeScript/Bun workspace、stdio MCP Server、`x-host` 和 standalone 分发目录。主程序只通过现有插件发现和 MCP 生命周期接入，不增加 X SDK、静态注册、专用主 CLI 命令或业务实现；源码使用显式 `--plugin-dir plugins/x`，生产使用 standalone 同级一级目录自动发现。
 - [ ] 配置以 X Developer App 别名为核心并支持多个 App，首版只读取固定的 `X_BEARER_TOKEN` App-only Bearer Token 环境变量，不兼容其他旧名称，也不允许通过配置改用其他环境变量名。提供 `x-host app add|remove|list|doctor` 和 `mcp` 生命周期；Token 不得出现在普通命令参数、Manifest、配置值或日志中。
+- [ ] 为 X 插件增加可选的 `X_PROXY_URL` 用户级环境配置，只允许从 `x-host` 进程环境或用户级 `settings.json.env` 读取；未配置时保持直连，配置后所有 X API 请求、分页和诊断必须使用同一代理出口。代理失败时明确终止，禁止静默回退直连或产生 DNS 泄漏；代理用户名、密码和查询参数按凭据处理，不得进入配置展示、日志、错误、诊断或模型上下文。
+- [ ] 实施前验证官方 XDK 在 Bun 开发运行和 standalone 中注入代理传输的边界，至少覆盖 HTTP/HTTPS CONNECT 和 SOCKS5；若 XDK 不能可靠注入，则仅允许在 `plugins/x` 内使用经验证的统一传输层，不得影响根 CLI 或其他插件。`x-host app doctor` 应报告脱敏的代理模式和 DNS/TCP/TLS/代理认证/X API 鉴权错误分类，不显示 Bearer Token 或代理凭据。
 - [ ] 首版只提供受限的公开数据读取工具：`x_get_post`、`x_get_thread`、`x_get_user`、`x_get_user_posts`、`x_search_recent` 和在当前 App 权限下可用的 `x_get_mentions`。每个工具必须固定 fields/expansions 白名单、单次结果数、自动分页页数、响应字节数、超时、并发和可接受 API 消耗上限；不得由模型无限翻页、自动扩大搜索范围或将部分结果伪装为完整结果。
 - [ ] App-only Bearer Token 只代表应用，不能当作用户登录状态。P1 明确不实现 OAuth 1.0a、OAuth 2.0 Authorization Code with PKCE 或任何用户身份授权，也不提供 Home Timeline、发布、回复、删除、点赞、转发、关注、取消关注、私信、账号修改、列表管理、媒体上传或其他用户身份读写操作；SDK 中存在对应接口不代表本项目允许暴露。权限或订阅级别不足时必须返回明确错误，不尝试其他凭据或降级到网页抓取。
 - [ ] 首版是按需调用的 MCP 工具插件，不是 Channel，也不启动 Filtered Stream、Account Activity、Webhook、后台轮询或自动通知。实时监听涉及持续 API 消耗、Stream Rule、断线恢复、事件排重和自动响应循环，必须在后续获得独立产品决策后另行规划，不能随着只读查询实现隐式启用。
 - [ ] 实现统一的 X API 错误与费用边界，区分 `401`、`403`、`404`、`429`、套餐/Endpoint 不可用、网络失败和服务端错误；读取并返回脱敏的 Rate Limit 摘要，按 `x-rate-limit-reset` 有界等待或明确失败。默认不自动重放可能产生额外计费的请求，不跨工具共享无限重试或分页预算；诊断不得记录 Bearer Token、Authorization Header、完整敏感查询或未截断的响应正文。
 - [ ] 用户身份授权和写能力属于明确不做范围，不保留“后续直接扩展”入口；如未来确需 OAuth、Home Timeline 或代表用户写入，必须先获得新的产品决策并修改“明确不做”边界，再作为独立项目重新进行安全、权限、Token 生命周期、费用和验收规划。不得复用 App-only Bearer Token 冒充用户授权。
-- [ ] 在 `scripts/validation` 增加 X SDK/Bun 兼容、插件与依赖边界、App-only 鉴权、只读工具、字段白名单、分页/响应/费用上限、限流、错误分类、脱敏和分发验证，并统一并入 `bun run verify`。Fixture 使用可注入本地 X API 端点或固定传输，不依赖真实 Token，至少覆盖多 App 隔离、`401`/`403`/`429`、分页截断、AbortSignal、禁止写工具、禁止后台连接、Host EOF、standalone 自动发现，以及 XDK 不进入根 CLI 和其他 Bundle。
+- [ ] 在 `scripts/validation` 增加 X SDK/Bun 兼容、插件与依赖边界、App-only 鉴权、只读工具、字段白名单、分页/响应/费用上限、限流、错误分类、脱敏和分发验证，并统一并入 `bun run verify`。Fixture 使用可注入本地 X API 端点和本地 HTTP CONNECT/SOCKS5 代理，不依赖真实 Token 或代理，至少覆盖多 App 隔离、直连基线、代理成功/认证/拒绝/超时/取消、DNS 不直连、禁止失败回退、代理秘密脱敏、`401`/`403`/`429`、分页截断、AbortSignal、禁止写工具、禁止后台连接、Host EOF、standalone 自动发现，以及 XDK 不进入根 CLI 和其他 Bundle。
 - [ ] 后续升级采用人工同步：发现 X API、计费、权限、官方 XDK 或鉴权政策变化后，先冻结版本与 commit，审计 Endpoint、类型、授权要求、依赖、Bundle 和成本变化，只移植当前只读边界需要的行为并更新 Fixture；验证通过后再更新兼容元数据，禁止自动下载、更新插件、扩大 scopes 或触发 CLI 自更新。
 
-完成条件：`x-host` 可使用至少两个独立 App-only Bearer Token 配置执行受限公开数据查询且不会串 Token、分页、限流或费用预算；首版不包含任何用户写操作、OAuth 用户登录、Channel、Stream、Webhook 或后台轮询；源码和 standalone 分发均可删除式移除，`typecheck:x-host`、`build:x-host`、依赖边界、分发验证和 `bun run verify -- --ci` 全部通过。固定 Fixture 通过后，再用低权限测试 App 对真实 X API 验收用户查询、Post 查询、近期搜索、分页、限流和套餐拒绝行为。
+完成条件：`x-host` 可使用至少两个独立 App-only Bearer Token 配置执行受限公开数据查询且不会串 Token、分页、限流或费用预算；未配置代理时保持直连，配置支持的代理后所有 X API 链路均经代理且失败不回退直连，不泄漏 DNS、代理凭据或 X Token；首版不包含任何用户写操作、OAuth 用户登录、Channel、Stream、Webhook 或后台轮询；源码和 standalone 分发均可删除式移除，`typecheck:x-host`、`build:x-host`、代理 Fixture、依赖边界、分发验证和 `bun run verify -- --ci` 全部通过。固定 Fixture 通过后，再用低权限测试 App 经真实本地代理对真实 X API 验收用户查询、Post 查询、近期搜索、分页、限流和套餐拒绝行为。
 
 ### P2：可选产品能力
 
