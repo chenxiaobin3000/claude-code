@@ -32,6 +32,7 @@ const weixinPluginPath = join(distributionRoot, 'plugins', 'weixin')
 const wxworkPluginPath = join(distributionRoot, 'plugins', 'wxwork')
 const qqPluginPath = join(distributionRoot, 'plugins', 'qq')
 const telegramPluginPath = join(distributionRoot, 'plugins', 'telegram')
+const telegramUserPluginPath = join(distributionRoot, 'plugins', 'telegram-user')
 const hiddenPluginPath = join(
   distributionRoot,
   `.chrome-validation-hidden-${process.pid}`,
@@ -61,6 +62,7 @@ await access(weixinPluginPath)
 await access(wxworkPluginPath)
 await access(qqPluginPath)
 await access(telegramPluginPath)
+await access(telegramUserPluginPath)
 
 const automatic = listPlugins()
 assert(
@@ -100,6 +102,10 @@ const automaticTelegram = automatic.find(plugin => plugin.name === 'telegram')
 assert(automaticTelegram, 'standalone must automatically discover telegram')
 assertEqual(automaticTelegram.source, 'telegram@local', 'telegram automatic source')
 assertEqual(resolve(automaticTelegram.path), resolve(telegramPluginPath), 'telegram automatic plugin path')
+const automaticTelegramUser = automatic.find(plugin => plugin.name === 'telegram-user')
+assert(automaticTelegramUser, 'standalone must automatically discover telegram-user')
+assertEqual(automaticTelegramUser.source, 'telegram-user@local', 'telegram-user automatic source')
+assertEqual(resolve(automaticTelegramUser.path), resolve(telegramUserPluginPath), 'telegram-user automatic plugin path')
 assertEqual(
   resolve(automaticChrome.path),
   resolve(pluginPath),
@@ -149,6 +155,10 @@ try {
   assert(
     withoutAutomaticPlugin.some(plugin => plugin.name === 'telegram'),
     'removing chrome must not remove the independent telegram plugin',
+  )
+  assert(
+    withoutAutomaticPlugin.some(plugin => plugin.name === 'telegram-user'),
+    'removing chrome must not remove the independent telegram-user plugin',
   )
 } finally {
   if (moved) await rename(hiddenPluginPath, pluginPath)

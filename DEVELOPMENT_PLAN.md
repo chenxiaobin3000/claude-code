@@ -121,18 +121,18 @@
 
 ### P0：Telegram 用户账号 Channel 插件
 
-- [ ] 新增独立的 `telegram-user` 插件，使用 TypeScript 的 GramJS（npm 包 `telegram`）连接 Telegram MTProto，不使用 grammY Bot API，也不与 `telegram` Bot 插件共享代码路径、配置、凭据、Session、路由或权限状态。GramJS 是插件内正式运行时依赖，只能进入 `plugins/telegram-user` 和独立 Host，不得进入根包、主 CLI、其他插件或非 Telegram User 生产 Bundle。
-- [ ] 实施前先冻结 GramJS、Telegram MTProto Layer 和官方 Telegram API 文档的精确版本、仓库 commit 与审计日期，并完成最小技术验证：Bun 直接运行、`api_id`/`api_hash` 登录、手机号验证码、2FA、StringSession 保存/恢复、消息与媒体收发、断线重连，以及当前支持平台的 `bun build --compile` standalone。GramJS 官方只明确支持 Node.js/浏览器，因此 Bun 与 standalone 兼容性必须以真实产物验证，不能凭接口相似性判定。
-- [ ] 技术验证通过后，在 `plugins/telegram-user` 建立标准 `telegram-user` Plugin Manifest、独立 TypeScript/Bun workspace、stdio MCP Server、`telegram-user-host` 和 standalone 分发目录。源码通过显式 `--plugin-dir plugins/telegram-user` 加载，生产通过 standalone 同级一级目录自动发现；删除插件目录即可完整移除普通 Telegram 用户账号能力。
-- [ ] 若 GramJS 无法稳定运行或打入当前支持平台的 Bun standalone，P0 必须停在不通过状态并记录具体边界，再单独决策 Node Host、Telethon/Python sidecar 或 TDLib 原生库；不得自动引入 Python、Node Runtime、C++ 动态库或静默切换实现。Telethon 只是后备评估对象，不属于当前 P0 的默认依赖与分发范围。
-- [ ] 登录需要应用级 `api_id` 与 `api_hash`，以及账号级手机号、一次性验证码和可选 2FA 密码；这些值只能从秘密环境变量、私有交互输入或私有状态读取，禁止出现在普通命令参数、Manifest、Shell 历史和日志中。提供 `telegram-user-host account add|login|logout|remove|list|doctor` 和 `mcp` 生命周期，验证码与 2FA 只在当前交互中使用，不落盘。
-- [ ] 支持多个 Telegram 用户账号并要求本地别名唯一；每个账号独立保存 MTProto Session、数据中心连接、Update 状态、允许列表、排重状态和体验配置。Session 等价于长期登录凭据，必须使用逐账号私有目录、原子写入和严格文件权限，日志与诊断不得返回 Session、Auth Key、`api_hash`、手机号、验证码、2FA、完整敏感消息或带鉴权信息的媒体地址；一个账号故障不得影响其他账号。
-- [ ] 产品范围只包含已登录账号显式允许的私聊、群组和频道消息接收，以及文本和受支持媒体的定向回复；默认不订阅全部会话，首次启用必须配置 Chat/User allowlist。P0 不实现批量群发、联系人导入、自动加群、自动私聊陌生用户、账号资料修改、删除消息、群管理、频道管理、通话、Secret Chat、账号注册或绕过 Telegram 风控；平台拒绝或权限不足时必须明确失败。
-- [ ] 将 MTProto Update 转换为标准 Channel 通知，路由固定编码账号别名、Peer 类型、Peer ID 和可选 Topic/Thread ID，保留消息 ID、发送者、引用、编辑状态和附件元数据。必须过滤本账号发出的回声、插件自己的回复和排重命中的 Update，避免模型与账号形成自激循环；Peer/access hash 只按账号作用域保存和解析，跨账号或目标不唯一时 fail-closed。
-- [ ] MCP 首版只提供绑定原入站消息的 `reply` 和受限媒体回复；主动发送默认关闭，并要求独立、高风险工具权限和明确目标。所有权限审批按账号、Peer 类型、Peer ID、Topic、发送者和 Request ID 隔离，群内其他成员、其他会话或其他账号不得批准请求；普通用户账号操作必须在 UI 和审批文本中明确标注“将以你的 Telegram 用户身份执行”，不能伪装成 Bot 操作。
-- [ ] 为网络重连、FloodWait、迁移到其他数据中心、Session 失效、验证码过期、2FA 错误和账号被限制提供有界恢复与脱敏诊断。只对 Telegram 明确要求等待且可以安全重试的请求执行有限重试；结果不确定的发送操作、批量动作和权限敏感动作不得自动重放，禁止无限重连、无限验证码请求或规避平台限制。
-- [ ] 在 `scripts/validation` 增加 GramJS/Bun 技术验证、插件与依赖边界、登录状态机、Session 安全、多账号隔离、路由、回声抑制、媒体、权限、错误恢复和分发验证，并统一并入 `bun run verify`。固定 Fixture 或可注入传输至少覆盖验证码/2FA、Session 恢复、双账号并发、Peer/access hash 隔离、Update 排重、跨账号拒绝、FloodWait、断线与 DC 迁移、敏感信息脱敏、Host EOF、standalone 自动发现，以及 GramJS 不进入根 CLI 和其他 Bundle；真实账号只作为固定 Fixture 之后的附加验收。
-- [ ] 后续升级采用人工同步：发现 Telegram MTProto Layer、GramJS 或 Telegram API 条款变化后，先冻结版本和 commit，审计协议、生成类型、Session 格式、依赖、Bundle 与产品风险，只移植当前边界需要的行为并更新 Fixture；验证通过后再更新兼容元数据，禁止自动下载、覆盖插件、更新 Session 或触发 CLI 自更新。
+- [x] 新增独立的 `telegram-user` 插件，使用 TypeScript 的 GramJS（npm 包 `telegram`）连接 Telegram MTProto，不使用 grammY Bot API，也不与 `telegram` Bot 插件共享代码路径、配置、凭据、Session、路由或权限状态。GramJS 是插件内正式运行时依赖，只能进入 `plugins/telegram-user` 和独立 Host，不得进入根包、主 CLI、其他插件或非 Telegram User 生产 Bundle。
+- [ ] 已冻结 GramJS `2.26.22`、commit `3aedb2e6ef216d307607f3d0f3f5b0ace6701378`、生成 MTProto Layer 198、Telegram API/Auth 文档和 `2026-08-04` 审计日期；Bun 直接加载和 Windows `bun build --compile` standalone 已通过。仍需使用低权限真实账号完成 `api_id`/`api_hash`、手机号验证码、2FA、StringSession 重启恢复、私聊/群组/频道/Topic、消息与媒体收发及断线重连验收。
+- [x] 在 `plugins/telegram-user` 建立标准 `telegram-user` Plugin Manifest、独立 TypeScript/Bun workspace、stdio MCP Server、`telegram-user-host` 和 standalone 分发目录。源码通过显式 `--plugin-dir plugins/telegram-user` 加载，生产通过 standalone 同级一级目录自动发现；删除插件目录即可完整移除普通 Telegram 用户账号能力。
+- [x] GramJS 已可直接打入当前 Windows Bun standalone；没有引入 Python、额外 Node Runtime、Telethon、TDLib 或 C++ 动态库，技术后备分支未触发。
+- [x] 登录使用应用级 `api_id`/`api_hash`、账号级手机号、一次性验证码和可选 2FA 密码；配置只保存秘密环境变量名，验证码与 2FA 仅从当前私有交互读取且不落盘。已提供 `telegram-user-host account add|login|logout|remove|list|doctor` 和 `mcp` 生命周期。
+- [x] 支持唯一别名的多个 Telegram 用户账号；每个账号独立保存私有 MTProto Session、连接租约、Update 排重、允许列表和体验状态。Session 原子写入逐账号私有目录，诊断对 Session、API Hash、手机号和认证错误脱敏；单账号启动失败不终止其他账号。
+- [x] 产品范围只包含显式 allowlist 的私聊、群组和频道入站，以及文本和受支持媒体的定向回复；未授权 Update 在本地立即丢弃。没有批量群发、联系人导入、自动加群、陌生人主动私聊、账号资料修改、删除消息、群/频道管理、通话、Secret Chat、账号注册或风控规避入口。
+- [x] MTProto Update 转换为标准 Channel 通知，路由固定编码账号别名、Peer 类型、Peer ID 和可选 Topic ID，并保留消息 ID、发送者、引用、编辑状态和附件元数据。本账号出站、插件回复和重复 Update 均被过滤；回复使用原入站账号作用域内的 InputPeer，不解析或复用其他账号的 access hash。
+- [x] MCP 首版只提供绑定 15 分钟内原入站消息的 `reply` 与受限媒体回复，不提供主动发送。权限按账号、Peer、Topic、发送者和 Request ID 隔离，审批文本明确标注“将以你的 Telegram 用户身份执行”。
+- [x] 网络连接与自动重连次数有界，GramJS 隐式请求重试和 FloodWait 自动等待关闭；FloodWait、DC 迁移、Session、验证码和 2FA 错误统一分类并脱敏。发送操作不自动重放，禁止无限重连和规避平台限制。
+- [x] `scripts/validation/telegram-user-*.ts` 已覆盖 GramJS/Bun 边界、可注入登录状态机、Session 安全、双账号隔离、路由/Topic、回声/Update 排重、媒体、权限、FloodWait/DC 分类、秘密脱敏、Host EOF、standalone 分发/自动发现和根 Bundle 依赖禁入，并统一并入 `bun run verify`；真实账号仍作为下一项附加验收。
+- [x] 后续升级固定为人工同步：先冻结 Telegram MTProto Layer、GramJS 版本/commit 和文档基线，再审计协议、生成类型、Session、依赖、Bundle 与产品风险并更新 Fixture；禁止自动下载、覆盖插件、更新 Session 或触发 CLI 自更新。
 
 完成条件：GramJS 在当前支持平台的 Bun 开发运行和 standalone 产物均通过真实验证；至少两个 Telegram 用户账号可以同时连接，且不会串 Session、Peer、Update、附件、权限或秘密；插件默认只处理 allowlist 会话、不会处理自身回声，也不会提供批量或账号管理型高风险操作；`typecheck:telegram-user-host`、`build:telegram-user-host`、依赖边界、分发验证和 `bun run verify -- --ci` 全部通过。随后使用专门的低权限测试账号验收登录、重启恢复、私聊、群组、频道、Topic、断线恢复及媒体收发，禁止直接使用重要主账号作为首次验收对象。
 

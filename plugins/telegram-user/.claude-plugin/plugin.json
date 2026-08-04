@@ -1,0 +1,19 @@
+{
+  "name": "telegram-user",
+  "version": "1.0.0",
+  "telegramUserCompatibility": {
+    "gramjs": "2.26.22",
+    "gramjsCommit": "3aedb2e6ef216d307607f3d0f3f5b0ace6701378"
+  },
+  "apiVersion": "^1.0.0",
+  "description": "Local allowlist-only Telegram user account Channel over GramJS MTProto.",
+  "author": { "name": "claude-code" },
+  "keywords": ["telegram", "user", "mtproto", "gramjs", "channel", "local"],
+  "mcpServers": {
+    "telegram-user": {
+      "type": "stdio",
+      "command": "bun",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/host/entry.ts", "mcp"]
+    }
+  }
+}

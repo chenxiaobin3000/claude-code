@@ -1,0 +1,30 @@
+{
+  "name": "@claude-code/telegram-user-plugin",
+  "version": "1.0.0",
+  "telegramUserCompatibility": {
+    "gramjs": "2.26.22",
+    "gramjsCommit": "3aedb2e6ef216d307607f3d0f3f5b0ace6701378",
+    "mtprotoDocumentation": "https://core.telegram.org/api",
+    "authorizationDocumentation": "https://core.telegram.org/api/auth",
+    "auditedAt": "2026-08-04"
+  },
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
+    "test:smoke": "bun run ../../scripts/validation/workspace-smoke.ts"
+  },
+  "workspaceValidation": {
+    "build": {
+      "applicable": false,
+      "reason": "The root build:telegram-user-host script compiles this local Plugin into a standalone distribution."
+    }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "telegram": "2.26.22",
+    "zod": "^4.3.6"
+  }
+}

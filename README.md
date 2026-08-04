@@ -333,6 +333,34 @@ Webhook、广播、Cron、Mini App 或 Bot 管理面板。文本按 4096 个 Uni
 单文件上限 20 MiB，本地出站文件必须位于 `TELEGRAM_ALLOWED_FILE_ROOTS`。完整边界见
 [`plugins/telegram/README.md`](plugins/telegram/README.md)。
 
+### telegram 用户账号插件
+
+Telegram User Channel 位于 [`plugins/telegram-user`](plugins/telegram-user)，使用固定的
+`telegram@2.26.22`（GramJS，commit
+`3aedb2e6ef216d307607f3d0f3f5b0ace6701378`，生成 MTProto Layer 198）连接普通
+Telegram 用户账号。它与 grammY Bot 插件完全分离，不共享配置、Session、路由或权限。
+
+先从 `my.telegram.org` 获取应用 API ID/API Hash，并将 API ID、API Hash 和 E.164 手机号
+放入环境变量。普通命令只保存环境变量名；验证码与可选 2FA 密码由私有交互输入读取，
+不会写入配置或日志：
+
+```powershell
+$env:TELEGRAM_API_ID = "12345678"
+$env:TELEGRAM_API_HASH = "0123456789abcdef0123456789abcdef"
+$env:TELEGRAM_PHONE = "+15551234567"
+bun plugins/telegram-user/host/entry.ts account add personal TELEGRAM_API_ID TELEGRAM_API_HASH TELEGRAM_PHONE
+bun plugins/telegram-user/host/entry.ts account login personal
+bun plugins/telegram-user/host/entry.ts access allow personal user 123456789
+bun run dev -- --plugin-dir plugins/telegram-user --dangerously-load-development-channels plugin:telegram-user@inline
+```
+
+生产分发把 `bun` 替换为 `dist/plugins/telegram-user/telegram-user-host.exe`，并以
+`--channels plugin:telegram-user@local` 启用。Session 是长期登录凭据，逐账号私有保存于
+`~/.claude/channels/telegram-user`；只处理显式 allowlist 的 Peer/Topic，且只能回复 15 分钟
+内的入站消息。主动发送、群发、联系人/群组/频道管理、账号资料修改和风控规避均不提供。
+审批会明确标注操作“将以你的 Telegram 用户身份执行”。首次真实验收应使用低权限测试账号。
+完整配置与安全边界见 [`plugins/telegram-user/README.md`](plugins/telegram-user/README.md)。
+
 ## 构建与验证
 
 ```powershell
@@ -347,6 +375,7 @@ bun run build:weixin-host
 bun run build:wxwork-host
 bun run build:qq-host
 bun run build:telegram-host
+bun run build:telegram-user-host
 bun run build:production
 bun run verify
 ```
@@ -366,9 +395,11 @@ bun run verify
   单文件，目标机器无需 Bun 或 Node.js。
 - telegram Plugin：`dist/plugins/telegram` 是完整分发目录，其中 grammY 与独立
   Telegram Channel MCP Host 已打入 standalone，目标机器无需 Bun 或 Node.js。
+- telegram-user Plugin：`dist/plugins/telegram-user` 是完整分发目录，其中 GramJS、
+  MTProto 客户端与独立 Telegram User Channel MCP Host 已打入 standalone，目标机器无需 Bun 或 Node.js。
 
 `bun run build:production` 一次生成 `dist/claude.exe` 和
-`dist/plugins/chrome`、`dist/plugins/weixin`、`dist/plugins/wxwork`、`dist/plugins/qq`、`dist/plugins/telegram`。整个 `dist` 是 Windows 生产分发单元：standalone
+`dist/plugins/chrome`、`dist/plugins/weixin`、`dist/plugins/wxwork`、`dist/plugins/qq`、`dist/plugins/telegram`、`dist/plugins/telegram-user`。整个 `dist` 是 Windows 生产分发单元：standalone
 启动时只自动加载同级 `plugins` 下的一级插件目录；`--plugin-dir <path>` 仍可加载
 临时插件或覆盖同名自动插件。自动发现不会安装 Chrome 扩展、注册 Native Host、
 下载插件或更新任何产物。
