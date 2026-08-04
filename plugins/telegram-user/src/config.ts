@@ -9,6 +9,7 @@ import {
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { resolveConfiguredEnvValue } from '../../userSettingsEnv.js'
 
 export interface TelegramUserAccountConfig {
   alias: string
@@ -174,9 +175,18 @@ export function resolveTelegramUserCredentials(
     throw new Error(
       `Credential environment variable names are missing for Telegram user account ${account.alias}.`,
     )
-  const rawApiId = process.env[account.apiIdEnv]?.trim()
-  const apiHash = process.env[account.apiHashEnv]?.trim()
-  const phone = process.env[account.phoneEnv]?.trim()
+  const rawApiId = resolveConfiguredEnvValue(
+    account.apiIdEnv,
+    `API ID for Telegram user account ${account.alias}`,
+  )
+  const apiHash = resolveConfiguredEnvValue(
+    account.apiHashEnv,
+    `API Hash for Telegram user account ${account.alias}`,
+  )
+  const phone = resolveConfiguredEnvValue(
+    account.phoneEnv,
+    `Phone for Telegram user account ${account.alias}`,
+  )
   return validateTelegramUserCredentials(
     { apiId: rawApiId, apiHash, phone },
     `Environment credentials for ${account.alias}`,

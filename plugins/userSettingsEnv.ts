@@ -11,14 +11,10 @@ export function getUserSettingsPath(): string {
   return join(configDir || join(homedir(), '.claude'), 'settings.json')
 }
 
-export function findUserSettingsEnvName(value: string, label: string): string {
-  if (!value) throw new Error(`${label} must not be empty.`)
-
+function readUserSettings(): { path: string; settings: UserSettings } {
   const path = getUserSettingsPath()
   if (!existsSync(path)) {
-    throw new Error(
-      `User settings file ${path} does not exist; add ${label} to settings.json env before running add-local.`,
-    )
+    throw new Error(`User settings file ${path} does not exist.`)
   }
 
   let settings: UserSettings
@@ -27,25 +23,22 @@ export function findUserSettingsEnvName(value: string, label: string): string {
   } catch (error) {
     throw new Error(`Cannot read user settings file ${path}: ${error}`)
   }
+  return { path, settings }
+}
 
-  const matches = Object.entries(settings.env ?? {})
-    .filter(
-      ([name, candidate]) =>
-        /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) &&
-        typeof candidate === 'string' &&
-        candidate === value,
-    )
-    .map(([name]) => name)
+export function getUserSettingsEnvValue(name: string): string | undefined {
+  const { settings } = readUserSettings()
+  const value = settings.env?.[name]
+  return typeof value === 'string' ? value : undefined
+}
 
-  if (matches.length === 0) {
+export function resolveConfiguredEnvValue(name: string, label: string): string {
+  const value = process.env[name] ?? getUserSettingsEnvValue(name)
+  const resolved = value?.trim()
+  if (!resolved) {
     throw new Error(
-      `No user settings env entry matches ${label}; add it to ${path} before running add-local.`,
+      `${label} environment variable ${name} is not set in the process or user settings.json env.`,
     )
   }
-  if (matches.length > 1) {
-    throw new Error(
-      `Multiple user settings env entries match ${label} (${matches.join(', ')}); use the regular add command with an explicit environment variable name.`,
-    )
-  }
-  return matches[0]!
+  return resolved
 }

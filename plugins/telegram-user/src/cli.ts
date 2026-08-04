@@ -16,13 +16,12 @@ import {
   resolveTelegramUserCredentials,
   saveTelegramUserAccount,
 } from './config.js'
-import { findUserSettingsEnvName } from '../../userSettingsEnv.js'
 import { runTelegramUserMcpServer } from './server.js'
 import type { TelegramUserPeerType } from './types.js'
 
 function usage(): void {
   process.stdout.write(
-    'Usage:\n  telegram-user-host mcp\n  telegram-user-host account add <alias> <api-id-env> <api-hash-env> <phone-env>\n  telegram-user-host account add-local <alias> <api-id> <api-hash> <phone>\n  telegram-user-host account login [alias]\n  telegram-user-host account logout [alias]\n  telegram-user-host account remove <alias>\n  telegram-user-host account list\n  telegram-user-host account doctor [alias]\n  telegram-user-host access allow|deny <alias> <user|group|channel> <peer-id> [topic-id]\n  telegram-user-host access list <alias>\n',
+    'Usage:\n  telegram-user-host mcp\n  telegram-user-host account add <alias> <api-id-env> <api-hash-env> <phone-env>\n  telegram-user-host account login [alias]\n  telegram-user-host account logout [alias]\n  telegram-user-host account remove <alias>\n  telegram-user-host account list\n  telegram-user-host account doctor [alias]\n  telegram-user-host access allow|deny <alias> <user|group|channel> <peer-id> [topic-id]\n  telegram-user-host access list <alias>\n',
   )
 }
 async function promptLine(label: string): Promise<string> {
@@ -94,25 +93,6 @@ export async function handleTelegramUserCli(
       })
       process.stdout.write(
         `Configured Telegram user account ${account.alias}; secret values remain in the named environment variables.\n`,
-      )
-      return
-    }
-    if (args[0] === 'account' && args[1] === 'add-local') {
-      if (!args[2] || !args[3] || !args[4] || !args[5])
-        throw new Error(
-          'Expected: account add-local <alias> <api-id> <api-hash> <phone>',
-        )
-      process.stderr.write(
-        'Warning: credentials supplied as command-line arguments may be retained in shell history; values are only matched against user settings and are not stored by this command.\n',
-      )
-      const account = saveTelegramUserAccount({
-        alias: args[2],
-        apiIdEnv: findUserSettingsEnvName(args[3], 'Telegram API ID'),
-        apiHashEnv: findUserSettingsEnvName(args[4], 'Telegram API Hash'),
-        phoneEnv: findUserSettingsEnvName(args[5], 'Telegram phone number'),
-      })
-      process.stdout.write(
-        `Configured Telegram user account ${account.alias}; credential sources: ${account.apiIdEnv}, ${account.apiHashEnv}, ${account.phoneEnv}.\n`,
       )
       return
     }

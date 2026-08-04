@@ -9,6 +9,7 @@ import {
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { resolveConfiguredEnvValue } from '../../userSettingsEnv.js'
 
 export const QQ_API_BASE_URL = 'https://api.sgroup.qq.com'
 export const QQ_TOKEN_BASE_URL = 'https://bots.qq.com'
@@ -168,12 +169,10 @@ export function resolveQqSecret(bot: QqBotConfig): string {
     throw new Error(
       `Secret environment variable name is missing for QQ bot ${bot.alias}.`,
     )
-  const secret = process.env[bot.secretEnv]?.trim()
-  if (!secret)
-    throw new Error(
-      `Secret environment variable ${bot.secretEnv} is not set for QQ bot ${bot.alias}.`,
-    )
-  return secret
+  return resolveConfiguredEnvValue(
+    bot.secretEnv,
+    `Secret for QQ bot ${bot.alias}`,
+  )
 }
 export function loadQqState<T>(
   alias: string,

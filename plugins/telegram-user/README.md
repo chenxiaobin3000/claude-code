@@ -11,16 +11,10 @@ telegram-user-host access allow personal user 123456789
 telegram-user-host account doctor personal
 ```
 
-如果三个值已存在于用户级 `settings.json.env`，也可以直接传入，反查并保存变量名：
-
-```text
-telegram-user-host account add-local personal 12345678 0123456789abcdef0123456789abcdef +15551234567
-```
-
-`add-local` 不保存 API ID、API Hash 或手机号，只读取 `~/.claude/settings.json`（或
-`CLAUDE_CONFIG_DIR/settings.json`）并要求每个值各自唯一匹配一个 `env` 变量；项目和管理级
-设置不参与匹配。参数可能保留在 Shell 历史和进程命令行中，普通 `account add` 仍是推荐
-方式。后续运行仍读取环境变量；一次性验证码与 2FA 密码只在 `account login` 时交互输入。
+配置只保存三个环境变量名，不保存 API ID、API Hash 或手机号。后续运行优先读取进程环境
+变量；独立运行 Host 且变量未注入时，会按已保存的变量名回退读取用户级
+`settings.json.env`。项目和管理级设置不参与该回退。一次性验证码与 2FA 密码只在
+`account login` 时交互输入。
 
 The one-time code and optional 2FA password are read interactively and are not persisted. The resulting StringSession is a long-lived credential stored privately under `~/.claude/channels/telegram-user/accounts/<alias>` (or `TELEGRAM_USER_STATE_DIR`). Protect and back up that directory as you would a password.
 

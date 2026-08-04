@@ -9,6 +9,7 @@ import {
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { resolveConfiguredEnvValue } from '../../userSettingsEnv.js'
 
 export interface TelegramBotConfig {
   alias: string
@@ -155,11 +156,10 @@ export function resolveTelegramToken(bot: TelegramBotConfig): string {
     throw new Error(
       `Token environment variable name is missing for Telegram bot ${bot.alias}.`,
     )
-  const token = process.env[bot.tokenEnv]?.trim()
-  if (!token)
-    throw new Error(
-      `Token environment variable ${bot.tokenEnv} is not set for Telegram bot ${bot.alias}.`,
-    )
+  const token = resolveConfiguredEnvValue(
+    bot.tokenEnv,
+    `Token for Telegram bot ${bot.alias}`,
+  )
   return validateTelegramToken(
     token,
     `Token environment variable ${bot.tokenEnv}`,

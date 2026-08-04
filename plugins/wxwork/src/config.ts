@@ -9,6 +9,7 @@ import {
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { resolveConfiguredEnvValue } from '../../userSettingsEnv.js'
 
 export const DEFAULT_WXWORK_WS_URL = 'wss://openws.work.weixin.qq.com'
 
@@ -190,12 +191,10 @@ export function resolveBotSecret(bot: WxworkBotConfig): string {
     throw new Error(
       `Secret environment variable name is missing for wxwork bot ${bot.alias}.`,
     )
-  const value = process.env[bot.secretEnv]?.trim()
-  if (!value)
-    throw new Error(
-      `Secret environment variable ${bot.secretEnv} is not set for wxwork bot ${bot.alias}.`,
-    )
-  return value
+  return resolveConfiguredEnvValue(
+    bot.secretEnv,
+    `Secret for wxwork bot ${bot.alias}`,
+  )
 }
 
 export function loadBotState<T>(

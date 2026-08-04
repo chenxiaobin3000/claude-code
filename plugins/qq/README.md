@@ -17,17 +17,9 @@ bun plugins/qq/host/entry.ts bot add primary your-app-id QQ_PRIMARY_SECRET
 bun plugins/qq/host/entry.ts bot doctor primary
 ```
 
-如果 Secret 已存在于用户级 `settings.json.env`，也可以直接传入值，让命令反查并保存
-对应的环境变量名：
-
-```powershell
-bun plugins/qq/host/entry.ts bot add-local primary your-app-id your-app-secret
-```
-
-`add-local` 不保存 Secret，只读取 `~/.claude/settings.json`（或
-`CLAUDE_CONFIG_DIR/settings.json`）并要求 `env` 中有且仅有一个值精确匹配；项目和管理级
-设置不参与匹配。明文参数可能保留在 Shell 历史和进程命令行中，普通 `bot add` 仍是
-推荐方式。后续 `mcp` 和 `doctor` 与普通模式一样读取环境变量。
+配置只保存环境变量名，不保存 Secret。后续 `mcp` 和 `doctor` 优先读取进程环境变量；
+独立运行 Host 且变量未注入时，会按已保存的变量名回退读取用户级 `settings.json.env`。
+项目和管理级设置不参与该回退。
 
 源码开发：
 

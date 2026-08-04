@@ -10,7 +10,6 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { findUserSettingsEnvName } from '../../plugins/userSettingsEnv.js'
 import {
   getQqBotStateDir,
   resolveQqSecret,
@@ -40,6 +39,12 @@ const previous = {
   WXWORK_STATE_DIR: process.env.WXWORK_STATE_DIR,
   TELEGRAM_STATE_DIR: process.env.TELEGRAM_STATE_DIR,
   TELEGRAM_USER_STATE_DIR: process.env.TELEGRAM_USER_STATE_DIR,
+  QQ_APP_SECRET: process.env.QQ_APP_SECRET,
+  WXWORK_SECRET: process.env.WXWORK_SECRET,
+  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
+  TELEGRAM_API_ID: process.env.TELEGRAM_API_ID,
+  TELEGRAM_API_HASH: process.env.TELEGRAM_API_HASH,
+  TELEGRAM_PHONE: process.env.TELEGRAM_PHONE,
 }
 
 const secrets = {
@@ -51,25 +56,17 @@ const secrets = {
   phone: '+8613800000000',
 }
 
-function expectFailure(
-  action: () => unknown,
-  pattern: RegExp,
-  message: string,
-) {
-  try {
-    action()
-  } catch (error) {
-    assert(pattern.test(String(error)), `${message}: unexpected error ${error}`)
-    return
-  }
-  throw new Error(`${message}: expected failure`)
-}
-
 process.env.CLAUDE_CONFIG_DIR = join(root, 'config')
 process.env.QQ_STATE_DIR = join(root, 'qq')
 process.env.WXWORK_STATE_DIR = join(root, 'wxwork')
 process.env.TELEGRAM_STATE_DIR = join(root, 'telegram')
 process.env.TELEGRAM_USER_STATE_DIR = join(root, 'telegram-user')
+delete process.env.QQ_APP_SECRET
+delete process.env.WXWORK_SECRET
+delete process.env.TELEGRAM_BOT_TOKEN
+delete process.env.TELEGRAM_API_ID
+delete process.env.TELEGRAM_API_HASH
+delete process.env.TELEGRAM_PHONE
 
 try {
   mkdirSync(process.env.CLAUDE_CONFIG_DIR, { recursive: true })
@@ -91,92 +88,72 @@ try {
     )}\n`,
   )
 
-  assertEqual(
-    findUserSettingsEnvName(secrets.qq, 'QQ AppSecret'),
-    'QQ_APP_SECRET',
-    'finds the exact user settings env name',
-  )
-  expectFailure(
-    () => findUserSettingsEnvName('missing', 'fixture secret'),
-    /No user settings env entry matches fixture secret/,
-    'rejects a value absent from user settings',
-  )
-
-  const settingsPath = join(process.env.CLAUDE_CONFIG_DIR, 'settings.json')
-  const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as {
-    env: Record<string, string>
-  }
-  settings.env.DUPLICATE_QQ_SECRET = secrets.qq
-  writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
-  expectFailure(
-    () => findUserSettingsEnvName(secrets.qq, 'QQ AppSecret'),
-    /Multiple user settings env entries match QQ AppSecret/,
-    'rejects ambiguous matches',
-  )
-  delete settings.env.DUPLICATE_QQ_SECRET
-  writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
-
-  process.env.QQ_APP_SECRET = secrets.qq
   const qqDir = getQqBotStateDir('primary')
   writeFileSync(join(qqDir, 'credentials.json'), '{"legacy":true}\n')
   const qq = saveQqBot({
     alias: 'primary',
     appId: 'qq-app',
-    secretEnv: findUserSettingsEnvName(secrets.qq, 'QQ AppSecret'),
+    secretEnv: 'QQ_APP_SECRET',
   })
-  assertEqual(resolveQqSecret(qq), secrets.qq, 'QQ keeps env runtime flow')
+  assertEqual(
+    resolveQqSecret(qq),
+    secrets.qq,
+    'QQ standalone runtime falls back to user settings env',
+  )
+  process.env.QQ_APP_SECRET = 'process-env-wins'
+  assertEqual(
+    resolveQqSecret(qq),
+    'process-env-wins',
+    'QQ process environment takes precedence',
+  )
+  delete process.env.QQ_APP_SECRET
   assert(!existsSync(join(qqDir, 'credentials.json')), 'QQ removes legacy file')
 
-  process.env.WXWORK_SECRET = secrets.wxwork
   const wxworkDir = getWxworkBotStateDir('primary')
   writeFileSync(join(wxworkDir, 'credentials.json'), '{"legacy":true}\n')
   const wxwork = saveWxworkBot({
     alias: 'primary',
     botId: 'wxwork-bot',
-    secretEnv: findUserSettingsEnvName(secrets.wxwork, 'wxwork Secret'),
+    secretEnv: 'WXWORK_SECRET',
   })
   assertEqual(
     resolveBotSecret(wxwork),
     secrets.wxwork,
-    'wxwork keeps env runtime flow',
+    'wxwork standalone runtime falls back to user settings env',
   )
   assert(
     !existsSync(join(wxworkDir, 'credentials.json')),
     'wxwork removes legacy file',
   )
 
-  process.env.TELEGRAM_BOT_TOKEN = secrets.telegram
   const telegramDir = getTelegramBotStateDir('primary')
   writeFileSync(join(telegramDir, 'credentials.json'), '{"legacy":true}\n')
   const telegram = saveTelegramBot({
     alias: 'primary',
-    tokenEnv: findUserSettingsEnvName(secrets.telegram, 'Telegram Bot Token'),
+    tokenEnv: 'TELEGRAM_BOT_TOKEN',
   })
   assertEqual(
     resolveTelegramToken(telegram),
     secrets.telegram,
-    'Telegram keeps env runtime flow',
+    'Telegram standalone runtime falls back to user settings env',
   )
   assert(
     !existsSync(join(telegramDir, 'credentials.json')),
     'Telegram removes legacy file',
   )
 
-  process.env.TELEGRAM_API_ID = secrets.apiId
-  process.env.TELEGRAM_API_HASH = secrets.apiHash
-  process.env.TELEGRAM_PHONE = secrets.phone
   const telegramUserDir = getTelegramUserAccountStateDir('personal')
   writeFileSync(join(telegramUserDir, 'credentials.json'), '{"legacy":true}\n')
   const telegramUser = saveTelegramUserAccount({
     alias: 'personal',
-    apiIdEnv: findUserSettingsEnvName(secrets.apiId, 'Telegram API ID'),
-    apiHashEnv: findUserSettingsEnvName(secrets.apiHash, 'Telegram API Hash'),
-    phoneEnv: findUserSettingsEnvName(secrets.phone, 'Telegram phone number'),
+    apiIdEnv: 'TELEGRAM_API_ID',
+    apiHashEnv: 'TELEGRAM_API_HASH',
+    phoneEnv: 'TELEGRAM_PHONE',
   })
   assertDeepEqual(
     resolveTelegramUserCredentials(telegramUser),
     { apiId: 12345678, apiHash: secrets.apiHash, phone: secrets.phone },
-    'Telegram User keeps env runtime flow',
+    'Telegram User standalone runtime falls back to user settings env',
   )
   assert(
     !existsSync(join(telegramUserDir, 'credentials.json')),
@@ -205,10 +182,10 @@ try {
     'plugins/telegram-user/src/cli.ts',
   ]) {
     const source = readFileSync(join(import.meta.dir, '..', '..', path), 'utf8')
-    assert(source.includes('add-local'), `${path} exposes add-local`)
+    const removedCommand = ['add', 'local'].join('-')
     assert(
-      source.includes('only matched against user settings'),
-      `${path} explains value-only matching`,
+      !source.includes(removedCommand),
+      `${path} does not expose the removed local-add command`,
     )
   }
 } finally {
@@ -219,4 +196,4 @@ try {
   rmSync(root, { recursive: true, force: true })
 }
 
-console.log('channel local env matching validation passed')
+console.log('channel environment resolution validation passed')

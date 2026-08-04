@@ -16,16 +16,9 @@ bun plugins/telegram/host/entry.ts bot doctor primary
 bun run dev -- --plugin-dir plugins/telegram --dangerously-load-development-channels plugin:telegram@inline
 ```
 
-如果 Token 已存在于用户级 `settings.json.env`，也可以直接传入值，反查并保存变量名：
-
-```powershell
-bun plugins/telegram/host/entry.ts bot add-local primary "123456:your-secret-token"
-```
-
-`add-local` 不保存 Token，只读取 `~/.claude/settings.json`（或
-`CLAUDE_CONFIG_DIR/settings.json`）并要求 `env` 中有且仅有一个值精确匹配；项目和管理级
-设置不参与匹配。明文参数可能保留在 Shell 历史和进程命令行中，普通 `bot add` 仍是
-推荐方式。后续运行仍读取环境变量。
+配置只保存环境变量名，不保存 Token。后续运行优先读取进程环境变量；独立运行 Host 且
+变量未注入时，会按已保存的变量名回退读取用户级 `settings.json.env`。项目和管理级设置
+不参与该回退。
 
 生产分发：
 
