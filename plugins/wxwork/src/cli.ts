@@ -7,8 +7,8 @@ import {
   resolveBot,
   resolveBotSecret,
   saveBot,
-  saveLocalBot,
 } from './config.js'
+import { findUserSettingsEnvName } from '../../userSettingsEnv.js'
 import { runWxworkMcpServer } from './server.js'
 
 function usage(): void {
@@ -49,16 +49,16 @@ async function runBot(args: string[]): Promise<void> {
         'Expected: bot add-local <alias> <bot-id> <secret> [wss-url]',
       )
     process.stderr.write(
-      'Warning: credentials supplied as command-line arguments may be retained in shell history.\n',
+      'Warning: credentials supplied as command-line arguments may be retained in shell history; the value is only matched against user settings and is not stored by this command.\n',
     )
-    const bot = saveLocalBot({
+    const bot = saveBot({
       alias,
       botId,
-      secret,
+      secretEnv: findUserSettingsEnvName(secret, 'wxwork Secret'),
       wsUrl: wsUrl || DEFAULT_WXWORK_WS_URL,
     })
     process.stdout.write(
-      `Configured wxwork bot ${bot.alias}; credential source: local.\n`,
+      `Configured wxwork bot ${bot.alias}; secret source: ${bot.secretEnv}.\n`,
     )
     return
   }
@@ -72,7 +72,7 @@ async function runBot(args: string[]): Promise<void> {
     const bots = listBots()
     process.stdout.write(
       bots.length
-        ? `${bots.map(bot => `${bot.alias}\t${bot.botId}\t${bot.credentialSource === 'local' ? 'local' : bot.secretEnv}\t${bot.wsUrl}`).join('\n')}\n`
+        ? `${bots.map(bot => `${bot.alias}\t${bot.botId}\t${bot.secretEnv}\t${bot.wsUrl}`).join('\n')}\n`
         : 'No wxwork bots configured.\n',
     )
     return

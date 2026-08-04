@@ -19,15 +19,16 @@ bun plugins/wxwork/host/entry.ts bot add primary your-bot-id WXWORK_PRIMARY_SECR
 bun plugins/wxwork/host/entry.ts bot doctor primary
 ```
 
-也可以直接传入并逐 Bot 保存在本地私有文件中：
+如果 Secret 已存在于用户级 `settings.json.env`，也可以直接传入值，反查并保存变量名：
 
 ```powershell
 bun plugins/wxwork/host/entry.ts bot add-local primary your-bot-id your-secret
 ```
 
-`add-local` 的明文参数可能保留在 Shell 历史和进程命令行中，且凭据以明文 JSON 保存于
-`~/.claude/channels/wxwork/bots/<alias>/credentials.json`；环境变量模式仍是推荐方式。
-相同别名重新执行普通 `bot add` 会切回环境变量模式并删除本地凭据。
+`add-local` 不保存 Secret，只读取 `~/.claude/settings.json`（或
+`CLAUDE_CONFIG_DIR/settings.json`）并要求 `env` 中有且仅有一个值精确匹配；项目和管理级
+设置不参与匹配。明文参数可能保留在 Shell 历史和进程命令行中，普通 `bot add` 仍是
+推荐方式。后续运行仍读取环境变量。
 
 多 Bot 使用不同别名、Bot ID 和 Secret 环境变量。状态保存在
 `.claude/channels/wxwork`，不会写入插件目录。新用户首次发消息会收到配对码：

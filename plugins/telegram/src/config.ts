@@ -12,8 +12,7 @@ import { join } from 'node:path'
 
 export interface TelegramBotConfig {
   alias: string
-  credentialSource?: 'env' | 'local'
-  tokenEnv?: string
+  tokenEnv: string
   savedAt: string
 }
 
@@ -71,7 +70,7 @@ export function writeTelegramPrivateFile(path: string, content: string): void {
 function indexPath(): string {
   return join(getTelegramStateDir(), 'bots.json')
 }
-function credentialPath(alias: string): string {
+function legacyCredentialPath(alias: string): string {
   return join(getTelegramBotStateDir(alias), 'credentials.json')
 }
 function readIndex(): BotIndex {
@@ -112,16 +111,14 @@ export function resolveTelegramBot(alias?: string): TelegramBotConfig | null {
 }
 function saveTelegramBotConfig(bot: TelegramBotConfig): TelegramBotConfig {
   const index = readIndex()
-  if (bot.tokenEnv) {
-    const duplicate = index.bots.find(
-      candidate =>
-        candidate.tokenEnv === bot.tokenEnv && candidate.alias !== bot.alias,
+  const duplicate = index.bots.find(
+    candidate =>
+      candidate.tokenEnv === bot.tokenEnv && candidate.alias !== bot.alias,
+  )
+  if (duplicate)
+    throw new Error(
+      `Telegram Token environment variable is already configured as ${duplicate.alias}.`,
     )
-    if (duplicate)
-      throw new Error(
-        `Telegram Token environment variable is already configured as ${duplicate.alias}.`,
-      )
-  }
   const position = index.bots.findIndex(
     candidate => candidate.alias === bot.alias,
   )
@@ -137,31 +134,11 @@ export function saveTelegramBot(input: {
 }): TelegramBotConfig {
   const bot = saveTelegramBotConfig({
     alias: validateTelegramAlias(input.alias),
-    credentialSource: 'env',
     tokenEnv: validateTelegramTokenEnv(input.tokenEnv),
     savedAt: new Date().toISOString(),
   })
-  rmSync(credentialPath(bot.alias), { force: true })
+  rmSync(legacyCredentialPath(bot.alias), { force: true })
   return bot
-}
-export function saveLocalTelegramBot(input: {
-  alias: string
-  token: string
-}): TelegramBotConfig {
-  const alias = validateTelegramAlias(input.alias)
-  const token = validateTelegramToken(
-    input.token,
-    `Stored token for Telegram bot ${alias}`,
-  )
-  writeTelegramPrivateFile(
-    credentialPath(alias),
-    `${JSON.stringify({ version: 1, token }, null, 2)}\n`,
-  )
-  return saveTelegramBotConfig({
-    alias,
-    credentialSource: 'local',
-    savedAt: new Date().toISOString(),
-  })
 }
 export function removeTelegramBot(alias: string): void {
   const resolved = validateTelegramAlias(alias)
@@ -174,23 +151,6 @@ export function removeTelegramBot(alias: string): void {
   })
 }
 export function resolveTelegramToken(bot: TelegramBotConfig): string {
-  if (bot.credentialSource === 'local') {
-    try {
-      const stored = JSON.parse(
-        readFileSync(credentialPath(bot.alias), 'utf8'),
-      ) as { version?: number; token?: string }
-      if (stored.version === 1 && stored.token)
-        return validateTelegramToken(
-          stored.token,
-          `Stored token for Telegram bot ${bot.alias}`,
-        )
-    } catch {
-      /* Report a single non-sensitive error below. */
-    }
-    throw new Error(
-      `Stored credential is missing or invalid for Telegram bot ${bot.alias}.`,
-    )
-  }
   if (!bot.tokenEnv)
     throw new Error(
       `Token environment variable name is missing for Telegram bot ${bot.alias}.`,

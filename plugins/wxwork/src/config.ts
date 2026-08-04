@@ -15,8 +15,7 @@ export const DEFAULT_WXWORK_WS_URL = 'wss://openws.work.weixin.qq.com'
 export interface WxworkBotConfig {
   alias: string
   botId: string
-  credentialSource?: 'env' | 'local'
-  secretEnv?: string
+  secretEnv: string
   wsUrl: string
   savedAt: string
 }
@@ -83,7 +82,7 @@ function indexPath(): string {
   return join(getWxworkStateDir(), 'bots.json')
 }
 
-function credentialPath(alias: string): string {
+function legacyCredentialPath(alias: string): string {
   return join(getBotStateDir(alias), 'credentials.json')
 }
 
@@ -166,36 +165,13 @@ export function saveBot(input: {
   const bot: WxworkBotConfig = {
     alias: validateBotAlias(input.alias),
     botId: validateBotId(input.botId),
-    credentialSource: 'env',
     secretEnv: validateSecretEnv(input.secretEnv),
     wsUrl: validateWsUrl(input.wsUrl || DEFAULT_WXWORK_WS_URL),
     savedAt: new Date().toISOString(),
   }
   saveBotConfig(bot)
-  rmSync(credentialPath(bot.alias), { force: true })
+  rmSync(legacyCredentialPath(bot.alias), { force: true })
   return bot
-}
-
-export function saveLocalBot(input: {
-  alias: string
-  botId: string
-  secret: string
-  wsUrl?: string
-}): WxworkBotConfig {
-  const alias = validateBotAlias(input.alias)
-  const secret = input.secret.trim()
-  if (!secret) throw new Error('wxwork Secret must not be empty.')
-  writePrivateFileAtomic(
-    credentialPath(alias),
-    `${JSON.stringify({ version: 1, secret }, null, 2)}\n`,
-  )
-  return saveBotConfig({
-    alias,
-    botId: validateBotId(input.botId),
-    credentialSource: 'local',
-    wsUrl: validateWsUrl(input.wsUrl || DEFAULT_WXWORK_WS_URL),
-    savedAt: new Date().toISOString(),
-  })
 }
 
 export function removeBot(alias: string): void {
@@ -210,20 +186,6 @@ export function removeBot(alias: string): void {
 }
 
 export function resolveBotSecret(bot: WxworkBotConfig): string {
-  if (bot.credentialSource === 'local') {
-    try {
-      const stored = JSON.parse(
-        readFileSync(credentialPath(bot.alias), 'utf8'),
-      ) as { version?: number; secret?: string }
-      const secret = stored.version === 1 ? stored.secret?.trim() : undefined
-      if (secret) return secret
-    } catch {
-      /* Report a single non-sensitive error below. */
-    }
-    throw new Error(
-      `Stored credential is missing or invalid for wxwork bot ${bot.alias}.`,
-    )
-  }
   if (!bot.secretEnv)
     throw new Error(
       `Secret environment variable name is missing for wxwork bot ${bot.alias}.`,

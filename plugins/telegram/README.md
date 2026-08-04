@@ -7,7 +7,7 @@ Bot 管理面板或主动发送。
 
 ## 配置
 
-在 BotFather 创建 Bot。推荐将 Token 放入环境变量，避免进入命令历史或本地凭据文件：
+在 BotFather 创建 Bot。推荐将 Token 放入环境变量，避免进入命令历史：
 
 ```powershell
 $env:TELEGRAM_PRIMARY_TOKEN = "123456:your-secret-token"
@@ -16,15 +16,16 @@ bun plugins/telegram/host/entry.ts bot doctor primary
 bun run dev -- --plugin-dir plugins/telegram --dangerously-load-development-channels plugin:telegram@inline
 ```
 
-也可以直接传入并逐 Bot 保存在本地私有文件中：
+如果 Token 已存在于用户级 `settings.json.env`，也可以直接传入值，反查并保存变量名：
 
 ```powershell
 bun plugins/telegram/host/entry.ts bot add-local primary "123456:your-secret-token"
 ```
 
-`add-local` 的明文参数可能保留在 Shell 历史和进程命令行中，且 Token 以明文 JSON 保存于
-`~/.claude/channels/telegram/bots/<alias>/credentials.json`；环境变量模式仍是推荐方式。
-相同别名重新执行普通 `bot add` 会切回环境变量模式并删除本地凭据。
+`add-local` 不保存 Token，只读取 `~/.claude/settings.json`（或
+`CLAUDE_CONFIG_DIR/settings.json`）并要求 `env` 中有且仅有一个值精确匹配；项目和管理级
+设置不参与匹配。明文参数可能保留在 Shell 历史和进程命令行中，普通 `bot add` 仍是
+推荐方式。后续运行仍读取环境变量。
 
 生产分发：
 

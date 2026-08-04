@@ -5,9 +5,9 @@ import {
   removeQqBot,
   resolveQqBot,
   resolveQqSecret,
-  saveLocalQqBot,
   saveQqBot,
 } from './config.js'
+import { findUserSettingsEnvName } from '../../userSettingsEnv.js'
 import { QqGateway } from './gateway.js'
 import { runQqMcpServer } from './server.js'
 
@@ -42,15 +42,15 @@ export async function handleQqCli(
       if (!args[2] || !args[3] || !args[4])
         throw new Error('Expected: bot add-local <alias> <app-id> <app-secret>')
       process.stderr.write(
-        'Warning: credentials supplied as command-line arguments may be retained in shell history.\n',
+        'Warning: credentials supplied as command-line arguments may be retained in shell history; the value is only matched against user settings and is not stored by this command.\n',
       )
-      const bot = saveLocalQqBot({
+      const bot = saveQqBot({
         alias: args[2],
         appId: args[3],
-        secret: args[4],
+        secretEnv: findUserSettingsEnvName(args[4], 'QQ AppSecret'),
       })
       process.stdout.write(
-        `Configured QQ bot ${bot.alias}; credential source: local.\n`,
+        `Configured QQ bot ${bot.alias}; secret source: ${bot.secretEnv}.\n`,
       )
       return
     }
@@ -64,7 +64,7 @@ export async function handleQqCli(
       const bots = listQqBots()
       process.stdout.write(
         bots.length
-          ? `${bots.map(bot => `${bot.alias}\t${bot.appId}\t${bot.credentialSource === 'local' ? 'local' : bot.secretEnv}`).join('\n')}\n`
+          ? `${bots.map(bot => `${bot.alias}\t${bot.appId}\t${bot.secretEnv}`).join('\n')}\n`
           : 'No QQ bots configured.\n',
       )
       return

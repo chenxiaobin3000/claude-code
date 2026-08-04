@@ -5,9 +5,9 @@ import {
   removeTelegramBot,
   resolveTelegramBot,
   resolveTelegramToken,
-  saveLocalTelegramBot,
   saveTelegramBot,
 } from './config.js'
+import { findUserSettingsEnvName } from '../../userSettingsEnv.js'
 import { runTelegramMcpServer } from './server.js'
 
 function usage(): void {
@@ -37,11 +37,14 @@ export async function handleTelegramCli(
       if (!args[2] || !args[3])
         throw new Error('Expected: bot add-local <alias> <bot-token>')
       process.stderr.write(
-        'Warning: credentials supplied as command-line arguments may be retained in shell history.\n',
+        'Warning: credentials supplied as command-line arguments may be retained in shell history; the value is only matched against user settings and is not stored by this command.\n',
       )
-      const bot = saveLocalTelegramBot({ alias: args[2], token: args[3] })
+      const bot = saveTelegramBot({
+        alias: args[2],
+        tokenEnv: findUserSettingsEnvName(args[3], 'Telegram Bot Token'),
+      })
       process.stdout.write(
-        `Configured Telegram bot ${bot.alias}; credential source: local.\n`,
+        `Configured Telegram bot ${bot.alias}; token source: ${bot.tokenEnv}.\n`,
       )
       return
     }
@@ -55,7 +58,7 @@ export async function handleTelegramCli(
       const bots = listTelegramBots()
       process.stdout.write(
         bots.length
-          ? `${bots.map(bot => `${bot.alias}\t${bot.credentialSource === 'local' ? 'local' : bot.tokenEnv}`).join('\n')}\n`
+          ? `${bots.map(bot => `${bot.alias}\t${bot.tokenEnv}`).join('\n')}\n`
           : 'No Telegram bots configured.\n',
       )
       return

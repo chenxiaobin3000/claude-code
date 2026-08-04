@@ -16,8 +16,7 @@ export const QQ_TOKEN_BASE_URL = 'https://bots.qq.com'
 export interface QqBotConfig {
   alias: string
   appId: string
-  credentialSource?: 'env' | 'local'
-  secretEnv?: string
+  secretEnv: string
   savedAt: string
 }
 
@@ -89,7 +88,7 @@ export function writeQqPrivateFile(path: string, content: string): void {
 function indexPath(): string {
   return join(getQqStateDir(), 'bots.json')
 }
-function credentialPath(alias: string): string {
+function legacyCredentialPath(alias: string): string {
   return join(getQqBotStateDir(alias), 'credentials.json')
 }
 function readIndex(): BotIndex {
@@ -148,31 +147,11 @@ export function saveQqBot(input: {
   const bot = saveQqBotConfig({
     alias: validateQqAlias(input.alias),
     appId: validateQqAppId(input.appId),
-    credentialSource: 'env',
     secretEnv: validateQqSecretEnv(input.secretEnv),
     savedAt: new Date().toISOString(),
   })
-  rmSync(credentialPath(bot.alias), { force: true })
+  rmSync(legacyCredentialPath(bot.alias), { force: true })
   return bot
-}
-export function saveLocalQqBot(input: {
-  alias: string
-  appId: string
-  secret: string
-}): QqBotConfig {
-  const alias = validateQqAlias(input.alias)
-  const secret = input.secret.trim()
-  if (!secret) throw new Error('QQ AppSecret must not be empty.')
-  writeQqPrivateFile(
-    credentialPath(alias),
-    `${JSON.stringify({ version: 1, secret }, null, 2)}\n`,
-  )
-  return saveQqBotConfig({
-    alias,
-    appId: validateQqAppId(input.appId),
-    credentialSource: 'local',
-    savedAt: new Date().toISOString(),
-  })
 }
 export function removeQqBot(alias: string): void {
   const resolved = validateQqAlias(alias)
@@ -185,20 +164,6 @@ export function removeQqBot(alias: string): void {
   })
 }
 export function resolveQqSecret(bot: QqBotConfig): string {
-  if (bot.credentialSource === 'local') {
-    try {
-      const stored = JSON.parse(
-        readFileSync(credentialPath(bot.alias), 'utf8'),
-      ) as { version?: number; secret?: string }
-      const secret = stored.version === 1 ? stored.secret?.trim() : undefined
-      if (secret) return secret
-    } catch {
-      /* Report a single non-sensitive error below. */
-    }
-    throw new Error(
-      `Stored credential is missing or invalid for QQ bot ${bot.alias}.`,
-    )
-  }
   if (!bot.secretEnv)
     throw new Error(
       `Secret environment variable name is missing for QQ bot ${bot.alias}.`,

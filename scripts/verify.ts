@@ -57,7 +57,7 @@ const validationScripts = [
   'scripts/validation/extension-api-compat.ts',
   'scripts/validation/mcp-lifecycle.ts',
   'scripts/validation/channel-settings.ts',
-  'scripts/validation/channel-local-credentials.ts',
+  'scripts/validation/channel-local-env.ts',
   'scripts/validation/chrome-plugin-boundary.ts',
   'scripts/validation/weixin-plugin-boundary.ts',
   'scripts/validation/weixin-api-protocol.ts',

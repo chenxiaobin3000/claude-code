@@ -12,10 +12,9 @@ import { join } from 'node:path'
 
 export interface TelegramUserAccountConfig {
   alias: string
-  credentialSource?: 'env' | 'local'
-  apiIdEnv?: string
-  apiHashEnv?: string
-  phoneEnv?: string
+  apiIdEnv: string
+  apiHashEnv: string
+  phoneEnv: string
   savedAt: string
 }
 interface AccountIndex {
@@ -79,7 +78,7 @@ export function writeTelegramUserPrivateFile(
 function indexPath(): string {
   return join(getTelegramUserStateDir(), 'accounts.json')
 }
-function credentialPath(alias: string): string {
+function legacyCredentialPath(alias: string): string {
   return join(getTelegramUserAccountStateDir(alias), 'credentials.json')
 }
 function readIndex(): AccountIndex {
@@ -145,35 +144,13 @@ export function saveTelegramUserAccount(input: {
 }): TelegramUserAccountConfig {
   const account = saveTelegramUserAccountConfig({
     alias: validateTelegramUserAlias(input.alias),
-    credentialSource: 'env',
     apiIdEnv: validateSecretEnvName(input.apiIdEnv),
     apiHashEnv: validateSecretEnvName(input.apiHashEnv),
     phoneEnv: validateSecretEnvName(input.phoneEnv),
     savedAt: new Date().toISOString(),
   })
-  rmSync(credentialPath(account.alias), { force: true })
+  rmSync(legacyCredentialPath(account.alias), { force: true })
   return account
-}
-export function saveLocalTelegramUserAccount(input: {
-  alias: string
-  apiId: string
-  apiHash: string
-  phone: string
-}): TelegramUserAccountConfig {
-  const alias = validateTelegramUserAlias(input.alias)
-  const credentials = validateTelegramUserCredentials(
-    input,
-    `Stored credentials for ${alias}`,
-  )
-  writeTelegramUserPrivateFile(
-    credentialPath(alias),
-    `${JSON.stringify({ version: 1, ...credentials }, null, 2)}\n`,
-  )
-  return saveTelegramUserAccountConfig({
-    alias,
-    credentialSource: 'local',
-    savedAt: new Date().toISOString(),
-  })
 }
 export function removeTelegramUserAccount(alias: string): void {
   const validated = validateTelegramUserAlias(alias)
@@ -193,23 +170,6 @@ export interface TelegramUserCredentials {
 export function resolveTelegramUserCredentials(
   account: TelegramUserAccountConfig,
 ): TelegramUserCredentials {
-  if (account.credentialSource === 'local') {
-    try {
-      const stored = JSON.parse(
-        readFileSync(credentialPath(account.alias), 'utf8'),
-      ) as Partial<TelegramUserCredentials> & { version?: number }
-      if (stored.version === 1)
-        return validateTelegramUserCredentials(
-          stored,
-          `Stored credentials for ${account.alias}`,
-        )
-    } catch {
-      /* Report a single non-sensitive error below. */
-    }
-    throw new Error(
-      `Stored credentials are missing or invalid for Telegram user account ${account.alias}.`,
-    )
-  }
   if (!account.apiIdEnv || !account.apiHashEnv || !account.phoneEnv)
     throw new Error(
       `Credential environment variable names are missing for Telegram user account ${account.alias}.`,

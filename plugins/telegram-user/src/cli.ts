@@ -14,9 +14,9 @@ import {
   removeTelegramUserAccount,
   resolveTelegramUserAccount,
   resolveTelegramUserCredentials,
-  saveLocalTelegramUserAccount,
   saveTelegramUserAccount,
 } from './config.js'
+import { findUserSettingsEnvName } from '../../userSettingsEnv.js'
 import { runTelegramUserMcpServer } from './server.js'
 import type { TelegramUserPeerType } from './types.js'
 
@@ -103,16 +103,16 @@ export async function handleTelegramUserCli(
           'Expected: account add-local <alias> <api-id> <api-hash> <phone>',
         )
       process.stderr.write(
-        'Warning: credentials supplied as command-line arguments may be retained in shell history.\n',
+        'Warning: credentials supplied as command-line arguments may be retained in shell history; values are only matched against user settings and are not stored by this command.\n',
       )
-      const account = saveLocalTelegramUserAccount({
+      const account = saveTelegramUserAccount({
         alias: args[2],
-        apiId: args[3],
-        apiHash: args[4],
-        phone: args[5],
+        apiIdEnv: findUserSettingsEnvName(args[3], 'Telegram API ID'),
+        apiHashEnv: findUserSettingsEnvName(args[4], 'Telegram API Hash'),
+        phoneEnv: findUserSettingsEnvName(args[5], 'Telegram phone number'),
       })
       process.stdout.write(
-        `Configured Telegram user account ${account.alias}; credential source: local.\n`,
+        `Configured Telegram user account ${account.alias}; credential sources: ${account.apiIdEnv}, ${account.apiHashEnv}, ${account.phoneEnv}.\n`,
       )
       return
     }
@@ -120,7 +120,7 @@ export async function handleTelegramUserCli(
       const accounts = listTelegramUserAccounts()
       process.stdout.write(
         accounts.length
-          ? `${accounts.map(account => `${account.alias}\t${loadTelegramUserSession(account.alias) ? 'logged-in' : 'login-required'}\t${account.credentialSource === 'local' ? 'local' : `${account.apiIdEnv}\t${account.apiHashEnv}\t${account.phoneEnv}`}`).join('\n')}\n`
+          ? `${accounts.map(account => `${account.alias}\t${loadTelegramUserSession(account.alias) ? 'logged-in' : 'login-required'}\t${account.apiIdEnv}\t${account.apiHashEnv}\t${account.phoneEnv}`).join('\n')}\n`
           : 'No Telegram user accounts configured.\n',
       )
       return
