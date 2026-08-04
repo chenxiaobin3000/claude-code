@@ -56,6 +56,7 @@
 - 插件仅支持本地插件。Windows standalone 只扫描 `claude.exe` 同级 `plugins` 下含 `.claude-plugin/plugin.json` 的一级直接子目录，不递归、不扫描 cwd 或 `~/.claude/plugins`；目录缺失或为空时静默跳过，链接、Junction 和路径逃逸 fail-closed。源码/Bun 开发模式不自动扫描，继续使用 `--plugin-dir`。
 - 稳定 Channel 可通过用户级 `~/.claude/settings.json` 或管理级 `managed-settings.json`/`managed-settings.d/*.json` 的 `channels` 列表随主程序启动，也可继续使用 `--channels`；三者合并去重。项目 `.claude/settings.json`、`.claude/settings.local.json` 与 `--settings` 中的同名字段一律忽略，仓库不能自行启用外部消息入口；开发 Channel 仍只能通过交互式命令行参数临时启用。
 - `qq-host`、`wxwork-host`、`telegram-host` 与 `telegram-user-host` 只保存环境变量名，不保存长期凭据。后续运行优先读取进程环境变量，独立 Host 未获得 `claude.exe` 注入时按变量名回退读取用户级 `settings.json.env`；项目和管理级设置不参与该回退。
+- 所有 Channel 插件的核心 `reply` MCP 工具通过 `anthropic/alwaysLoad` 始终进入模型工具列表，外部消息回复不依赖延迟工具搜索；非必要 Channel 工具继续按需加载。
 - 插件优先级固定为显式 `--plugin-dir`（`@inline`）> standalone 自动发现（`@local`）> 内置（`@builtin`）。同级重名禁用歧义项，高优先级插件失败时不回退同名低优先级实现；`--bare` 禁用自动发现但保留显式插件，`/reload-plugins` 会重新扫描并裁剪已移除的全部插件组件。
 - 不支持远端市场、自动下载、原生安装、CLI 自更新或插件自动更新；自动发现不会安装 Chrome 扩展、注册 Native Host 或修改注册表。
 - 微信能力已从主程序内置 workspace 迁入 `plugins/weixin`：登录、轮询、媒体、二维码、配对、回复和权限转发由独立 `weixin-host` 承担。主程序不保留 `ccb weixin`、`weixin@builtin` 或微信实现依赖；生产使用 `weixin@local`，源码显式加载使用 `weixin@inline`，删除插件目录即可移除全部微信入口。

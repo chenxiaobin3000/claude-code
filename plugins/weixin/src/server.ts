@@ -1,7 +1,10 @@
 import { existsSync, rmSync } from 'node:fs'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod/v4'
 import {
   CDN_BASE_URL,
@@ -39,7 +42,10 @@ const ChannelPermissionRequestNotificationSchema = z.object({
     description: z.string(),
     input_preview: z.string(),
     channel_context: z
-      .object({ source_server: z.string().optional(), chat_id: z.string().optional() })
+      .object({
+        source_server: z.string().optional(),
+        chat_id: z.string().optional(),
+      })
       .optional(),
   }),
 })
@@ -48,7 +54,9 @@ function log(message: string): void {
   process.stderr.write(`${message}\n`)
 }
 
-function formatPermissionRequestMessage(request: ChannelPermissionRequestParams): string {
+function formatPermissionRequestMessage(
+  request: ChannelPermissionRequestParams,
+): string {
   return [
     'Claude Code needs your approval.',
     '',
@@ -79,22 +87,28 @@ export function resolveWeixinToolTarget(
 function toolDefinitions(): Array<Record<string, unknown>> {
   const commonAccountProperty = {
     type: 'string',
-    description: 'Account ID. Required with an unqualified chat_id when multiple accounts exist.',
+    description:
+      'Account ID. Required with an unqualified chat_id when multiple accounts exist.',
   }
   const tools: Array<Record<string, unknown>> = [
     {
       name: 'reply',
+      _meta: { 'anthropic/alwaysLoad': true },
       description: 'Reply to a WeChat message using its routed chat_id.',
       inputSchema: {
         type: 'object',
         properties: {
-          chat_id: { type: 'string', description: 'The chat_id from the channel notification' },
+          chat_id: {
+            type: 'string',
+            description: 'The chat_id from the channel notification',
+          },
           account_id: commonAccountProperty,
           text: { type: 'string', description: 'The reply text' },
           files: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Optional absolute paths, or HTTP(S) URLs when remoteHttpMedia is enabled',
+            description:
+              'Optional absolute paths, or HTTP(S) URLs when remoteHttpMedia is enabled',
           },
         },
         required: ['chat_id', 'text'],
@@ -113,7 +127,11 @@ function toolDefinitions(): Array<Record<string, unknown>> {
       },
     },
   ]
-  if (listAccounts().some(account => loadFeatureConfig(account.accountId).channelDiagnostics)) {
+  if (
+    listAccounts().some(
+      account => loadFeatureConfig(account.accountId).channelDiagnostics,
+    )
+  ) {
     tools.push({
       name: 'diagnostics',
       description: 'Show redacted WeChat account and local state diagnostics.',
@@ -139,31 +157,44 @@ export function createWeixinMcpServer(version: string): Server {
     },
   )
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: toolDefinitions() as never }))
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: toolDefinitions() as never,
+  }))
 
   server.setRequestHandler(CallToolRequestSchema, async request => {
     const { name, arguments: args } = request.params
     try {
       if (name === 'diagnostics') {
-        const requested = typeof args?.account_id === 'string' ? args.account_id : undefined
+        const requested =
+          typeof args?.account_id === 'string' ? args.account_id : undefined
         const accountId = resolveAccountId(requested)
         if (!accountId) throw new Error('No WeChat account is configured.')
         const account = loadAccount(accountId)
-        if (!account) throw new Error(`WeChat account is not connected: ${accountId}`)
+        if (!account)
+          throw new Error(`WeChat account is not connected: ${accountId}`)
         const features = loadFeatureConfig(accountId)
-        if (!features.channelDiagnostics) throw new Error('channelDiagnostics is disabled for this account.')
+        if (!features.channelDiagnostics)
+          throw new Error('channelDiagnostics is disabled for this account.')
         return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              accountId,
-              userId: account.userId ?? null,
-              baseUrl: new URL(account.baseUrl).origin,
-              savedAt: account.savedAt,
-              features,
-              stateFiles: listAccountStateFiles(accountId).filter(file => file !== 'account.json'),
-            }, null, 2),
-          }],
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  accountId,
+                  userId: account.userId ?? null,
+                  baseUrl: new URL(account.baseUrl).origin,
+                  savedAt: account.savedAt,
+                  features,
+                  stateFiles: listAccountStateFiles(accountId).filter(
+                    file => file !== 'account.json',
+                  ),
+                },
+                null,
+                2,
+              ),
+            },
+          ],
         }
       }
 
@@ -171,7 +202,10 @@ export function createWeixinMcpServer(version: string): Server {
       const requestedAccountId =
         typeof args?.account_id === 'string' ? args.account_id : undefined
       if (!chatId) throw new Error('Missing chat_id parameter.')
-      const { account, userId } = resolveWeixinToolTarget(chatId, requestedAccountId)
+      const { account, userId } = resolveWeixinToolTarget(
+        chatId,
+        requestedAccountId,
+      )
       const accountId = account.accountId
       const baseUrl = account.baseUrl || DEFAULT_BASE_URL
       const contextToken = getContextToken(userId, accountId) || ''
@@ -179,7 +213,9 @@ export function createWeixinMcpServer(version: string): Server {
       if (name === 'reply') {
         const text = typeof args?.text === 'string' ? args.text : ''
         const files = Array.isArray(args?.files)
-          ? args.files.filter((value): value is string => typeof value === 'string')
+          ? args.files.filter(
+              (value): value is string => typeof value === 'string',
+            )
           : []
         if (!text) throw new Error('Missing text parameter.')
         const features = loadFeatureConfig(accountId)
@@ -188,11 +224,16 @@ export function createWeixinMcpServer(version: string): Server {
           for (const [index, source] of files.entries()) {
             const isRemote = /^https?:\/\//i.test(source)
             if (isRemote && !features.remoteHttpMedia) {
-              throw new Error(`Remote HTTP media is disabled for account ${accountId}.`)
+              throw new Error(
+                `Remote HTTP media is disabled for account ${accountId}.`,
+              )
             }
-            const filePath = isRemote ? await downloadRemoteToTemp(source) : source
+            const filePath = isRemote
+              ? await downloadRemoteToTemp(source)
+              : source
             if (isRemote) temporaryFiles.push(filePath)
-            if (!existsSync(filePath)) throw new Error(`File not found: ${filePath}`)
+            if (!existsSync(filePath))
+              throw new Error(`File not found: ${filePath}`)
             await sendMediaFile({
               filePath,
               to: userId,
@@ -217,11 +258,26 @@ export function createWeixinMcpServer(version: string): Server {
         } finally {
           for (const path of temporaryFiles) rmSync(path, { force: true })
         }
-        return { content: [{ type: 'text', text: files.length ? 'Message sent with attachments.' : 'Message sent.' }] }
+        return {
+          content: [
+            {
+              type: 'text',
+              text: files.length
+                ? 'Message sent with attachments.'
+                : 'Message sent.',
+            },
+          ],
+        }
       }
 
       if (name === 'send_typing') {
-        const config = await getConfig(baseUrl, account.token, userId, contextToken, accountId)
+        const config = await getConfig(
+          baseUrl,
+          account.token,
+          userId,
+          contextToken,
+          accountId,
+        )
         if (config.typing_ticket) {
           await sendTyping(
             baseUrl,
@@ -240,7 +296,12 @@ export function createWeixinMcpServer(version: string): Server {
       throw new Error(`Unknown tool: ${name}`)
     } catch (error) {
       return {
-        content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }],
+        content: [
+          {
+            type: 'text',
+            text: error instanceof Error ? error.message : String(error),
+          },
+        ],
         isError: true,
       }
     }
@@ -252,48 +313,67 @@ export function createWeixinMcpServer(version: string): Server {
 export async function runWeixinMcpServer(version: string): Promise<void> {
   const accounts = loadAllAccounts()
   if (accounts.length === 0) {
-    throw new Error('No WeChat account configured. Run `weixin-host login [account-id]` first.')
+    throw new Error(
+      'No WeChat account configured. Run `weixin-host login [account-id]` first.',
+    )
   }
   const featuresByAccount = new Map(
-    accounts.map(account => [account.accountId, loadFeatureConfig(account.accountId)]),
+    accounts.map(account => [
+      account.accountId,
+      loadFeatureConfig(account.accountId),
+    ]),
   )
   const server = createWeixinMcpServer(version)
   const transport = new StdioServerTransport()
 
-  server.setNotificationHandler(ChannelPermissionRequestNotificationSchema, async notification => {
-    const request: ChannelPermissionRequestParams = notification.params
-    const requestedChatId = request.channel_context?.chat_id
-    const routed = requestedChatId ? parseRoutedChatId(requestedChatId) : null
-    const target = routed
-      ? {
-          accountId: routed.accountId,
-          chatId: routed.userId,
-          contextToken: getContextToken(routed.userId, routed.accountId),
-        }
-      : getActivePermissionChat()
-    if (!target) {
-      log(`[weixin] Permission request ${request.request_id} has no unambiguous account/chat target.`)
-      return
-    }
-    const account = loadAccount(target.accountId)
-    if (!account) {
-      log(`[weixin:${target.accountId}] Permission target account is unavailable.`)
-      return
-    }
-    try {
-      savePendingPermission(request, target.accountId, target.chatId, target.contextToken)
-      await sendText({
-        to: target.chatId,
-        text: formatPermissionRequestMessage(request),
-        baseUrl: account.baseUrl || DEFAULT_BASE_URL,
-        token: account.token,
-        contextToken: target.contextToken || '',
-        accountId: target.accountId,
-      })
-    } catch (error) {
-      log(`[weixin:${target.accountId}] Failed to relay permission request ${request.request_id}: ${error}`)
-    }
-  })
+  server.setNotificationHandler(
+    ChannelPermissionRequestNotificationSchema,
+    async notification => {
+      const request: ChannelPermissionRequestParams = notification.params
+      const requestedChatId = request.channel_context?.chat_id
+      const routed = requestedChatId ? parseRoutedChatId(requestedChatId) : null
+      const target = routed
+        ? {
+            accountId: routed.accountId,
+            chatId: routed.userId,
+            contextToken: getContextToken(routed.userId, routed.accountId),
+          }
+        : getActivePermissionChat()
+      if (!target) {
+        log(
+          `[weixin] Permission request ${request.request_id} has no unambiguous account/chat target.`,
+        )
+        return
+      }
+      const account = loadAccount(target.accountId)
+      if (!account) {
+        log(
+          `[weixin:${target.accountId}] Permission target account is unavailable.`,
+        )
+        return
+      }
+      try {
+        savePendingPermission(
+          request,
+          target.accountId,
+          target.chatId,
+          target.contextToken,
+        )
+        await sendText({
+          to: target.chatId,
+          text: formatPermissionRequestMessage(request),
+          baseUrl: account.baseUrl || DEFAULT_BASE_URL,
+          token: account.token,
+          contextToken: target.contextToken || '',
+          accountId: target.accountId,
+        })
+      } catch (error) {
+        log(
+          `[weixin:${target.accountId}] Failed to relay permission request ${request.request_id}: ${error}`,
+        )
+      }
+    },
+  )
 
   await server.connect(transport)
   const controller = new AbortController()
@@ -319,9 +399,14 @@ export async function runWeixinMcpServer(version: string): Promise<void> {
     await Promise.all(
       accounts.map(async account => {
         try {
-          const response = await notifyStart(account.baseUrl || DEFAULT_BASE_URL, account.token)
+          const response = await notifyStart(
+            account.baseUrl || DEFAULT_BASE_URL,
+            account.token,
+          )
           if (response.ret !== undefined && response.ret !== 0) {
-            log(`[weixin:${account.accountId}] notifyStart ret=${response.ret} ${response.errmsg ?? ''}`)
+            log(
+              `[weixin:${account.accountId}] notifyStart ret=${response.ret} ${response.errmsg ?? ''}`,
+            )
           }
         } catch (error) {
           log(`[weixin:${account.accountId}] notifyStart failed: ${error}`)
@@ -346,8 +431,12 @@ export async function runWeixinMcpServer(version: string): Promise<void> {
                   sender_id: msg.fromUserId,
                   account_id: msg.accountId,
                   message_id: msg.messageId,
-                  ...(msg.attachmentPath && { attachment_path: msg.attachmentPath }),
-                  ...(msg.attachmentType && { attachment_type: msg.attachmentType }),
+                  ...(msg.attachmentPath && {
+                    attachment_path: msg.attachmentPath,
+                  }),
+                  ...(msg.attachmentType && {
+                    attachment_type: msg.attachmentType,
+                  }),
                 },
               },
             })
@@ -355,7 +444,10 @@ export async function runWeixinMcpServer(version: string): Promise<void> {
           onPermissionResponse: async response => {
             await server.notification({
               method: 'notifications/claude/channel/permission',
-              params: { request_id: response.requestId, behavior: response.behavior },
+              params: {
+                request_id: response.requestId,
+                behavior: response.behavior,
+              },
             })
           },
           abortSignal: controller.signal,
@@ -365,7 +457,9 @@ export async function runWeixinMcpServer(version: string): Promise<void> {
   } finally {
     clearInterval(parentCheck)
     await Promise.allSettled(
-      accounts.map(account => notifyStop(account.baseUrl || DEFAULT_BASE_URL, account.token)),
+      accounts.map(account =>
+        notifyStop(account.baseUrl || DEFAULT_BASE_URL, account.token),
+      ),
     )
     await server.close()
   }

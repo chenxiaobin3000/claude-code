@@ -379,6 +379,9 @@ Host 的 `doctor`、`login` 或 `mcp` 时，缺失变量会按已保存的变量
 `~/.claude/settings.json`（或 `CLAUDE_CONFIG_DIR/settings.json`）的 `env`。项目和管理级
 设置不参与该回退。
 
+所有 Channel 插件的核心 `reply` MCP 工具均始终加载；收到外部消息后模型可在同一轮直接
+回复，不依赖先搜索延迟工具。`send_typing`、诊断等非必要工具仍按需加载。
+
 生产分发把 `bun` 替换为 `dist/plugins/telegram-user/telegram-user-host.exe`，并以
 `--channels plugin:telegram-user@local` 启用。Session 是长期登录凭据，逐账号私有保存于
 `~/.claude/channels/telegram-user`；只处理显式 allowlist 的 Peer/Topic，且只能回复 15 分钟
