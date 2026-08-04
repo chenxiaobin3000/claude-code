@@ -95,6 +95,7 @@
 
 - 根包与 workspace 均遵循最小脚本约定：`typecheck`、`build`、`test` 或明确的 `test:smoke`；不适用的子包须写明原因。
 - 支持 Bun bundle、Vite/Rollup Node bundle、Bun standalone EXE 三条构建链，并在 CI 只验证适用产物。
+- Windows standalone 构建统一处理 Bun Runtime 临时文件的瞬时 `EBUSY`/提交占用：只对明确的临时文件错误最多重试 3 次，按 250/500/1000 ms 退避并清理当前未完成产物；依赖、类型和 Bundle 等确定性错误立即失败。
 - `bun run verify` 是唯一验证入口：依赖锁定、TypeScript、Biome、构建、CLI 启动、源码轻量验证与本地模型可用时的单轮模型/工具调用均在其中执行。
 - 模型请求诊断日志必须脱敏，禁止记录 API Key、OAuth Token 和完整敏感 Prompt。
 

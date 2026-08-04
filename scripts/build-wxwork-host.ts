@@ -2,6 +2,7 @@
 
 import { cp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import { buildStandaloneWithRetry } from './standalone-build.ts'
 
 const platformTarget =
   process.platform === 'win32'
@@ -22,7 +23,10 @@ const outfile = join(outputDirectory, hostFilename)
 await rm(outputDirectory, { recursive: true, force: true })
 await mkdir(outputDirectory, { recursive: true })
 
-const result = await Bun.build({
+const result = await buildStandaloneWithRetry({
+  label: 'wxwork-host',
+  outfile,
+  build: () => Bun.build({
   entrypoints: [join(pluginRoot, 'host', 'entry.ts')],
   target: 'bun',
   compile: {
@@ -41,6 +45,7 @@ const result = await Bun.build({
   define: {
     'process.env.NODE_ENV': JSON.stringify('production'),
   },
+  }),
 })
 
 if (!result.success) {

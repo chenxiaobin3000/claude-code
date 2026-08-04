@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, rm, stat } from 'fs/promises'
 import { getMacroDefines, resolveBuildFeatures } from './defines.ts'
+import { buildStandaloneWithRetry } from './standalone-build.ts'
 
 const outfile = 'dist/claude.exe'
 const legacyOutfiles = ['dist/claude-code.exe']
@@ -19,7 +20,10 @@ await mkdir('dist', { recursive: true })
 await Promise.all(legacyOutfiles.map(path => rm(path, { force: true })))
 
 async function buildStandalone(includeWindowsMetadata: boolean) {
-  return Bun.build({
+  return buildStandaloneWithRetry({
+    label: 'claude.exe',
+    outfile,
+    build: () => Bun.build({
     entrypoints: ['src/entrypoints/cli-standalone-windows.ts'],
     target: 'bun',
     compile: {
@@ -42,6 +46,7 @@ async function buildStandalone(includeWindowsMetadata: boolean) {
       'process.env.CCB_EMBEDDED_RIPGREP_SHA256': JSON.stringify(ripgrepHash),
     },
     features,
+    }),
   })
 }
 

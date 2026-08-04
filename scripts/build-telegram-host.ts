@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { cp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import { buildStandaloneWithRetry } from './standalone-build.ts'
 
 const platformTarget = process.platform === 'win32' ? 'bun-windows-x64' : process.platform === 'darwin' ? process.arch === 'arm64' ? 'bun-darwin-arm64' : 'bun-darwin-x64' : process.arch === 'arm64' ? 'bun-linux-arm64' : 'bun-linux-x64'
 const root = resolve(import.meta.dir, '..')
@@ -10,11 +11,11 @@ const filename = process.platform === 'win32' ? 'telegram-host.exe' : 'telegram-
 const outfile = join(directory, filename)
 await rm(directory, { recursive: true, force: true })
 await mkdir(directory, { recursive: true })
-const result = await Bun.build({
+const result = await buildStandaloneWithRetry({ label: 'telegram-host', outfile, build: () => Bun.build({
   entrypoints: [join(plugin, 'host', 'entry.ts')], target: 'bun',
   compile: { target: platformTarget, outfile, ...(process.platform === 'win32' ? { windows: { title: 'Telegram Host', description: 'Local Telegram Bot Channel MCP Host', version: '1.0.0.0' } } : {}) },
   define: { 'process.env.NODE_ENV': JSON.stringify('production') },
-})
+}) })
 if (!result.success) { for (const item of result.logs) console.error(item); process.exit(1) }
 const output = await stat(outfile)
 await cp(join(plugin, 'README.md'), join(directory, 'README.md'))

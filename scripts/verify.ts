@@ -80,6 +80,7 @@ const validationScripts = [
   'scripts/validation/windows-file-contention.ts',
   'scripts/validation/background-supervisor.ts',
   'scripts/validation/stability-pressure.ts',
+  'scripts/validation/standalone-build-retry.ts',
   'scripts/validation/self-update-boundary.ts',
   'scripts/validation/dependency-boundary.ts',
   'scripts/validation/feature-flags.ts',
