@@ -11,19 +11,31 @@ const packageJson = JSON.parse(
   await readFile(join(projectRoot, 'package.json'), 'utf8'),
 ) as { version: string }
 const weixinPackageJson = JSON.parse(
-  await readFile(join(projectRoot, 'plugins', 'weixin', 'package.json'), 'utf8'),
+  await readFile(
+    join(projectRoot, 'plugins', 'weixin', 'package.json'),
+    'utf8',
+  ),
 ) as { version: string }
 const wxworkPackageJson = JSON.parse(
-  await readFile(join(projectRoot, 'plugins', 'wxwork', 'package.json'), 'utf8'),
+  await readFile(
+    join(projectRoot, 'plugins', 'wxwork', 'package.json'),
+    'utf8',
+  ),
 ) as { version: string }
 const qqPackageJson = JSON.parse(
   await readFile(join(projectRoot, 'plugins', 'qq', 'package.json'), 'utf8'),
 ) as { version: string }
 const telegramPackageJson = JSON.parse(
-  await readFile(join(projectRoot, 'plugins', 'telegram', 'package.json'), 'utf8'),
+  await readFile(
+    join(projectRoot, 'plugins', 'telegram', 'package.json'),
+    'utf8',
+  ),
 ) as { version: string }
 const telegramUserPackageJson = JSON.parse(
-  await readFile(join(projectRoot, 'plugins', 'telegram-user', 'package.json'), 'utf8'),
+  await readFile(
+    join(projectRoot, 'plugins', 'telegram-user', 'package.json'),
+    'utf8',
+  ),
 ) as { version: string }
 const expectedVersion = `${packageJson.version} (Claude Code)`
 const commandTimeoutMs = 120_000
@@ -44,6 +56,7 @@ const validationScripts = [
   'scripts/validation/plugin-skill-lifecycle.ts',
   'scripts/validation/extension-api-compat.ts',
   'scripts/validation/mcp-lifecycle.ts',
+  'scripts/validation/channel-settings.ts',
   'scripts/validation/chrome-plugin-boundary.ts',
   'scripts/validation/weixin-plugin-boundary.ts',
   'scripts/validation/weixin-api-protocol.ts',
@@ -572,13 +585,7 @@ async function main(): Promise<void> {
         `wxwork Host version mismatch: ${wxworkHostVersion.stdout.trim()}`,
       )
     }
-    const qqHost = resolve(
-      projectRoot,
-      'dist',
-      'plugins',
-      'qq',
-      'qq-host.exe',
-    )
+    const qqHost = resolve(projectRoot, 'dist', 'plugins', 'qq', 'qq-host.exe')
     const qqHostVersion = await runStep(
       'QQ standalone Host version',
       [qqHost, '--version'],
@@ -618,7 +625,9 @@ async function main(): Promise<void> {
       [telegramUserHost, '--version'],
       { capture: true },
     )
-    if (telegramUserHostVersion.stdout.trim() !== telegramUserPackageJson.version) {
+    if (
+      telegramUserHostVersion.stdout.trim() !== telegramUserPackageJson.version
+    ) {
       throw new Error(
         `Telegram User Host version mismatch: ${telegramUserHostVersion.stdout.trim()}`,
       )
@@ -630,11 +639,10 @@ async function main(): Promise<void> {
         CHROME_VALIDATION_SOCKET_SUFFIX: `verify-${process.pid}`,
       },
     })
-    await runStep(
-      'chrome MCP Host EOF lifecycle',
-      [chromeHost, 'mcp'],
-      { capture: true, timeoutMs: 10_000 },
-    )
+    await runStep('chrome MCP Host EOF lifecycle', [chromeHost, 'mcp'], {
+      capture: true,
+      timeoutMs: 10_000,
+    })
   } else {
     console.log(
       `\n[verify] SKIP Windows x64 standalone EXE on ${process.platform}-${process.arch}`,

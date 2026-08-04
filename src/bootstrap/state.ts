@@ -164,8 +164,9 @@ type State = {
   lastEmittedDate: string | null
   // Additional directories from --add-dir flag (for CLAUDE.md loading)
   additionalDirectoriesForClaudeMd: string[]
-  // Channel server allowlist from --channels flag (servers whose channel
-  // notifications should register this session). Parsed once in main.tsx —
+  // Channel server selection from --channels, user settings, and managed
+  // settings (servers whose notifications should register this session).
+  // Parsed once during default-mode startup —
   // the tag decides trust model: 'plugin' → marketplace verification +
   // allowlist, 'server' → allowlist always fails (schema is plugin-only).
   // Either kind needs entry.dev to bypass allowlist.

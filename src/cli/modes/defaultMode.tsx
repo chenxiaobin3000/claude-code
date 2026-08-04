@@ -81,6 +81,7 @@ import {
 } from '../../interactiveHelpers.js';
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { getMcpToolsCommandsAndResources, prefetchAllMcpResources } from '../../services/mcp/client.js';
+import { getChannelSelections } from '../../services/mcp/channelConfiguration.js';
 import { initBundledSkills } from '../../skills/bundled/index.js';
 import type { AgentColorName } from '@claude-code/builtin-tools/tools/AgentTool/agentColorManager.js';
 import {
@@ -771,18 +772,19 @@ export async function runDefaultMode(
     channels?: string[];
     dangerouslyLoadDevelopmentChannels?: string[];
   };
-  const rawChannels = channelOpts.channels;
+  const rawChannels = getChannelSelections(channelOpts.channels);
   const rawDev = channelOpts.dangerouslyLoadDevelopmentChannels;
   // Always parse + set. ChannelsNotice reads getAllowedChannels() and
   // renders the appropriate branch (disabled/noAuth/policyBlocked/
   // listening) in the startup screen. gateChannelServer() enforces.
-  // --channels works in both interactive and print/SDK modes; dev-channels
-  // stays interactive-only (requires a confirmation dialog).
+  // Stable channels may come from --channels, user settings, or managed
+  // settings. Project, project-local, and --settings sources are deliberately
+  // excluded. Dev channels stay interactive-only and require confirmation.
   let channelEntries: ChannelEntry[] = [];
-  if (rawChannels && rawChannels.length > 0) {
-    channelEntries = parseChannelEntries(rawChannels, '--channels');
-    setAllowedChannels(channelEntries);
+  if (rawChannels.length > 0) {
+    channelEntries = parseChannelEntries(rawChannels, '--channels/settings channels');
   }
+  setAllowedChannels(channelEntries);
   if (!isNonInteractiveSession) {
     if (rawDev && rawDev.length > 0) {
       devChannels = parseChannelEntries(rawDev, '--dangerously-load-development-channels');
@@ -1441,10 +1443,7 @@ export async function runDefaultMode(
   }
 
   // Resolve MCP configs (started early, overlaps with setup/trust dialog work)
-  const {
-    servers: existingMcpConfigs,
-    errors: mcpStartupErrors = [],
-  } = await mcpConfigPromise;
+  const { servers: existingMcpConfigs, errors: mcpStartupErrors = [] } = await mcpConfigPromise;
   if (isNonInteractiveSession) {
     for (const error of mcpStartupErrors) {
       writeToStderr(`MCP configuration warning: ${getPluginErrorMessage(error)}\n`);

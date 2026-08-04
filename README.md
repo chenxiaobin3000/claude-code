@@ -128,6 +128,26 @@ Bash/PowerShell 命令中的 `cd` 属于 Shell cwd 持久化规则，不会触�
 
 插件仅支持本地插件。Windows standalone 自动扫描 `claude.exe` 同级 `plugins` 目录下包含 `.claude-plugin/plugin.json` 的一级直接子目录，不递归、不扫描 cwd 或 `~/.claude/plugins`；链接、Junction 和路径逃逸会安全拒绝。优先级为显式 `--plugin-dir`（`@inline`）> 自动发现（`@local`）> 内置（`@builtin`）；同级重名禁用歧义项，高优先级加载失败不回退同名低优先级插件。`--bare` 禁用自动发现但保留显式插件；`/reload-plugins` 会重新扫描并裁剪已移除的活动组件。没有远端市场、下载、原生安装、CLI 自更新或插件自动更新。
 
+### Channel 启动配置
+
+稳定 Channel 可以在用户级 `~/.claude/settings.json` 的 `channels` 字段中持久化。以后只需启动 `claude.exe`，不必每次传入 `--channels`：
+
+```json
+{
+  "channels": [
+    "plugin:weixin@local",
+    "plugin:wxwork@local",
+    "plugin:qq@local",
+    "plugin:telegram@local",
+    "plugin:telegram-user@local"
+  ]
+}
+```
+
+管理员也可以在管理级 `managed-settings.json` 或 `managed-settings.d/*.json` 中配置同一字段。Windows 文件位置为 `C:\\Program Files\\ClaudeCode\\managed-settings.json`；macOS 为 `/Library/Application Support/ClaudeCode/managed-settings.json`；Linux 为 `/etc/claude-code/managed-settings.json`。
+
+`channels` 明确不能在项目中配置：仓库内的 `.claude/settings.json`、`.claude/settings.local.json` 以及 `--settings` 指定的临时配置即使包含该字段也会被忽略，避免打开项目时由仓库自行启动外部消息入口。命令行 `--channels` 继续支持，并与用户级、管理级列表合并去重；`--dangerously-load-development-channels` 仍只用于当前交互式开发会话，不允许持久化。
+
 本地 Plugin Manifest 可用 `apiVersion` 声明所需的扩展 API SemVer 范围，例如 `"apiVersion": "^1.0.0"`。当前扩展 API 为 `1.0.0`，并与 CLI 产品版本独立；同一主版本只允许新增可选字段或能力，删除、改名、默认行为变化等破坏性修改必须升级主版本。旧 Manifest 缺少该字段时按 v1 契约继续加载。显式范围不兼容时会禁用整个 Plugin，并连带收回其 Hook、Skill、Agent、Command、MCP、LSP 和 Settings，避免组件半加载；依赖该 Plugin 的其他 Plugin 也会按依赖闭包安全降级。MCP 和 ACP 仍使用各自协议的原生版本协商，不复用 Plugin API 版本。
 
 ### chrome 插件与 Chrome 扩展

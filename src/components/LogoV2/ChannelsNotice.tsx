@@ -6,7 +6,7 @@
 
 import * as React from 'react';
 import { useState } from 'react';
-import { type ChannelEntry, getAllowedChannels, getHasDevChannels } from '../../bootstrap/state.js';
+import { type ChannelEntry, getAllowedChannels } from '../../bootstrap/state.js';
 import { getBuiltinPlugins } from '../../plugins/builtinPlugins.js';
 import { Box, Text } from '@anthropic/ink';
 import { getMcpConfigsByScope } from '../../services/mcp/config.js';
@@ -33,16 +33,6 @@ export function ChannelsNotice(): React.ReactNode {
   });
   if (channels.length === 0) return null;
 
-  // When both flags are passed, the list mixes entries and a single flag
-  // name would be wrong for half of it. entry.dev distinguishes origin.
-  const hasNonDev = channels.some(c => !c.dev);
-  const flag =
-    getHasDevChannels() && hasNonDev
-      ? 'Channels'
-      : getHasDevChannels()
-        ? '--dangerously-load-development-channels'
-        : '--channels';
-
   // "Listening for" not "active" — at this point we only know the allowlist
   // was set. Server connection, capability declaration, and whether the name
   // even matches a configured MCP server are all still unknown.
@@ -51,7 +41,7 @@ export function ChannelsNotice(): React.ReactNode {
       <Text color="error">Listening for channel messages from: {list}</Text>
       <Text dimColor>
         Experimental · inbound messages will be pushed into this session, this carries prompt injection risks. Restart
-        Claude Code without {flag} to disable.
+        Remove these selections from settings or command-line options, then restart Claude Code to disable.
       </Text>
       {unmatched.map(u => (
         <Text key={`${formatEntry(u.entry)}:${u.why}`} color="warning">

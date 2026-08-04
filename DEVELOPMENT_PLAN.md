@@ -54,6 +54,7 @@
 
 - 主题仅来自内置主题和 `~/.claude/themes/*.json`；重启读取，不提供编辑器、热更新或插件主题安装。
 - 插件仅支持本地插件。Windows standalone 只扫描 `claude.exe` 同级 `plugins` 下含 `.claude-plugin/plugin.json` 的一级直接子目录，不递归、不扫描 cwd 或 `~/.claude/plugins`；目录缺失或为空时静默跳过，链接、Junction 和路径逃逸 fail-closed。源码/Bun 开发模式不自动扫描，继续使用 `--plugin-dir`。
+- 稳定 Channel 可通过用户级 `~/.claude/settings.json` 或管理级 `managed-settings.json`/`managed-settings.d/*.json` 的 `channels` 列表随主程序启动，也可继续使用 `--channels`；三者合并去重。项目 `.claude/settings.json`、`.claude/settings.local.json` 与 `--settings` 中的同名字段一律忽略，仓库不能自行启用外部消息入口；开发 Channel 仍只能通过交互式命令行参数临时启用。
 - 插件优先级固定为显式 `--plugin-dir`（`@inline`）> standalone 自动发现（`@local`）> 内置（`@builtin`）。同级重名禁用歧义项，高优先级插件失败时不回退同名低优先级实现；`--bare` 禁用自动发现但保留显式插件，`/reload-plugins` 会重新扫描并裁剪已移除的全部插件组件。
 - 不支持远端市场、自动下载、原生安装、CLI 自更新或插件自动更新；自动发现不会安装 Chrome 扩展、注册 Native Host 或修改注册表。
 - 微信能力已从主程序内置 workspace 迁入 `plugins/weixin`：登录、轮询、媒体、二维码、配对、回复和权限转发由独立 `weixin-host` 承担。主程序不保留 `ccb weixin`、`weixin@builtin` 或微信实现依赖；生产使用 `weixin@local`，源码显式加载使用 `weixin@inline`，删除插件目录即可移除全部微信入口。
@@ -117,6 +118,7 @@
 - Anthropic 云端浏览器桥接、已移除的 `mcp-chrome`、Artifact 工具和 VS Code 插件路线。
 - 官方大型测试体系；项目只维护独立的 `scripts/validation` 轻量验证脚本。
 - 企业微信 `wxwork` 只实现 API 模式智能机器人的 Bot WebSocket 长连接；不实现 Bot Webhook、Agent/自建应用 XML 回调、公网回调服务、Bot→Agent 回退或多连接模式切换，后续官方同步也不得扩大这一边界。
+- X 插件不实现 OAuth 1.0a、OAuth 2.0 Authorization Code with PKCE 或任何用户身份授权，只允许固定 `X_BEARER_TOKEN` 的 App-only 公开数据只读访问；因此不提供 Home Timeline、发布、回复、删除、点赞、转发、关注、取消关注、私信、账号修改及其他用户身份读写操作，后续官方 SDK 同步也不得隐式扩大该边界。
 
 ## 可选后续路线图（不影响当前验收）
 
@@ -144,10 +146,10 @@
 - [ ] 在 `plugins/x` 建立标准 `x` Plugin Manifest、独立 TypeScript/Bun workspace、stdio MCP Server、`x-host` 和 standalone 分发目录。主程序只通过现有插件发现和 MCP 生命周期接入，不增加 X SDK、静态注册、专用主 CLI 命令或业务实现；源码使用显式 `--plugin-dir plugins/x`，生产使用 standalone 同级一级目录自动发现。
 - [ ] 配置以 X Developer App 别名为核心并支持多个 App，首版只读取固定的 `X_BEARER_TOKEN` App-only Bearer Token 环境变量，不兼容其他旧名称，也不允许通过配置改用其他环境变量名。提供 `x-host app add|remove|list|doctor` 和 `mcp` 生命周期；Token 不得出现在普通命令参数、Manifest、配置值或日志中。
 - [ ] 首版只提供受限的公开数据读取工具：`x_get_post`、`x_get_thread`、`x_get_user`、`x_get_user_posts`、`x_search_recent` 和在当前 App 权限下可用的 `x_get_mentions`。每个工具必须固定 fields/expansions 白名单、单次结果数、自动分页页数、响应字节数、超时、并发和可接受 API 消耗上限；不得由模型无限翻页、自动扩大搜索范围或将部分结果伪装为完整结果。
-- [ ] App-only Bearer Token 只代表应用，不能当作用户登录状态。P1 不提供发布、回复、删除、点赞、转发、关注、取消关注、私信、账号修改、列表管理、媒体上传或其他用户身份写操作，也不实现 OAuth 1.0a、OAuth 2.0 PKCE 用户授权；SDK 中存在对应接口不代表本项目允许暴露。权限或订阅级别不足时必须返回明确错误，不尝试其他凭据或降级到网页抓取。
+- [ ] App-only Bearer Token 只代表应用，不能当作用户登录状态。P1 明确不实现 OAuth 1.0a、OAuth 2.0 Authorization Code with PKCE 或任何用户身份授权，也不提供 Home Timeline、发布、回复、删除、点赞、转发、关注、取消关注、私信、账号修改、列表管理、媒体上传或其他用户身份读写操作；SDK 中存在对应接口不代表本项目允许暴露。权限或订阅级别不足时必须返回明确错误，不尝试其他凭据或降级到网页抓取。
 - [ ] 首版是按需调用的 MCP 工具插件，不是 Channel，也不启动 Filtered Stream、Account Activity、Webhook、后台轮询或自动通知。实时监听涉及持续 API 消耗、Stream Rule、断线恢复、事件排重和自动响应循环，必须在后续获得独立产品决策后另行规划，不能随着只读查询实现隐式启用。
 - [ ] 实现统一的 X API 错误与费用边界，区分 `401`、`403`、`404`、`429`、套餐/Endpoint 不可用、网络失败和服务端错误；读取并返回脱敏的 Rate Limit 摘要，按 `x-rate-limit-reset` 有界等待或明确失败。默认不自动重放可能产生额外计费的请求，不跨工具共享无限重试或分页预算；诊断不得记录 Bearer Token、Authorization Header、完整敏感查询或未截断的响应正文。
-- [ ] 若后续需要代表用户发布或回复，必须作为独立增量重新规划 OAuth 2.0 PKCE 或 OAuth 1.0a User Context、Token 刷新、账号选择、写工具权限和正文预览；写能力必须默认关闭、逐次审批、禁止批量发布，并对结果不确定的发送请求禁止自动重放。该后续能力不能复用 App-only Bearer Token 冒充用户授权，也不属于当前 P1 完成条件。
+- [ ] 用户身份授权和写能力属于明确不做范围，不保留“后续直接扩展”入口；如未来确需 OAuth、Home Timeline 或代表用户写入，必须先获得新的产品决策并修改“明确不做”边界，再作为独立项目重新进行安全、权限、Token 生命周期、费用和验收规划。不得复用 App-only Bearer Token 冒充用户授权。
 - [ ] 在 `scripts/validation` 增加 X SDK/Bun 兼容、插件与依赖边界、App-only 鉴权、只读工具、字段白名单、分页/响应/费用上限、限流、错误分类、脱敏和分发验证，并统一并入 `bun run verify`。Fixture 使用可注入本地 X API 端点或固定传输，不依赖真实 Token，至少覆盖多 App 隔离、`401`/`403`/`429`、分页截断、AbortSignal、禁止写工具、禁止后台连接、Host EOF、standalone 自动发现，以及 XDK 不进入根 CLI 和其他 Bundle。
 - [ ] 后续升级采用人工同步：发现 X API、计费、权限、官方 XDK 或鉴权政策变化后，先冻结版本与 commit，审计 Endpoint、类型、授权要求、依赖、Bundle 和成本变化，只移植当前只读边界需要的行为并更新 Fixture；验证通过后再更新兼容元数据，禁止自动下载、更新插件、扩大 scopes 或触发 CLI 自更新。
 

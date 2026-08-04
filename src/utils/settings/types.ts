@@ -810,6 +810,14 @@ export const SettingsSchema = lazySchema(() =>
             'claude/channel capability pushing inbound messages). Default off. ' +
             'Set true to allow; users then select servers via --channels.',
         ),
+      channels: z
+        .array(z.string().trim().min(1))
+        .optional()
+        .describe(
+          'Channel servers to activate at startup, using plugin:<name>@<marketplace> ' +
+            'or server:<name>. Only user settings and managed settings are read; ' +
+            'project, project-local, and --settings sources are ignored.',
+        ),
       // Org-level channel plugin allowlist. When set, REPLACES the
       // Anthropic ledger — admin owns the trust decision. Undefined means
       // fall back to the ledger. Plugin-only entry shape (same as the

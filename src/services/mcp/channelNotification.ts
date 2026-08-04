@@ -147,16 +147,12 @@ export type ChannelGateResult =
   | { action: 'register' }
   | {
       action: 'skip'
-      kind:
-        | 'capability'
-        | 'session'
-        | 'marketplace'
-        | 'allowlist'
+      kind: 'capability' | 'session' | 'marketplace' | 'allowlist'
       reason: string
     }
 
 /**
- * Match a connected MCP server against the user's parsed --channels entries.
+ * Match a connected MCP server against the active channel selections.
  * server-kind is exact match on bare name; plugin-kind matches on the second
  * segment of plugin:X:Y. Returns the matching entry so callers can read its
  * kind — that's the user's trust declaration, not inferred from runtime shape.
@@ -178,10 +174,10 @@ export function findChannelEntry(
 /**
  * Gate an MCP server's channel-notification path. Caller checks
  * feature('KAIROS') || feature('KAIROS_CHANNELS') first (build-time
- * elimination). Gate order: capability → session --channels → allowlist.
+ * elimination). Gate order: capability → active channel selection → allowlist.
  *
  *   skip      Not a channel server, or managed org hasn't opted in, or
- *             not in session --channels. Connection stays up; handler
+ *             not selected for this session. Connection stays up; handler
  *             not registered.
  *   register  Subscribe to notifications/claude/channel.
  *
@@ -205,15 +201,14 @@ export function gateChannelServer(
     }
   }
 
-  // User-level session opt-in. A server must be explicitly listed in
-  // --channels to push inbound this session — protects against a trusted
-  // server surprise-adding the capability.
+  // Explicit session opt-in. A server must be selected by CLI, user settings,
+  // or managed settings before it may push inbound messages.
   const entry = findChannelEntry(serverName, getAllowedChannels())
   if (!entry) {
     return {
       action: 'skip',
       kind: 'session',
-      reason: `server ${serverName} not in --channels list for this session`,
+      reason: `server ${serverName} is not in the active channels list for this session`,
     }
   }
 
