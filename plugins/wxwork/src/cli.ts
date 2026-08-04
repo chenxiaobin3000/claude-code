@@ -1,12 +1,21 @@
 import { confirmPairing } from './access.js'
 import { WxworkClient } from './client.js'
-import { DEFAULT_WXWORK_WS_URL, listBots, removeBot, resolveBot, resolveBotSecret, saveBot } from './config.js'
+import {
+  DEFAULT_WXWORK_WS_URL,
+  listBots,
+  removeBot,
+  resolveBot,
+  resolveBotSecret,
+  saveBot,
+  saveLocalBot,
+} from './config.js'
 import { runWxworkMcpServer } from './server.js'
 
 function usage(): void {
   process.stdout.write(`Usage:
   wxwork-host mcp
   wxwork-host bot add <alias> <bot-id> <secret-env> [wss-url]
+  wxwork-host bot add-local <alias> <bot-id> <secret> [wss-url]
   wxwork-host bot remove <alias>
   wxwork-host bot list
   wxwork-host bot doctor [alias]
@@ -18,9 +27,39 @@ async function runBot(args: string[]): Promise<void> {
   const [action, ...rest] = args
   if (action === 'add') {
     const [alias, botId, secretEnv, wsUrl] = rest
-    if (!alias || !botId || !secretEnv) throw new Error('Expected: bot add <alias> <bot-id> <secret-env> [wss-url]')
-    const bot = saveBot({ alias, botId, secretEnv, wsUrl: wsUrl || DEFAULT_WXWORK_WS_URL })
-    process.stdout.write(`Configured wxwork bot ${bot.alias}; secret source: ${bot.secretEnv}.\n`)
+    if (!alias || !botId || !secretEnv)
+      throw new Error(
+        'Expected: bot add <alias> <bot-id> <secret-env> [wss-url]',
+      )
+    const bot = saveBot({
+      alias,
+      botId,
+      secretEnv,
+      wsUrl: wsUrl || DEFAULT_WXWORK_WS_URL,
+    })
+    process.stdout.write(
+      `Configured wxwork bot ${bot.alias}; secret source: ${bot.secretEnv}.\n`,
+    )
+    return
+  }
+  if (action === 'add-local') {
+    const [alias, botId, secret, wsUrl] = rest
+    if (!alias || !botId || !secret)
+      throw new Error(
+        'Expected: bot add-local <alias> <bot-id> <secret> [wss-url]',
+      )
+    process.stderr.write(
+      'Warning: credentials supplied as command-line arguments may be retained in shell history.\n',
+    )
+    const bot = saveLocalBot({
+      alias,
+      botId,
+      secret,
+      wsUrl: wsUrl || DEFAULT_WXWORK_WS_URL,
+    })
+    process.stdout.write(
+      `Configured wxwork bot ${bot.alias}; credential source: local.\n`,
+    )
     return
   }
   if (action === 'remove') {
@@ -31,35 +70,56 @@ async function runBot(args: string[]): Promise<void> {
   }
   if (action === 'list') {
     const bots = listBots()
-    process.stdout.write(bots.length ? `${bots.map(bot => `${bot.alias}\t${bot.botId}\t${bot.secretEnv}\t${bot.wsUrl}`).join('\n')}\n` : 'No wxwork bots configured.\n')
+    process.stdout.write(
+      bots.length
+        ? `${bots.map(bot => `${bot.alias}\t${bot.botId}\t${bot.credentialSource === 'local' ? 'local' : bot.secretEnv}\t${bot.wsUrl}`).join('\n')}\n`
+        : 'No wxwork bots configured.\n',
+    )
     return
   }
   if (action === 'doctor') {
     const bot = resolveBot(rest[0])
     if (!bot) throw new Error('No wxwork bot configured.')
-    const client = new WxworkClient({ botId: bot.botId, secret: resolveBotSecret(bot), wsUrl: bot.wsUrl, maxReconnectAttempts: 0 })
+    const client = new WxworkClient({
+      botId: bot.botId,
+      secret: resolveBotSecret(bot),
+      wsUrl: bot.wsUrl,
+      maxReconnectAttempts: 0,
+    })
     try {
       client.connect()
       await client.waitForAuthentication()
-      process.stdout.write(`wxwork bot ${bot.alias}: authenticated at ${new URL(bot.wsUrl).origin}.\n`)
-    } finally { client.disconnect() }
+      process.stdout.write(
+        `wxwork bot ${bot.alias}: authenticated at ${new URL(bot.wsUrl).origin}.\n`,
+      )
+    } finally {
+      client.disconnect()
+    }
     return
   }
-  throw new Error('Expected `bot add`, `bot remove`, `bot list`, or `bot doctor`.')
+  throw new Error(
+    'Expected `bot add`, `bot remove`, `bot list`, or `bot doctor`.',
+  )
 }
 
-export async function handleWxworkCli(args: string[], version: string): Promise<void> {
+export async function handleWxworkCli(
+  args: string[],
+  version: string,
+): Promise<void> {
   try {
     if (args[0] === 'mcp') await runWxworkMcpServer(version)
     else if (args[0] === 'bot') await runBot(args.slice(1))
     else if (args[0] === 'access' && args[1] === 'pair') {
-      if (!args[2] || !args[3]) throw new Error('Expected: access pair <alias> <code>')
+      if (!args[2] || !args[3])
+        throw new Error('Expected: access pair <alias> <code>')
       const user = confirmPairing(args[2], args[3])
       if (!user) throw new Error('Invalid or expired pairing code.')
       process.stdout.write(`Paired wxwork user ${user} with bot ${args[2]}.\n`)
     } else usage()
   } catch (error) {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
+    process.stderr.write(
+      `${error instanceof Error ? error.message : String(error)}\n`,
+    )
     process.exitCode = 1
   }
 }

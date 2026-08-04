@@ -10,14 +10,24 @@ Bot→Agent 回退、OpenClaw Runtime、自动安装或自动更新。
 
 ## 配置
 
-先在企业微信后台创建“API 模式智能机器人”，取得 Bot ID 和 Secret。Secret 只放在
-环境变量中，配置保存环境变量名而不保存 Secret：
+先在企业微信后台创建“API 模式智能机器人”，取得 Bot ID 和 Secret。推荐把 Secret
+放在环境变量中，普通配置只保存环境变量名而不保存 Secret：
 
 ```powershell
 $env:WXWORK_PRIMARY_SECRET = "your-secret"
 bun plugins/wxwork/host/entry.ts bot add primary your-bot-id WXWORK_PRIMARY_SECRET
 bun plugins/wxwork/host/entry.ts bot doctor primary
 ```
+
+也可以直接传入并逐 Bot 保存在本地私有文件中：
+
+```powershell
+bun plugins/wxwork/host/entry.ts bot add-local primary your-bot-id your-secret
+```
+
+`add-local` 的明文参数可能保留在 Shell 历史和进程命令行中，且凭据以明文 JSON 保存于
+`~/.claude/channels/wxwork/bots/<alias>/credentials.json`；环境变量模式仍是推荐方式。
+相同别名重新执行普通 `bot add` 会切回环境变量模式并删除本地凭据。
 
 多 Bot 使用不同别名、Bot ID 和 Secret 环境变量。状态保存在
 `.claude/channels/wxwork`，不会写入插件目录。新用户首次发消息会收到配对码：

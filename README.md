@@ -263,8 +263,8 @@ bun run dev -- --plugin-dir plugins/weixin --dangerously-load-development-channe
 OpenClaw Runtime 或 Bot→Agent 回退。实现独立维护；官方 CLI、OpenClaw 插件与
 `@wecom/aibot-node-sdk` 只用于人工差异审计，不是运行时依赖。
 
-Secret 只从指定环境变量读取，配置文件仅保存环境变量名。可使用不同别名配置多个
-Bot；路由、配对、排重、权限和连接租约逐 Bot 隔离，同一 Bot 被第二个 Host 启动时会
+Secret 默认从指定环境变量读取；也可用 `bot add-local <alias> <bot-id> <secret> [wss-url]`
+直接传入并保存到逐 Bot 本地凭据文件。可使用不同别名配置多个 Bot；路由、配对、排重、权限和连接租约逐 Bot 隔离，同一 Bot 被第二个 Host 启动时会
 在连接前拒绝。源码配置示例：
 
 ```powershell
@@ -278,6 +278,7 @@ bun run dev -- --plugin-dir plugins/wxwork --dangerously-load-development-channe
 
 ```powershell
 .\dist\plugins\wxwork\wxwork-host.exe bot add primary your-bot-id WXWORK_PRIMARY_SECRET
+.\dist\plugins\wxwork\wxwork-host.exe bot add-local secondary another-bot-id your-secret
 .\dist\plugins\wxwork\wxwork-host.exe bot doctor primary
 .\dist\claude.exe --channels plugin:wxwork@local
 ```
@@ -298,7 +299,8 @@ AppID/AppSecret 鉴权、WebSocket Gateway 入站和 REST 被动回复。当前�
 `589597a6cb5a24dce8230ba53bfba5390e13c073`）；这些包只用于人工协议审计，未安装、
 导入或打入产物。
 
-插件支持多个 Bot，别名和 AppID 必须唯一；配置只保存 Secret 环境变量名，Token、
+插件支持多个 Bot，别名和 AppID 必须唯一；Secret 默认使用环境变量，也可通过
+`bot add-local <alias> <app-id> <app-secret>` 保存到逐 Bot 本地凭据文件。Token、
 Gateway 会话、排重、配对和权限状态逐 Bot 隔离。源码配置示例：
 
 ```powershell
@@ -312,6 +314,7 @@ bun run dev -- --plugin-dir plugins/qq --dangerously-load-development-channels p
 
 ```powershell
 .\dist\plugins\qq\qq-host.exe bot add primary your-app-id QQ_PRIMARY_SECRET
+.\dist\plugins\qq\qq-host.exe bot add-local secondary another-app-id your-app-secret
 .\dist\plugins\qq\qq-host.exe bot doctor primary
 .\dist\claude.exe --channels plugin:qq@local
 ```
@@ -329,7 +332,8 @@ Telegram Bot API 10.2。只使用 `getUpdates` 长轮询，不建立 Webhook，�
 抢占已有 Webhook；grammY `bot.start()` 内部的删除调用会在本地确认而不发送到网络，
 启动前仍通过 `getWebhookInfo` 明确拒绝冲突配置。
 
-Token 只从环境变量读取，配置文件仅保存环境变量名。可使用唯一别名配置多个 Bot，
+Token 默认从环境变量读取，也可用 `bot add-local <alias> <bot-token>` 保存到逐 Bot 本地
+凭据文件。可使用唯一别名配置多个 Bot，
 Token、Update 排重、Chat/Topic 路由、媒体、配对、权限和连接租约逐 Bot 隔离：
 
 ```powershell
@@ -343,6 +347,7 @@ bun run dev -- --plugin-dir plugins/telegram --dangerously-load-development-chan
 
 ```powershell
 .\dist\plugins\telegram\telegram-host.exe bot add primary TELEGRAM_PRIMARY_TOKEN
+.\dist\plugins\telegram\telegram-host.exe bot add-local secondary "654321:your-secret-token"
 .\dist\plugins\telegram\telegram-host.exe bot doctor primary
 .\dist\claude.exe --channels plugin:telegram@local
 ```
@@ -360,8 +365,9 @@ Telegram User Channel 位于 [`plugins/telegram-user`](plugins/telegram-user)，
 `3aedb2e6ef216d307607f3d0f3f5b0ace6701378`，生成 MTProto Layer 198）连接普通
 Telegram 用户账号。它与 grammY Bot 插件完全分离，不共享配置、Session、路由或权限。
 
-先从 `my.telegram.org` 获取应用 API ID/API Hash，并将 API ID、API Hash 和 E.164 手机号
-放入环境变量。普通命令只保存环境变量名；验证码与可选 2FA 密码由私有交互输入读取，
+先从 `my.telegram.org` 获取应用 API ID/API Hash。普通 `account add` 保存 API ID、API
+Hash 和 E.164 手机号对应的环境变量名；也可用 `account add-local <alias> <api-id>
+<api-hash> <phone>` 保存到逐账号本地凭据文件。验证码与可选 2FA 密码由私有交互输入读取，
 不会写入配置或日志：
 
 ```powershell
@@ -373,6 +379,11 @@ bun plugins/telegram-user/host/entry.ts account login personal
 bun plugins/telegram-user/host/entry.ts access allow personal user 123456789
 bun run dev -- --plugin-dir plugins/telegram-user --dangerously-load-development-channels plugin:telegram-user@inline
 ```
+
+四个插件的 `add-local` 都会把凭据以明文 JSON 写入 `~/.claude/channels/<plugin>` 下的
+逐账号私有目录，并依赖用户目录 ACL（POSIX 同时设置 `0600`）。命令参数还可能进入
+Shell 历史和进程命令行，因此环境变量模式仍是推荐方案；`add-local` 只用于明确接受该
+风险的本地部署。相同别名改用普通 `add` 会删除旧本地凭据，`remove` 会删除整个账号目录。
 
 生产分发把 `bun` 替换为 `dist/plugins/telegram-user/telegram-user-host.exe`，并以
 `--channels plugin:telegram-user@local` 启用。Session 是长期登录凭据，逐账号私有保存于

@@ -9,13 +9,24 @@ WebSocket Gateway 入站及 REST 被动回复。不实现 Webhook、个人 QQ �
 
 ## 配置
 
-在 QQ 开放平台创建机器人，取得 AppID 和 AppSecret。Secret 只放环境变量：
+在 QQ 开放平台创建机器人，取得 AppID 和 AppSecret。推荐把 Secret 放入环境变量：
 
 ```powershell
 $env:QQ_PRIMARY_SECRET = "your-app-secret"
 bun plugins/qq/host/entry.ts bot add primary your-app-id QQ_PRIMARY_SECRET
 bun plugins/qq/host/entry.ts bot doctor primary
 ```
+
+也可以直接传入并逐 Bot 保存在本地私有文件中，后续 `mcp` 和 `doctor` 不再需要该
+Secret 环境变量：
+
+```powershell
+bun plugins/qq/host/entry.ts bot add-local primary your-app-id your-app-secret
+```
+
+`add-local` 的明文参数可能保留在 Shell 历史和进程命令行中，且凭据以明文 JSON 保存于
+`~/.claude/channels/qq/bots/<alias>/credentials.json`；环境变量模式仍是推荐方式。
+相同别名重新执行普通 `bot add` 会切回环境变量模式并删除本地凭据。
 
 源码开发：
 
