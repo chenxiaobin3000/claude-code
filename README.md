@@ -41,7 +41,7 @@ Hook 可在 `PreToolUse` 中配置 `{"type":"mcp","tool":"mcp__server__tool","in
 
 Hook command 的 `args` 会保持 argv 参数边界。启用 Sandbox 时不会回退到宿主直接执行：POSIX 进入 Sandbox 包装，Windows 上无法安全映射任意宿主可执行文件时会明确失败。
 
-远程功能开关不参与运行行为；本地固定策略见 [`scripts/feature-policy.ts`](scripts/feature-policy.ts)，可用环境变量的完整清单见 [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md)。
+远程功能开关不参与运行行为；本地固定策略见 [`scripts/feature-policy.ts`](scripts/feature-policy.ts)，可用环境变量的完整清单见 [ENVIRONMENT_VARIABLES.md](docs/configuration/ENVIRONMENT_VARIABLES.md)。
 
 ## 模型配置
 
@@ -444,12 +444,12 @@ bun run verify
 
 FileWrite/FileEdit 使用异步临时文件、flush、版本复核和原子替换；Windows 共享锁采用 25/50/100/200/400 ms 有界退避，外部内容变化仍要求重新 Read，正文不会因清理或重试被提交两次。远端 MCP 等可重建基础设施使用 250 ms 起步、10 秒封顶、5 次熔断的 Supervisor；Agent、Workflow、Shell 和可能已有副作用的 MCP Tool 不会自动重放。
 
-`bun run verify` 固定执行五窗口、5,000 Delta 的稳定性矩阵，UI flush 比上限为 0.1；当前验收实测为 0.0020。矩阵同时覆盖资源回落、Windows 真实文件锁、后台熔断、Agent/MCP/模型协议和会话生命周期，本地模型可用时再补充真实模型与工具调用。详细阈值和平台边界见 [开发计划与差异基线](DEVELOPMENT_PLAN.md)。
+`bun run verify` 固定执行五窗口、5,000 Delta 的稳定性矩阵，UI flush 比上限为 0.1；当前验收实测为 0.0020。矩阵同时覆盖资源回落、Windows 真实文件锁、后台熔断、Agent/MCP/模型协议和会话生命周期，本地模型可用时再补充真实模型与工具调用。详细阈值和平台边界见 [开发计划与差异基线](docs/DEVELOPMENT_PLAN.md)。
 
 ## 项目文档
 
-- [开发计划与差异基线](DEVELOPMENT_PLAN.md)
-- [环境变量](ENVIRONMENT_VARIABLES.md)
-- [Feature Flag 策略](FEATURE_FLAGS.md)
-- [依赖审计](DEPENDENCY_AUDIT.md)
-- [Anthropic SDK 类型兼容边界](ANTHROPIC_SDK_COMPATIBILITY.md)
+- [开发计划与差异基线](docs/DEVELOPMENT_PLAN.md)
+- [环境变量](docs/configuration/ENVIRONMENT_VARIABLES.md)
+- [Feature Flag 策略](docs/configuration/FEATURE_FLAGS.md)
+- [依赖审计](docs/architecture/DEPENDENCY_AUDIT.md)
+- [Anthropic SDK 类型兼容边界](docs/architecture/ANTHROPIC_SDK_COMPATIBILITY.md)

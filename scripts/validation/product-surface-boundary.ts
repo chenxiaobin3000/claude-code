@@ -15,16 +15,16 @@ const requiredDocumentation: Record<string, readonly string[]> = {
     'ENVIRONMENT_VARIABLES.md',
     'Windows standalone EXE',
   ],
-  'FEATURE_FLAGS.md': [
+  'docs/configuration/FEATURE_FLAGS.md': [
     '不连接远程 Feature Flag 服务',
     'CLAUDE_LOCAL_FEATURE_OVERRIDES',
   ],
-  'ENVIRONMENT_VARIABLES.md': [
+  'docs/configuration/ENVIRONMENT_VARIABLES.md': [
     'CLAUDE_CODE_VERIFY_MODEL',
     'CLAUDE_CODE_RCS_AUTH_TOKEN',
     'MCP_CLIENT_SECRET',
   ],
-  'DEPENDENCY_AUDIT.md': [
+  'docs/architecture/DEPENDENCY_AUDIT.md': [
     'scripts/check-exe-integrity.ts',
     'MCP OAuth',
   ],
@@ -101,4 +101,3 @@ for (const marker of [
 }
 
 console.log('[product-surface-boundary] PASS')
-

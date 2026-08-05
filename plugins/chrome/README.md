@@ -43,7 +43,7 @@ Domain Socket。这个结构允许多个 Chrome 个人资料分别启动 Host �
 身份的标签页。一个以上 Profile 在线时，所有后续工具调用都必须传回准确的
 `profileId`；未指定、已断线、身份重复或 Tab ID 冲突时安全拒绝，不自动选择账户。
 
-后续迁移及验收范围以根目录 `DEVELOPMENT_PLAN.md` 为准。
+后续迁移及验收范围以 `docs/DEVELOPMENT_PLAN.md` 为准。
 
 ## Host 命令
 
