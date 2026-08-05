@@ -23,6 +23,8 @@ const requiredDocumentation: Record<string, readonly string[]> = {
     'CLAUDE_CODE_VERIFY_MODEL',
     'CLAUDE_CODE_RCS_AUTH_TOKEN',
     'MCP_CLIENT_SECRET',
+    'X_BEARER_TOKEN',
+    'X_PROXY_URL',
   ],
   'docs/architecture/DEPENDENCY_AUDIT.md': [
     'scripts/check-exe-integrity.ts',
@@ -57,7 +59,9 @@ for (const marker of [
 
 const statusCommand = await source('src/commands/status/index.ts')
 if (/account|logged.?in|subscription/i.test(statusCommand)) {
-  throw new Error('[product-surface-boundary] /status still advertises an account')
+  throw new Error(
+    '[product-surface-boundary] /status still advertises an account',
+  )
 }
 
 const searchFactory = await source(
@@ -96,7 +100,9 @@ for (const marker of [
   'PERFETTO_TRACING',
 ]) {
   if (policy.includes(marker)) {
-    throw new Error(`[product-surface-boundary] Feature Policy contains ${marker}`)
+    throw new Error(
+      `[product-surface-boundary] Feature Policy contains ${marker}`,
+    )
   }
 }
 

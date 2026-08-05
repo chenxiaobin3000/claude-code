@@ -48,7 +48,8 @@
     "build:qq-host": "bun run scripts/build-qq-host.ts",
     "build:telegram-host": "bun run scripts/build-telegram-host.ts",
     "build:telegram-user-host": "bun run scripts/build-telegram-user-host.ts",
-    "build:production": "bun run build:exe && bun run build:chrome-host && bun run build:weixin-host && bun run build:wxwork-host && bun run build:qq-host && bun run build:telegram-host && bun run build:telegram-user-host",
+    "build:x-host": "bun run scripts/build-x-host.ts",
+    "build:production": "bun run build:exe && bun run build:chrome-host && bun run build:weixin-host && bun run build:wxwork-host && bun run build:qq-host && bun run build:telegram-host && bun run build:telegram-user-host && bun run build:x-host",
     "chrome:fixture": "bun run scripts/validation/chrome-browser-e2e.ts --serve-fixture",
     "chrome:verify": "bun run scripts/validation/chrome-browser-e2e.ts --connection",
     "chrome:verify:tools": "bun run scripts/validation/chrome-browser-e2e.ts --matrix",
@@ -79,6 +80,7 @@
     "typecheck:qq-host": "tsc -p plugins/qq/tsconfig.json --noEmit --pretty false",
     "typecheck:telegram-host": "tsc -p plugins/telegram/tsconfig.json --noEmit --pretty false",
     "typecheck:telegram-user-host": "tsc -p plugins/telegram-user/tsconfig.json --noEmit --pretty false",
+    "typecheck:x-host": "tsc -p plugins/x/tsconfig.json --noEmit --pretty false",
     "precheck": "bun run typecheck && bun run check:fix",
     "rcs": "bun run scripts/rcs.ts"
   },

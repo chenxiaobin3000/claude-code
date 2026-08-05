@@ -49,6 +49,14 @@ Unknown feature names, values other than `0` or `1`, missing authorization, depe
 
 These variables do not enable a hosted CLI account, remote Plugin Marketplace, telemetry upload, or automatic update service.
 
+## X read-only plugin
+
+- `X_BEARER_TOKEN` is the only supported X credential name. With one configured App it contains the raw App-only Bearer Token. With multiple Apps it contains a JSON object keyed by App alias. OAuth user credentials are not accepted.
+- `X_PROXY_URL` optionally routes every X API request through one HTTP or HTTPS CONNECT proxy. Once set, proxy failure is fatal and never falls back to direct networking. Proxy credentials are redacted. The current Bun standalone runtime rejects SOCKS5 explicitly because it cannot enforce that route reliably.
+- `X_STATE_DIR` is a validation-only state-location injection point and is not normal production configuration. Production uses `~/.claude/x`, and the API root is fixed in code to `https://api.x.com` so configuration cannot redirect the Bearer Token.
+
+The credential and proxy may come only from the X Host process environment or user-level `settings.json.env`; project and managed settings do not inject them into the external plugin Host.
+
 ## Proxy, TLS, shell, and configuration
 
 The runtime honors standard proxy variables such as `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY`, together with the documented local settings for proxy and mTLS. `NODE_EXTRA_CA_CERTS`, `CLAUDE_CODE_CLIENT_CERT`, and `CLAUDE_CODE_CLIENT_KEY` configure additional trust or client certificates.

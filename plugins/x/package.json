@@ -1,0 +1,30 @@
+{
+  "name": "@claude-code/x-plugin",
+  "version": "1.0.0",
+  "xCompatibility": {
+    "xdk": "0.6.6",
+    "xdkCommit": "9b312949e7edf4da32bfbaffda575f0eb7bc1525",
+    "apiDocumentation": "https://docs.x.com/x-api",
+    "authenticationDocumentation": "https://docs.x.com/xdks/typescript/authentication",
+    "rateLimitDocumentation": "https://docs.x.com/x-api/fundamentals/rate-limits",
+    "auditedAt": "2026-08-06"
+  },
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
+    "test:smoke": "bun run ../../scripts/validation/workspace-smoke.ts"
+  },
+  "workspaceValidation": {
+    "build": {
+      "applicable": false,
+      "reason": "The root build:x-host script compiles this local Plugin into a standalone distribution."
+    }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.3.6"
+  }
+}

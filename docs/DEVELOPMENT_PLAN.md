@@ -148,23 +148,16 @@
 
 完成条件：Telegram Bot 和 Telegram User 在未配置代理时保持现有直连行为，配置支持的代理时所有规定网络链路均经代理且失败不回退直连；代理凭据与 Telegram 凭据均不泄漏。GramJS 在当前支持平台的 Bun 开发运行和 standalone 产物均通过真实验证；至少两个 Telegram 用户账号可以同时连接，且不会串 Session、Peer、Update、附件、权限或秘密；插件默认只处理 allowlist 会话、不会处理自身回声，也不会提供批量或账号管理型高风险操作；`typecheck:telegram-host`、`typecheck:telegram-user-host`、两类 Host 构建、代理 Fixture、依赖边界、分发验证和 `bun run verify -- --ci` 全部通过。随后使用专门的低权限 Bot 与测试账号经真实本地代理验收 Bot API、登录、重启恢复、私聊、群组、频道、Topic、断线恢复及媒体收发，禁止直接使用重要主账号作为首次验收对象。
 
-### P1：X 只读 MCP 工具插件
+### P1：X 只读 MCP 工具插件真实服务验收
 
-- [ ] 新增独立的 `x` 插件，首版使用 X 官方 TypeScript XDK（`@xdevplatform/xdk`）调用 X API，不引入 Python、Tweepy 或社区 Twitter SDK。官方 XDK 是插件内正式运行时依赖，只能进入 `plugins/x` 和独立 Host，不得进入根包、主 CLI、其他插件或非 X 生产 Bundle；删除插件目录即可完整移除 X 能力。
-- [ ] 实施前冻结 X API、官方 TypeScript XDK、官方鉴权文档及计费/限流说明的精确版本、仓库 commit 和审计日期，并先验证 Bun 直接运行、App-only Bearer Token、查询与分页、`429`/Rate Limit Header、AbortSignal，以及当前支持平台的 `bun build --compile` standalone。若官方 XDK 无法稳定运行或打包，再单独决策插件内直接 `fetch` 官方 API；不得自动引入 Python/Tweepy、Node Runtime 或社区 SDK。
-- [ ] 在 `plugins/x` 建立标准 `x` Plugin Manifest、独立 TypeScript/Bun workspace、stdio MCP Server、`x-host` 和 standalone 分发目录。主程序只通过现有插件发现和 MCP 生命周期接入，不增加 X SDK、静态注册、专用主 CLI 命令或业务实现；源码使用显式 `--plugin-dir plugins/x`，生产使用 standalone 同级一级目录自动发现。
-- [ ] 配置以 X Developer App 别名为核心并支持多个 App，首版只读取固定的 `X_BEARER_TOKEN` App-only Bearer Token 环境变量，不兼容其他旧名称，也不允许通过配置改用其他环境变量名。提供 `x-host app add|remove|list|doctor` 和 `mcp` 生命周期；Token 不得出现在普通命令参数、Manifest、配置值或日志中。
-- [ ] 为 X 插件增加可选的 `X_PROXY_URL` 用户级环境配置，只允许从 `x-host` 进程环境或用户级 `settings.json.env` 读取；未配置时保持直连，配置后所有 X API 请求、分页和诊断必须使用同一代理出口。代理失败时明确终止，禁止静默回退直连或产生 DNS 泄漏；代理用户名、密码和查询参数按凭据处理，不得进入配置展示、日志、错误、诊断或模型上下文。
-- [ ] 实施前验证官方 XDK 在 Bun 开发运行和 standalone 中注入代理传输的边界，至少覆盖 HTTP/HTTPS CONNECT 和 SOCKS5；若 XDK 不能可靠注入，则仅允许在 `plugins/x` 内使用经验证的统一传输层，不得影响根 CLI 或其他插件。`x-host app doctor` 应报告脱敏的代理模式和 DNS/TCP/TLS/代理认证/X API 鉴权错误分类，不显示 Bearer Token 或代理凭据。
-- [ ] 首版只提供受限的公开数据读取工具：`x_get_post`、`x_get_thread`、`x_get_user`、`x_get_user_posts`、`x_search_recent` 和在当前 App 权限下可用的 `x_get_mentions`。每个工具必须固定 fields/expansions 白名单、单次结果数、自动分页页数、响应字节数、超时、并发和可接受 API 消耗上限；不得由模型无限翻页、自动扩大搜索范围或将部分结果伪装为完整结果。
-- [ ] App-only Bearer Token 只代表应用，不能当作用户登录状态。P1 明确不实现 OAuth 1.0a、OAuth 2.0 Authorization Code with PKCE 或任何用户身份授权，也不提供 Home Timeline、发布、回复、删除、点赞、转发、关注、取消关注、私信、账号修改、列表管理、媒体上传或其他用户身份读写操作；SDK 中存在对应接口不代表本项目允许暴露。权限或订阅级别不足时必须返回明确错误，不尝试其他凭据或降级到网页抓取。
-- [ ] 首版是按需调用的 MCP 工具插件，不是 Channel，也不启动 Filtered Stream、Account Activity、Webhook、后台轮询或自动通知。实时监听涉及持续 API 消耗、Stream Rule、断线恢复、事件排重和自动响应循环，必须在后续获得独立产品决策后另行规划，不能随着只读查询实现隐式启用。
-- [ ] 实现统一的 X API 错误与费用边界，区分 `401`、`403`、`404`、`429`、套餐/Endpoint 不可用、网络失败和服务端错误；读取并返回脱敏的 Rate Limit 摘要，按 `x-rate-limit-reset` 有界等待或明确失败。默认不自动重放可能产生额外计费的请求，不跨工具共享无限重试或分页预算；诊断不得记录 Bearer Token、Authorization Header、完整敏感查询或未截断的响应正文。
-- [ ] 用户身份授权和写能力属于明确不做范围，不保留“后续直接扩展”入口；如未来确需 OAuth、Home Timeline 或代表用户写入，必须先获得新的产品决策并修改“明确不做”边界，再作为独立项目重新进行安全、权限、Token 生命周期、费用和验收规划。不得复用 App-only Bearer Token 冒充用户授权。
-- [ ] 在 `scripts/validation` 增加 X SDK/Bun 兼容、插件与依赖边界、App-only 鉴权、只读工具、字段白名单、分页/响应/费用上限、限流、错误分类、脱敏和分发验证，并统一并入 `bun run verify`。Fixture 使用可注入本地 X API 端点和本地 HTTP CONNECT/SOCKS5 代理，不依赖真实 Token 或代理，至少覆盖多 App 隔离、直连基线、代理成功/认证/拒绝/超时/取消、DNS 不直连、禁止失败回退、代理秘密脱敏、`401`/`403`/`429`、分页截断、AbortSignal、禁止写工具、禁止后台连接、Host EOF、standalone 自动发现，以及 XDK 不进入根 CLI 和其他 Bundle。
-- [ ] 后续升级采用人工同步：发现 X API、计费、权限、官方 XDK 或鉴权政策变化后，先冻结版本与 commit，审计 Endpoint、类型、授权要求、依赖、Bundle 和成本变化，只移植当前只读边界需要的行为并更新 Fixture；验证通过后再更新兼容元数据，禁止自动下载、更新插件、扩大 scopes 或触发 CLI 自更新。
+- [x] 已新增可删除式移除的独立 `plugins/x`、标准 Plugin Manifest、stdio MCP、`x-host`、workspace、standalone 分发和自动发现；主 CLI 没有静态注册或 X 运行时依赖。官方 XDK `0.6.6`（commit `9b312949e7edf4da32bfbaffda575f0eb7bc1525`）已冻结审计，但其声明的实例 `httpClient` 与运行时模块级私有传输不一致，无法在 Bun standalone 安全注入插件代理，因此按既定后备方案改用插件内固定 GET-only 官方 X API 传输，XDK 不进入依赖或产物。
+- [x] App 配置支持唯一别名和固定 `X_BEARER_TOKEN`：单 App 使用原始 Token，多 App 使用同一变量内按别名索引的 JSON 对象；提供 `app add|remove|list|doctor` 与 `mcp`，不保存或输出 Token。生产 API 根固定为 `https://api.x.com`，配置不能把 Token 重定向到其他 Endpoint。
+- [x] 可选 `X_PROXY_URL` 使用 Bun 原生 HTTP/HTTPS 代理传输，未配置时直连，配置后所有请求和分页均经同一代理，代理不可用时明确失败且不回退直连。代理凭据脱敏；当前 Bun standalone 无可靠 SOCKS5 支持，配置 SOCKS5 会 fail-closed 并提示改用 HTTP/HTTPS CONNECT。
+- [x] 仅提供 `x_get_post`、`x_get_thread`、`x_get_user`、`x_get_user_posts`、`x_search_recent` 与 `x_get_mentions` 六个 App-only 公开数据读取工具；固定 fields/expansions、最多 100 条/页、2 页、512 KiB、15 秒和 2 并发，不自动重试，不提供 OAuth、写操作、Channel、Stream、Webhook 或后台轮询。Thread 明确标记 recent-search 时间窗口造成的部分结果。
+- [x] 错误区分 `401`、`403`/套餐、`404`、`429`、服务端、DNS、TCP/代理、TLS、超时与代理认证；返回脱敏 Rate Limit 摘要，不记录 Token、Authorization、完整查询或响应正文。`scripts/validation/x-*.ts` 已覆盖多 App/Token 隔离、字段与能力边界、代理成功、代理失败不回退、SOCKS5 安全拒绝、脱敏、Host EOF、XDK 禁入、standalone 分发和自动发现；`bun run verify -- --ci` 于 2026-08-06 全部通过。
+- [ ] 使用至少两个低权限 X 测试 App，经真实 HTTP/HTTPS 代理对真实 X API 验收用户/Post 查询、近期搜索、分页、限流、套餐拒绝、多 Token 隔离、代理出口和代理失败行为；当前环境未配置 `X_BEARER_TOKEN`，不得以 Fixture 结果冒充真实服务验收。
 
-完成条件：`x-host` 可使用至少两个独立 App-only Bearer Token 配置执行受限公开数据查询且不会串 Token、分页、限流或费用预算；未配置代理时保持直连，配置支持的代理后所有 X API 链路均经代理且失败不回退直连，不泄漏 DNS、代理凭据或 X Token；首版不包含任何用户写操作、OAuth 用户登录、Channel、Stream、Webhook 或后台轮询；源码和 standalone 分发均可删除式移除，`typecheck:x-host`、`build:x-host`、代理 Fixture、依赖边界、分发验证和 `bun run verify -- --ci` 全部通过。固定 Fixture 通过后，再用低权限测试 App 经真实本地代理对真实 X API 验收用户查询、Post 查询、近期搜索、分页、限流和套餐拒绝行为。
+完成条件：确定性工程验收已经通过；补齐上述两个低权限 App 的真实服务验收后，将本节删除并把最终行为并入基线。
 
 ### P2：可选产品能力
 

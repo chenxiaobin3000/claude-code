@@ -37,6 +37,9 @@ const telegramUserPackageJson = JSON.parse(
     'utf8',
   ),
 ) as { version: string }
+const xPackageJson = JSON.parse(
+  await readFile(join(projectRoot, 'plugins', 'x', 'package.json'), 'utf8'),
+) as { version: string }
 const expectedVersion = `${packageJson.version} (Claude Code)`
 const commandTimeoutMs = 120_000
 const modelTimeoutMs = 180_000
@@ -84,6 +87,9 @@ const validationScripts = [
   'scripts/validation/telegram-long-polling.ts',
   'scripts/validation/telegram-user-plugin-boundary.ts',
   'scripts/validation/telegram-user-core.ts',
+  'scripts/validation/x-plugin-boundary.ts',
+  'scripts/validation/x-core.ts',
+  'scripts/validation/x-api-fixture.ts',
   'scripts/validation/chrome-protocol.ts',
   'scripts/validation/chrome-profiles.ts',
   'scripts/validation/chrome-host.ts',
@@ -412,6 +418,7 @@ async function main(): Promise<void> {
     'run',
     'typecheck:telegram-user-host',
   ])
+  await runStep('X Host typecheck', [bunExecutable, 'run', 'typecheck:x-host'])
   await runStep('Biome lint', [bunExecutable, 'run', 'lint'])
   await runStep('workspace contract, checks, builds, and smoke', [
     bunExecutable,
@@ -530,6 +537,16 @@ async function main(): Promise<void> {
       'run',
       'scripts/validation/telegram-user-distribution.ts',
     ])
+    await runStep('X standalone Host build', [
+      bunExecutable,
+      'run',
+      'build:x-host',
+    ])
+    await runStep('X distributable Plugin validation', [
+      bunExecutable,
+      'run',
+      'scripts/validation/x-distribution.ts',
+    ])
     await runStep('standalone automatic Plugin lifecycle', [
       bunExecutable,
       'run',
@@ -633,6 +650,15 @@ async function main(): Promise<void> {
       throw new Error(
         `Telegram User Host version mismatch: ${telegramUserHostVersion.stdout.trim()}`,
       )
+    }
+    const xHost = resolve(projectRoot, 'dist', 'plugins', 'x', 'x-host.exe')
+    const xHostVersion = await runStep(
+      'X standalone Host version',
+      [xHost, '--version'],
+      { capture: true },
+    )
+    if (xHostVersion.stdout.trim() !== xPackageJson.version) {
+      throw new Error(`X Host version mismatch: ${xHostVersion.stdout.trim()}`)
     }
     await runStep('chrome Native Host EOF lifecycle', [chromeHost], {
       capture: true,

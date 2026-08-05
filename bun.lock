@@ -332,6 +332,14 @@
         "zod": "^4.3.6",
       },
     },
+    "plugins/x": {
+      "name": "@claude-code/x-plugin",
+      "version": "1.0.0",
+      "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.29.0",
+        "zod": "^4.3.6",
+      },
+    },
   },
   "overrides": {
     "@inquirer/prompts": "8.4.2",
@@ -501,6 +509,8 @@
     "@claude-code/workflow-engine": ["@claude-code/workflow-engine@workspace:packages/workflow-engine"],
 
     "@claude-code/wxwork-plugin": ["@claude-code/wxwork-plugin@workspace:plugins/wxwork"],
+
+    "@claude-code/x-plugin": ["@claude-code/x-plugin@workspace:plugins/x"],
 
     "@commander-js/extra-typings": ["@commander-js/extra-typings@14.0.0", "", { "peerDependencies": { "commander": "~14.0.0" } }, "sha512-hIn0ncNaJRLkZrxBIp5AsW/eXEHNKYQBh0aPdoUqNgD+Io3NIykQqpKFyKcuasZhicGaEZJX/JBSIkZ4e5x8Dg=="],
 

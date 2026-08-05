@@ -39,6 +39,7 @@
 # 本地插件（在 plugins/ 下）
 chrome:         Chrome MCP、Skill、Native Host 与扩展
 weixin:         微信 Channel、独立 MCP Host 与登录工具
+x:              X API App-only 只读 MCP 工具与独立 Host
 
 # Ant 包（在 packages/@ant/ 下）
 @ant/*:          Ant 相关工具（Chrome MCP、Computer Use 等）
@@ -76,6 +77,7 @@ weixin:         微信 Channel、独立 MCP Host 与登录工具
 | `dist/claude.exe` | `bun run build:exe` | Windows 独立可执行文件 |
 | `dist/plugins/chrome/` | `bun run build:chrome-host` | 可选 Chrome 插件完整分发目录；内含独立 Native Messaging/MCP Host |
 | `dist/plugins/weixin/` | `bun run build:weixin-host` | 可选微信 Channel 插件完整分发目录；内含独立 MCP Host |
+| `dist/plugins/x/` | `bun run build:x-host` | 可选 X 只读 MCP 插件完整分发目录；内含独立 Host |
 
 ### 构建流程（`build.ts`）
 

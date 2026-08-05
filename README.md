@@ -389,6 +389,27 @@ Host 的 `doctor`、`login` 或 `mcp` 时，缺失变量会按已保存的变量
 审批会明确标注操作“将以你的 Telegram 用户身份执行”。首次真实验收应使用低权限测试账号。
 完整配置与安全边界见 [`plugins/telegram-user/README.md`](plugins/telegram-user/README.md)。
 
+### X 只读 MCP 插件
+
+X 插件位于 [`plugins/x`](plugins/x)，只使用固定的 `X_BEARER_TOKEN` 执行 App-only
+公开数据读取。它提供 `x_get_post`、`x_get_thread`、`x_get_user`、
+`x_get_user_posts`、`x_search_recent` 和 `x_get_mentions`，不提供 OAuth 用户登录、
+发布、回复、点赞、转发、关注、私信、Stream、Webhook 或后台轮询。
+
+```powershell
+$env:X_BEARER_TOKEN = "your-app-bearer-token"
+bun plugins/x/host/entry.ts app add primary
+bun plugins/x/host/entry.ts app doctor primary
+bun run dev -- --plugin-dir plugins/x
+```
+
+多个 App 仍只使用 `X_BEARER_TOKEN` 一个固定变量，其值改为按别名索引的 JSON 对象。
+可选 `X_PROXY_URL` 使用 Bun standalone 原生 HTTP/HTTPS CONNECT 代理；配置代理后失败
+不会回退直连。当前 Bun standalone 不支持 SOCKS5，因此会明确拒绝。官方 XDK
+`0.6.6` 已完成兼容审计，但其模块级私有 HTTP 传输无法安全注入插件代理，生产 Host
+采用插件内固定 GET-only 传输且不打包 XDK。完整边界见
+[`plugins/x/README.md`](plugins/x/README.md)。
+
 ## 构建与验证
 
 ```powershell
@@ -404,6 +425,7 @@ bun run build:wxwork-host
 bun run build:qq-host
 bun run build:telegram-host
 bun run build:telegram-user-host
+bun run build:x-host
 bun run build:production
 bun run verify
 ```
@@ -425,9 +447,11 @@ bun run verify
   Telegram Channel MCP Host 已打入 standalone，目标机器无需 Bun 或 Node.js。
 - telegram-user Plugin：`dist/plugins/telegram-user` 是完整分发目录，其中 GramJS、
   MTProto 客户端与独立 Telegram User Channel MCP Host 已打入 standalone，目标机器无需 Bun 或 Node.js。
+- x Plugin：`dist/plugins/x` 是完整分发目录，其中只读 X API MCP Host 已打入
+  standalone，目标机器无需 Bun 或 Node.js。
 
 `bun run build:production` 一次生成 `dist/claude.exe` 和
-`dist/plugins/chrome`、`dist/plugins/weixin`、`dist/plugins/wxwork`、`dist/plugins/qq`、`dist/plugins/telegram`、`dist/plugins/telegram-user`。整个 `dist` 是 Windows 生产分发单元：standalone
+`dist/plugins/chrome`、`dist/plugins/weixin`、`dist/plugins/wxwork`、`dist/plugins/qq`、`dist/plugins/telegram`、`dist/plugins/telegram-user`、`dist/plugins/x`。整个 `dist` 是 Windows 生产分发单元：standalone
 启动时只自动加载同级 `plugins` 下的一级插件目录；`--plugin-dir <path>` 仍可加载
 临时插件或覆盖同名自动插件。自动发现不会安装 Chrome 扩展、注册 Native Host、
 下载插件或更新任何产物。

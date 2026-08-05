@@ -1,0 +1,19 @@
+{
+  "name": "x",
+  "version": "1.0.0",
+  "xCompatibility": {
+    "xdk": "0.6.6",
+    "xdkCommit": "9b312949e7edf4da32bfbaffda575f0eb7bc1525"
+  },
+  "apiVersion": "^1.0.0",
+  "description": "Local App-only, read-only X API MCP tools.",
+  "author": { "name": "claude-code" },
+  "keywords": ["x", "twitter", "api", "read-only", "mcp", "local"],
+  "mcpServers": {
+    "x": {
+      "type": "stdio",
+      "command": "bun",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/host/entry.ts", "mcp"]
+    }
+  }
+}

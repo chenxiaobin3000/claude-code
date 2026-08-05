@@ -14,6 +14,8 @@ Packages imported by `src/` and workspace source therefore belong in `devDepende
 
 The local `plugins/weixin` workspace owns its `qrcode`, MCP SDK, and Zod dependencies. They are compiled into the independent `weixin-host` distribution and are not imported by `src/` or included through a root workspace dependency. This keeps optional WeChat networking, media, and QR code code outside the main CLI bundle and its runtime dependency boundary.
 
+The optional `plugins/x` workspace owns only its MCP SDK and Zod runtime dependencies. XDK `0.6.6` was frozen and inspected, but its generated runtime uses a private module-level HTTP client that cannot safely receive a per-plugin proxy in Bun standalone; it is therefore excluded from all production dependencies and Bundles. The X Host uses a local, GET-only transport for the six approved public-data endpoints, with Bun-native HTTP/HTTPS proxy injection and independent Bundle validation.
+
 ## Installed production dependencies
 
 Only packages directly resolved by scripts shipped outside the bundle remain in `dependencies`:
