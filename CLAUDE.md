@@ -29,20 +29,30 @@
 
 ## Monorepo 工作空间
 
+workspaces 配置（package.json）：`plugins/*`、`packages/*`、`packages/@ant/*`、`packages/@anthropic-ai/*`。
+
 ```yaml
-# 自定义包（在 packages/ 下）
-@claude-code/agent-tools:  子代理工具（Explore/Plan/Verification 等）
-@claude-code/builtin-tools: 内置工具（Read、Write、Bash、Glob、Grep 等）
-@claude-code/mcp-client:    MCP（Model Context Protocol）客户端
+# 自定义包（直接位于 packages/ 根下）
+@claude-code/agent-tools:    子代理工具（Explore/Plan/Verification 等）
+@claude-code/builtin-tools:  内置工具（Read、Write、Bash、Glob、Grep 等）
+@claude-code/mcp-client:     MCP（Model Context Protocol）客户端
 @claude-code/workflow-engine: 工作流编排引擎
 
-# 本地插件（在 plugins/ 下）
-chrome:         Chrome MCP、Skill、Native Host 与扩展
-weixin:         微信 Channel、独立 MCP Host 与登录工具
-x:              X API App-only 只读 MCP 工具与独立 Host
+# 本地插件（在 plugins/ 下，均为 workspace 包）
+chrome:          Chrome MCP、Skill、Native Host 与扩展
+qq:              QQ Channel、独立 MCP Host 与登录工具
+telegram:        Telegram Channel、独立 MCP Host
+telegram-user:   Telegram 用户态/登录 Channel、独立 MCP Host
+weixin:          微信 Channel、独立 MCP Host 与登录工具
+wxwork:          WeCom 企业微信 Channel、独立 MCP Host
+x:               X API App-only 只读 MCP 工具与独立 Host
 
 # Ant 包（在 packages/@ant/ 下）
-@ant/*:          Ant 相关工具（Chrome MCP、Computer Use 等）
+@ant/computer-use-input:   Computer Use 输入处理
+@ant/computer-use-mcp:     Computer Use MCP 服务
+@ant/computer-use-swift:   Computer Use Swift 端
+@ant/model-provider:       模型供应商适配
+@anthropic/ink:            Ink（终端 React 渲染器）封装
 
 # Anthropic 包（外部 npm 依赖）
 @anthropic-ai/*: Anthropic SDK 和工具（外部 npm 依赖，非本地包）
@@ -77,7 +87,12 @@ x:              X API App-only 只读 MCP 工具与独立 Host
 | `dist/claude.exe` | `bun run build:exe` | Windows 独立可执行文件 |
 | `dist/plugins/chrome/` | `bun run build:chrome-host` | 可选 Chrome 插件完整分发目录；内含独立 Native Messaging/MCP Host |
 | `dist/plugins/weixin/` | `bun run build:weixin-host` | 可选微信 Channel 插件完整分发目录；内含独立 MCP Host |
+| `dist/plugins/wxwork/` | `bun run build:wxwork-host` | 可选 WeCom 企业微信插件完整分发目录；内含独立 MCP Host |
+| `dist/plugins/qq/` | `bun run build:qq-host` | 可选 QQ 插件完整分发目录；内含独立 MCP Host |
+| `dist/plugins/telegram/` | `bun run build:telegram-host` | 可选 Telegram 插件完整分发目录；内含独立 MCP Host |
+| `dist/plugins/telegram-user/` | `bun run build:telegram-user-host` | 可选 Telegram 用户态插件完整分发目录；内含独立 MCP Host |
 | `dist/plugins/x/` | `bun run build:x-host` | 可选 X 只读 MCP 插件完整分发目录；内含独立 Host |
+| 全部产物 | `bun run build:production` | 聚合构建 EXE + 全部插件 Host |
 
 ### 构建流程（`build.ts`）
 
@@ -142,9 +157,9 @@ x:              X API App-only 只读 MCP 工具与独立 Host
 - **Bridge/远程控制**：`claude remote-control`
 - **守护进程**：`claude daemon bg/status/attach/logs/kill`
 - **ACP 代理**：`claude --acp`
-- **微信**：`claude weixin`
 - **模板任务**：`claude job new/list/reply`
 - **自治管理**：`claude autonomy`
+- **Channel 插件**：chrome/qq/telegram/telegram-user/weixin/wxwork/x 等作为本地插件分发，通过插件机制与对应 MCP 启动
 
 ### 验证管道（`scripts/verify.ts`）
 
@@ -178,6 +193,13 @@ bun run build:bun        # 构建 Bun 产物
 bun run build:vite       # 构建 Vite/Node 产物
 bun run build:exe        # 构建 Windows 独立 EXE
 bun run build:chrome-host # 构建 chrome 分发插件与独立 Host
+bun run build:weixin-host # 构建 weixin 分发插件与独立 Host
+bun run build:wxwork-host # 构建 wxwork 分发插件与独立 Host
+bun run build:qq-host     # 构建 qq 分发插件与独立 Host
+bun run build:telegram-host # 构建 telegram 分发插件与独立 Host
+bun run build:telegram-user-host # 构建 telegram-user 分发插件与独立 Host
+bun run build:x-host      # 构建 x 分发插件与独立 Host
+bun run build:production # 聚合构建 EXE 与全部插件 Host
 bun run typecheck        # TypeScript 类型检查
 bun run lint             # Biome 代码检查
 bun run check:fix        # Biome 自动修复
@@ -209,9 +231,10 @@ claude-code/
 │   ├── services/             # 服务层（API、MCP 等）
 │   ├── utils/                # 工具函数
 │   └── ...
-├── packages/                 # 工作空间包
-│   ├── @claude-code/    # 自定义包
+├── packages/                 # 工作空间自定义包
+│   ├── @claude-code/*   # 自定义包（agent-tools、builtin-tools 等，位于根下）
 │   └── @ant/                 # Ant 工具包
+├── plugins/                  # 本地插件（chrome/qq/telegram/telegram-user/weixin/wxwork/x）
 ├── scripts/                  # 构建/开发/验证脚本
 │   ├── defines.ts            # MACRO 定义
 │   ├── feature-policy.ts     # Feature Flag 策略
