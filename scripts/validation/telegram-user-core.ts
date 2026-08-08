@@ -3,7 +3,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { isTelegramUserRouteAllowed, loadTelegramUserAccess, setTelegramUserRouteAllowed } from '../../plugins/telegram-user/src/access.js'
-import { classifyTelegramUserError, loginTelegramUserAccount, type TelegramUserLoginTransport } from '../../plugins/telegram-user/src/client.js'
+import { classifyTelegramUserError, createGramJsClient, loginTelegramUserAccount, type TelegramUserLoginTransport } from '../../plugins/telegram-user/src/client.js'
 import { listTelegramUserAccounts, loadTelegramUserSession, resolveTelegramUserCredentials, saveTelegramUserAccount, saveTelegramUserSession } from '../../plugins/telegram-user/src/config.js'
 import { rememberTelegramUserSentMessage, rememberTelegramUserUpdate } from '../../plugins/telegram-user/src/dedupe.js'
 import { acquireTelegramUserLease } from '../../plugins/telegram-user/src/lease.js'
@@ -21,6 +21,7 @@ process.env.TU_BETA_ID = '23456'; process.env.TU_BETA_HASH = 'fedcba9876543210fe
 try {
   const alpha = saveTelegramUserAccount({ alias: 'alpha', apiIdEnv: 'TU_ALPHA_ID', apiHashEnv: 'TU_ALPHA_HASH', phoneEnv: 'TU_ALPHA_PHONE' }); const beta = saveTelegramUserAccount({ alias: 'beta', apiIdEnv: 'TU_BETA_ID', apiHashEnv: 'TU_BETA_HASH', phoneEnv: 'TU_BETA_PHONE' })
   assertEqual(listTelegramUserAccounts().length, 2, 'two user accounts'); assertEqual(resolveTelegramUserCredentials(alpha).apiId, 12345, 'API ID env resolution')
+  const gramClient = createGramJsClient(resolveTelegramUserCredentials(alpha), ''); assertEqual((gramClient as unknown as { _requestRetries: number })._requestRetries, 1, 'GramJS performs one request attempt without automatic replay')
   saveTelegramUserSession('alpha', 'alpha-session'); saveTelegramUserSession('beta', 'beta-session'); assertEqual(loadTelegramUserSession('alpha'), 'alpha-session', 'alpha session isolated'); assertEqual(loadTelegramUserSession('beta'), 'beta-session', 'beta session isolated')
   if (process.platform !== 'win32') assertEqual(statSync(join(state, 'accounts', 'alpha', 'session.txt')).mode & 0o777, 0o600, 'private session mode')
   let observedSession = ''; let observedCode = ''; let observedPassword = ''
@@ -45,4 +46,3 @@ try {
   try { chmodSync(state, 0o700) } catch {}; rmSync(state, { recursive: true, force: true }); rmSync(allowed, { recursive: true, force: true })
 }
 console.log('[telegram-user-core] PASS')
-

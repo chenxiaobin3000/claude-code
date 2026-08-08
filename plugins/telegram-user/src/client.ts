@@ -27,7 +27,7 @@ export interface TelegramUserLoginTransport {
   getMe(): Promise<{ id: { toString(): string }; username?: string }>
   disconnect(): Promise<void>
 }
-const clientOptions = { connectionRetries: 3, reconnectRetries: 3, requestRetries: 0, downloadRetries: 2, retryDelay: 1000, autoReconnect: true, floodSleepThreshold: 0, sequentialUpdates: true, baseLogger: new Logger(LogLevel.NONE), deviceModel: 'Claude Code Telegram User Plugin', appVersion: '1.0.0' } as const
+const clientOptions = { connectionRetries: 3, reconnectRetries: 3, requestRetries: 1, downloadRetries: 2, retryDelay: 1000, autoReconnect: true, floodSleepThreshold: 0, sequentialUpdates: true, baseLogger: new Logger(LogLevel.NONE), deviceModel: 'Claude Code Telegram User Plugin', appVersion: '1.0.0' } as const
 function createGramJsClientWithTransport(credentials: Pick<TelegramUserCredentials, 'apiId' | 'apiHash'>, session: string, transport: TelegramUserTransport): TelegramClient {
   return new TelegramClient(new StringSession(session), credentials.apiId, credentials.apiHash, { ...clientOptions, ...(transport.proxy ? { proxy: transport.proxy } : {}) })
 }
