@@ -152,7 +152,7 @@
 
 ### P1：openai-proxy ChatGPT/Codex 订阅模型代理
 
-- [ ] 新增独立本地插件 `plugins/openai-proxy`，服务进程命名为 `openai-proxy-host`；实现仅使用 TypeScript、Bun 和现有项目构建链，不引入 Rust、Cargo、`.rs` 文件或其他语言运行时。
+- [x] 第一阶段已新增独立本地插件 `plugins/openai-proxy`，服务进程命名为 `openai-proxy-host`；实现仅使用 TypeScript、Bun 和现有项目构建链，不引入 Rust、Cargo、`.rs` 文件或其他语言运行时。插件已具备本地 MCP 生命周期入口、loopback-only 鉴权网关、`serve/status/doctor`、安全的未就绪响应、独立 Host 构建及边界/网关/分发验证；本阶段不读取 Codex 凭据、不执行 OAuth、不请求 OpenAI。
 - [ ] 保持现有模型调用主链不变，不新增 Provider 或代理模型类型，不修改 QueryEngine、OpenAI Provider、工具循环、权限、Sandbox、Session 或 UI 的权威职责；在 `models.json` 中仍按普通 OpenAI 兼容模型配置，仅将 `baseUrl` 指向 `http://127.0.0.1:48181/v1`，并通过 `OPENAI_PROXY_LOCAL_TOKEN` 提供本地访问凭据。
 - [ ] 提供仅监听 `127.0.0.1` 的 OpenAI 兼容网关，至少实现 `POST /v1/chat/completions`、`GET /v1/models`、`GET /health` 和 `GET /doctor`；未安装、未运行或认证失败时明确报错，不回退到其他模型或外部地址。
 - [ ] 使用本地 Bearer capability token 限制同机其他进程滥用订阅；Token 不得写入 `models.json`、日志、模型上下文或子进程参数，所有错误输出必须脱敏。

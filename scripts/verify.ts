@@ -40,6 +40,12 @@ const telegramUserPackageJson = JSON.parse(
 const xPackageJson = JSON.parse(
   await readFile(join(projectRoot, 'plugins', 'x', 'package.json'), 'utf8'),
 ) as { version: string }
+const openAIProxyPackageJson = JSON.parse(
+  await readFile(
+    join(projectRoot, 'plugins', 'openai-proxy', 'package.json'),
+    'utf8',
+  ),
+) as { version: string }
 const expectedVersion = `${packageJson.version} (Claude Code)`
 const commandTimeoutMs = 120_000
 const modelTimeoutMs = 180_000
@@ -92,6 +98,8 @@ const validationScripts = [
   'scripts/validation/x-plugin-boundary.ts',
   'scripts/validation/x-core.ts',
   'scripts/validation/x-api-fixture.ts',
+  'scripts/validation/openai-proxy-plugin-boundary.ts',
+  'scripts/validation/openai-proxy-gateway.ts',
   'scripts/validation/chrome-protocol.ts',
   'scripts/validation/chrome-profiles.ts',
   'scripts/validation/chrome-host.ts',
@@ -421,6 +429,11 @@ async function main(): Promise<void> {
     'typecheck:telegram-user-host',
   ])
   await runStep('X Host typecheck', [bunExecutable, 'run', 'typecheck:x-host'])
+  await runStep('openai-proxy Host typecheck', [
+    bunExecutable,
+    'run',
+    'typecheck:openai-proxy-host',
+  ])
   await runStep('Biome lint', [bunExecutable, 'run', 'lint'])
   await runStep('workspace contract, checks, builds, and smoke', [
     bunExecutable,
@@ -549,6 +562,16 @@ async function main(): Promise<void> {
       'run',
       'scripts/validation/x-distribution.ts',
     ])
+    await runStep('openai-proxy standalone Host build', [
+      bunExecutable,
+      'run',
+      'build:openai-proxy-host',
+    ])
+    await runStep('openai-proxy distributable Plugin validation', [
+      bunExecutable,
+      'run',
+      'scripts/validation/openai-proxy-distribution.ts',
+    ])
     await runStep('standalone automatic Plugin lifecycle', [
       bunExecutable,
       'run',
@@ -661,6 +684,25 @@ async function main(): Promise<void> {
     )
     if (xHostVersion.stdout.trim() !== xPackageJson.version) {
       throw new Error(`X Host version mismatch: ${xHostVersion.stdout.trim()}`)
+    }
+    const openAIProxyHost = resolve(
+      projectRoot,
+      'dist',
+      'plugins',
+      'openai-proxy',
+      'openai-proxy-host.exe',
+    )
+    const openAIProxyHostVersion = await runStep(
+      'openai-proxy standalone Host version',
+      [openAIProxyHost, '--version'],
+      { capture: true },
+    )
+    if (
+      openAIProxyHostVersion.stdout.trim() !== openAIProxyPackageJson.version
+    ) {
+      throw new Error(
+        `openai-proxy Host version mismatch: ${openAIProxyHostVersion.stdout.trim()}`,
+      )
     }
     await runStep('chrome Native Host EOF lifecycle', [chromeHost], {
       capture: true,

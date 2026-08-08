@@ -287,6 +287,13 @@
         "bun-types": "latest",
       },
     },
+    "plugins/openai-proxy": {
+      "name": "@claude-code/openai-proxy-plugin",
+      "version": "0.1.0",
+      "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.29.0",
+      },
+    },
     "plugins/qq": {
       "name": "@claude-code/qq-plugin",
       "version": "1.0.0",
@@ -497,6 +504,8 @@
     "@claude-code/builtin-tools": ["@claude-code/builtin-tools@workspace:packages/builtin-tools"],
 
     "@claude-code/mcp-client": ["@claude-code/mcp-client@workspace:packages/mcp-client"],
+
+    "@claude-code/openai-proxy-plugin": ["@claude-code/openai-proxy-plugin@workspace:plugins/openai-proxy"],
 
     "@claude-code/qq-plugin": ["@claude-code/qq-plugin@workspace:plugins/qq"],
 

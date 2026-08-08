@@ -1,0 +1,15 @@
+{
+  "name": "openai-proxy",
+  "version": "0.1.0",
+  "apiVersion": "^1.0.0",
+  "description": "Local authenticated gateway for an optional ChatGPT/Codex subscription integration.",
+  "author": { "name": "claude-code" },
+  "keywords": ["openai", "codex", "proxy", "local"],
+  "mcpServers": {
+    "openai-proxy": {
+      "type": "stdio",
+      "command": "bun",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/host/entry.ts", "mcp"]
+    }
+  }
+}
