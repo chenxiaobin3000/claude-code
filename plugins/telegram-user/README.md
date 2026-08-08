@@ -7,6 +7,7 @@ Create Telegram application credentials at `my.telegram.org`, place the API ID, 
 ```text
 telegram-user-host account add personal TELEGRAM_API_ID TELEGRAM_API_HASH TELEGRAM_PHONE
 telegram-user-host account login personal
+telegram-user-host account groups personal
 telegram-user-host access allow personal user 123456789
 telegram-user-host account doctor personal
 ```
@@ -15,6 +16,10 @@ telegram-user-host account doctor personal
 变量；独立运行 Host 且变量未注入时，会按已保存的变量名回退读取用户级
 `settings.json.env`。项目和管理级设置不参与该回退。一次性验证码与 2FA 密码只在
 `account login` 时交互输入。
+
+`account groups [alias]` 使用已保存的 Session 只读列出当前账号可访问的普通群、超级群和
+频道的 Peer ID 与名称；它不读取消息历史，也不会自动修改 allowlist。取得 ID 后，使用
+`access allow <alias> group|channel <peer-id>` 显式允许接收新消息。
 
 可选代理只从 Host 进程环境或用户级 `settings.json.env` 读取：
 

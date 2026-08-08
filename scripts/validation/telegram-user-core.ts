@@ -3,7 +3,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { isTelegramUserRouteAllowed, loadTelegramUserAccess, setTelegramUserRouteAllowed } from '../../plugins/telegram-user/src/access.js'
-import { classifyTelegramUserError, createGramJsClient, loginTelegramUserAccount, type TelegramUserLoginTransport } from '../../plugins/telegram-user/src/client.js'
+import { classifyTelegramUserError, createGramJsClient, loginTelegramUserAccount, selectTelegramUserGroups, type TelegramUserLoginTransport } from '../../plugins/telegram-user/src/client.js'
 import { listTelegramUserAccounts, loadTelegramUserSession, resolveTelegramUserCredentials, saveTelegramUserAccount, saveTelegramUserSession } from '../../plugins/telegram-user/src/config.js'
 import { rememberTelegramUserSentMessage, rememberTelegramUserUpdate } from '../../plugins/telegram-user/src/dedupe.js'
 import { acquireTelegramUserLease } from '../../plugins/telegram-user/src/lease.js'
@@ -22,6 +22,16 @@ try {
   const alpha = saveTelegramUserAccount({ alias: 'alpha', apiIdEnv: 'TU_ALPHA_ID', apiHashEnv: 'TU_ALPHA_HASH', phoneEnv: 'TU_ALPHA_PHONE' }); const beta = saveTelegramUserAccount({ alias: 'beta', apiIdEnv: 'TU_BETA_ID', apiHashEnv: 'TU_BETA_HASH', phoneEnv: 'TU_BETA_PHONE' })
   assertEqual(listTelegramUserAccounts().length, 2, 'two user accounts'); assertEqual(resolveTelegramUserCredentials(alpha).apiId, 12345, 'API ID env resolution')
   const gramClient = createGramJsClient(resolveTelegramUserCredentials(alpha), ''); assertEqual((gramClient as unknown as { _requestRetries: number })._requestRetries, 3, 'GramJS allows login data-center migration and a transient reconnect')
+  assertDeepEqual(selectTelegramUserGroups([
+    { id: { toString: () => '-10' }, title: 'Basic\tGroup', isGroup: true, isChannel: false },
+    { id: { toString: () => '-10020' }, title: 'Super\nGroup', isGroup: true, isChannel: true },
+    { id: { toString: () => '-10030' }, name: 'News', isGroup: false, isChannel: true },
+    { id: { toString: () => '40' }, name: 'Person', isGroup: false, isChannel: false },
+  ]), [
+    { type: 'group', id: '-10', name: 'Basic Group' },
+    { type: 'supergroup', id: '-10020', name: 'Super Group' },
+    { type: 'channel', id: '-10030', name: 'News' },
+  ], 'group dialog classification and safe tabular names')
   saveTelegramUserSession('alpha', 'alpha-session'); saveTelegramUserSession('beta', 'beta-session'); assertEqual(loadTelegramUserSession('alpha'), 'alpha-session', 'alpha session isolated'); assertEqual(loadTelegramUserSession('beta'), 'beta-session', 'beta session isolated')
   if (process.platform !== 'win32') assertEqual(statSync(join(state, 'accounts', 'alpha', 'session.txt')).mode & 0o777, 0o600, 'private session mode')
   let observedSession = ''; let observedCode = ''; let observedPassword = ''

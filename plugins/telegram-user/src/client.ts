@@ -27,6 +27,24 @@ export interface TelegramUserLoginTransport {
   getMe(): Promise<{ id: { toString(): string }; username?: string }>
   disconnect(): Promise<void>
 }
+export interface TelegramUserDialogTransport {
+  connect(): Promise<unknown>
+  checkAuthorization(): Promise<boolean>
+  getDialogs(params?: Record<string, never>): Promise<readonly TelegramUserDialogLike[]>
+  disconnect(): Promise<void>
+}
+export interface TelegramUserDialogLike {
+  id?: { toString(): string }
+  name?: string
+  title?: string
+  isGroup: boolean
+  isChannel: boolean
+}
+export interface TelegramUserGroup {
+  type: 'group' | 'supergroup' | 'channel'
+  id: string
+  name: string
+}
 // GramJS consumes a request attempt when Telegram redirects login to the
 // account's data center. Keep enough attempts for that internal migration and
 // one transient reconnect; this does not replay channel messages.
@@ -56,6 +74,44 @@ export async function loginTelegramUserAccount(account: TelegramUserAccountConfi
   } catch (error) {
     throw new Error(classifyTelegramUserError(error))
   } finally { await client.disconnect().catch(() => undefined) }
+}
+
+export function selectTelegramUserGroups(
+  dialogs: readonly TelegramUserDialogLike[],
+): TelegramUserGroup[] {
+  return dialogs.flatMap(dialog => {
+    if ((!dialog.isGroup && !dialog.isChannel) || !dialog.id) return []
+    const type: TelegramUserGroup['type'] = dialog.isGroup
+      ? dialog.isChannel
+        ? 'supergroup'
+        : 'group'
+      : 'channel'
+    const name = (dialog.title ?? dialog.name ?? '(unnamed)')
+      .replace(/[\t\r\n]+/g, ' ')
+      .trim() || '(unnamed)'
+    return [{ type, id: dialog.id.toString(), name }]
+  })
+}
+
+export async function listTelegramUserGroups(
+  account: TelegramUserAccountConfig,
+  credentials: TelegramUserCredentials,
+  factory: (
+    credentials: Pick<TelegramUserCredentials, 'apiId' | 'apiHash'>,
+    session: string,
+  ) => TelegramUserDialogTransport = createGramJsClient,
+): Promise<TelegramUserGroup[]> {
+  const client = factory(credentials, loadTelegramUserSession(account.alias))
+  try {
+    await client.connect()
+    if (!(await client.checkAuthorization()))
+      throw new Error('Telegram user session is not authorized; run account login.')
+    return selectTelegramUserGroups(await client.getDialogs({}))
+  } catch (error) {
+    throw new Error(classifyTelegramUserError(error))
+  } finally {
+    await client.disconnect().catch(() => undefined)
+  }
 }
 
 function mediaInfo(message: Api.Message): TelegramUserAttachment[] {

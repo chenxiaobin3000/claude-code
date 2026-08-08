@@ -4,6 +4,7 @@ import {
   setTelegramUserRouteAllowed,
 } from './access.js'
 import {
+  listTelegramUserGroups,
   loginTelegramUserAccount,
   TelegramUserRuntimeClient,
 } from './client.js'
@@ -21,7 +22,7 @@ import type { TelegramUserPeerType } from './types.js'
 
 function usage(): void {
   process.stdout.write(
-    'Usage:\n  telegram-user-host mcp\n  telegram-user-host proxy capabilities\n  telegram-user-host account add <alias> <api-id-env> <api-hash-env> <phone-env>\n  telegram-user-host account login [alias]\n  telegram-user-host account logout [alias]\n  telegram-user-host account remove <alias>\n  telegram-user-host account list\n  telegram-user-host account doctor [alias]\n  telegram-user-host access allow|deny <alias> <user|group|channel> <peer-id> [topic-id]\n  telegram-user-host access list <alias>\n',
+    'Usage:\n  telegram-user-host mcp\n  telegram-user-host proxy capabilities\n  telegram-user-host account add <alias> <api-id-env> <api-hash-env> <phone-env>\n  telegram-user-host account login [alias]\n  telegram-user-host account logout [alias]\n  telegram-user-host account remove <alias>\n  telegram-user-host account list\n  telegram-user-host account groups [alias]\n  telegram-user-host account doctor [alias]\n  telegram-user-host access allow|deny <alias> <user|group|channel> <peer-id> [topic-id]\n  telegram-user-host access list <alias>\n',
   )
 }
 async function promptLine(label: string): Promise<string> {
@@ -46,6 +47,7 @@ async function promptSecret(label: string): Promise<string> {
     const done = (error?: Error): void => {
       process.stdin.off('data', onData)
       process.stdin.setRawMode?.(false)
+      process.stdin.pause()
       process.stderr.write('\n')
       error ? reject(error) : resolve(value)
     }
@@ -133,6 +135,19 @@ export async function handleTelegramUserCli(
       )
       process.stdout.write(
         `Telegram user account ${account.alias} logged in as ${result.username ? `@${result.username}` : result.userId}.\n`,
+      )
+      return
+    }
+    if (args[0] === 'account' && args[1] === 'groups') {
+      const account = accountOrThrow(args[2])
+      const groups = await listTelegramUserGroups(
+        account,
+        resolveTelegramUserCredentials(account),
+      )
+      process.stdout.write(
+        groups.length
+          ? `TYPE\tID\tNAME\n${groups.map(group => `${group.type}\t${group.id}\t${group.name}`).join('\n')}\n`
+          : 'No Telegram groups or channels are available to this account.\n',
       )
       return
     }

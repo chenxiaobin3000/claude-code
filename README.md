@@ -395,6 +395,7 @@ $env:TELEGRAM_API_HASH = "0123456789abcdef0123456789abcdef"
 $env:TELEGRAM_PHONE = "+15551234567"
 bun plugins/telegram-user/host/entry.ts account add personal TELEGRAM_API_ID TELEGRAM_API_HASH TELEGRAM_PHONE
 bun plugins/telegram-user/host/entry.ts account login personal
+bun plugins/telegram-user/host/entry.ts account groups personal
 bun plugins/telegram-user/host/entry.ts access allow personal user 123456789
 bun run dev -- --plugin-dir plugins/telegram-user --dangerously-load-development-channels plugin:telegram-user@inline
 ```
