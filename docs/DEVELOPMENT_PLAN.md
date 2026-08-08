@@ -116,7 +116,7 @@
 ## 明确不做
 
 - Anthropic 官方账号、网络 Provider、原生安装器和任何 CLI 自更新能力。
-- ChatGPT/Codex OAuth、云模型供应商专用适配、自动能力探测与隐式请求字段降级。
+- 除独立本地 `openai-proxy` 插件明确限定的 ChatGPT/Codex 订阅登录与模型转发外，不增加其他云模型供应商专用适配、自动能力探测或隐式请求字段降级。
 - 官方 MCP Registry 预取、远端插件市场、远端插件下载和插件自动更新。
 - Anthropic 云端浏览器桥接、已移除的 `mcp-chrome`、Artifact 工具和 VS Code 插件路线。
 - 官方大型测试体系；项目只维护独立的 `scripts/validation` 轻量验证脚本。
@@ -150,7 +150,28 @@
 
 完成条件：Telegram Bot 和 Telegram User 在未配置代理时保持现有直连行为，配置支持的代理时所有规定网络链路均经代理且失败不回退直连；代理凭据与 Telegram 凭据均不泄漏。GramJS 在当前支持平台的 Bun 开发运行和 standalone 产物均通过真实验证；至少两个 Telegram 用户账号可以同时连接，且不会串 Session、Peer、Update、附件、权限或秘密；插件默认只处理 allowlist 会话、不会处理自身回声，也不会提供批量或账号管理型高风险操作；`typecheck:telegram-host`、`typecheck:telegram-user-host`、两类 Host 构建、代理 Fixture、依赖边界、分发验证和 `bun run verify -- --ci` 全部通过。随后使用专门的低权限 Bot 与测试账号经真实本地代理验收 Bot API、登录、重启恢复、私聊、群组、频道、Topic、断线恢复及媒体收发，禁止直接使用重要主账号作为首次验收对象。
 
-### P1：X 只读 MCP 工具插件真实服务验收
+### P1：openai-proxy ChatGPT/Codex 订阅模型代理
+
+- [ ] 新增独立本地插件 `plugins/openai-proxy`，服务进程命名为 `openai-proxy-host`；实现仅使用 TypeScript、Bun 和现有项目构建链，不引入 Rust、Cargo、`.rs` 文件或其他语言运行时。
+- [ ] 保持现有模型调用主链不变，不新增 Provider 或代理模型类型，不修改 QueryEngine、OpenAI Provider、工具循环、权限、Sandbox、Session 或 UI 的权威职责；在 `models.json` 中仍按普通 OpenAI 兼容模型配置，仅将 `baseUrl` 指向 `http://127.0.0.1:48181/v1`，并通过 `OPENAI_PROXY_LOCAL_TOKEN` 提供本地访问凭据。
+- [ ] 提供仅监听 `127.0.0.1` 的 OpenAI 兼容网关，至少实现 `POST /v1/chat/completions`、`GET /v1/models`、`GET /health` 和 `GET /doctor`；未安装、未运行或认证失败时明确报错，不回退到其他模型或外部地址。
+- [ ] 使用本地 Bearer capability token 限制同机其他进程滥用订阅；Token 不得写入 `models.json`、日志、模型上下文或子进程参数，所有错误输出必须脱敏。
+- [ ] 将现有 Chat Completions 请求转换为官方 Codex Responses 请求，并把 Responses SSE 稳定适配回现有流事件，覆盖文本、reasoning、工具调用、并行工具、工具结果、Usage、finish reason、取消和断流；插件不得接管项目自身的 Agent 循环或工具执行。
+- [ ] 以 TypeScript 语义重写官方开源 Codex 中必要的登录能力：浏览器 OAuth、device-code、PKCE/state、回调、Token 交换/刷新/撤销，以及账号、workspace 和 plan 信息解析；提供 `setup`、`login`、`login --device-code`、`status`、`doctor`、`logout`、`serve`、`stop` 命令。
+- [ ] Session 固定保存到 `~/.claude/openai-proxy/auth.json`，采用原子替换、并发刷新互斥和最小权限保护；POSIX 使用 `0600`，Windows 使用当前用户 ACL。不得读取、导入或覆盖 `~/.codex/auth.json`，不得把 OAuth Token 暴露给主项目进程。
+- [ ] 复用现有本地 Plugin/MCP 生命周期能力管理单实例服务，记录 PID、锁、端点和版本，支持多 CLI 客户端安全共享、租约和空闲退出；服务异常终止后必须可诊断、可重启且不损坏 Session。
+- [ ] 支持显式 `OPENAI_PROXY_URL`，配置来源仅限进程环境或用户 `settings.json.env`；沿用现有代理策略实现 HTTP、HTTPS CONNECT 和代理认证，SOCKS5 未实现时明确拒绝。
+- [ ] 代理覆盖 OAuth Token 交换、device-code 轮询、刷新/撤销、模型目录、Responses/SSE 及必要的账号/额度请求；localhost 回调、本地网关和系统浏览器自身不经过该代理。
+- [ ] 配置代理后采用 fail-closed：代理拒绝、超时、认证失败或 DNS 失败时不得转为直连或本地 DNS；不重放结果不确定的模型请求，日志不得泄露 Authorization、Cookie、Token、验证码或敏感查询参数。
+- [ ] 建立严格上游同步边界：在 `plugins/openai-proxy/upstream/` 维护 `BASELINE.json`、`SOURCE_MAP.md` 和 `THIRD_PARTY_NOTICES.md`，固定官方 OpenAI Codex release tag、完整 commit、审计日期、来源文件及哈希，并保留 Apache-2.0 归属说明。
+- [ ] 上游同步白名单仅允许登录/OAuth/device-code/PKCE/Token/Session、必要请求头和基础地址、Responses 请求与 SSE、模型/账号/限额，以及 TLS/CA/代理相关语义；禁止同步 Agent 循环、Prompt、Tool、Shell/文件、Sandbox、审批、Thread、MCP、Plugin/Skill、Cloud/Remote、遥测、更新、UI、多 Agent、Memory、Web、Image、Voice 和后台任务实现。
+- [ ] 增加 `bun run audit:openai-proxy-upstream -- --tag <version>`：仅把白名单文件下载到临时目录，生成哈希与语义差异报告，不自动改写生产代码；验证脚本必须阻止 `.rs`、Cargo 文件、Rust 工具链声明和白名单外上游代码进入插件。
+- [ ] 增加确定性测试：浏览器/device-code 登录、PKCE/state、回调冲突、Session 原子写入、刷新竞争、无效 refresh、logout；请求/流事件转换；取消、超时、断流、401/403/429；代理成功、认证/拒绝/超时和无直连回退；本地端点认证、守护进程多客户端/租约/EOF，以及 Windows 独立发行包运行。
+- [ ] 回归验证现有 OpenAI、DeepSeek、llama.cpp、自定义 OpenAI 兼容端点、工具调用、权限与 Sandbox 行为不变；固定测试通过后，再使用低权限 ChatGPT 测试账号单独补录真实登录、模型调用、Token 刷新和退出证据，不以 Fixture 结果替代真实验收。
+
+完成条件：删除 `plugins/openai-proxy` 即可完整移除该能力且主项目模型链无需回滚；插件不引入新语言，登录凭据和订阅 Token 不进入主进程、配置、日志或模型上下文；本地网关、Responses 适配、代理 fail-closed、生命周期、Windows 独立发行和上游审计均有确定性验证，真实低权限账号验收单独留证，且 `bun run verify --ci` 全部通过。
+
+### P2：X 只读 MCP 工具插件真实服务验收
 
 - [x] 已新增可删除式移除的独立 `plugins/x`、标准 Plugin Manifest、stdio MCP、`x-host`、workspace、standalone 分发和自动发现；主 CLI 没有静态注册或 X 运行时依赖。官方 XDK `0.6.6`（commit `9b312949e7edf4da32bfbaffda575f0eb7bc1525`）已冻结审计，但其声明的实例 `httpClient` 与运行时模块级私有传输不一致，无法在 Bun standalone 安全注入插件代理，因此按既定后备方案改用插件内固定 GET-only 官方 X API 传输，XDK 不进入依赖或产物。
 - [x] App 配置支持唯一别名和固定 `X_BEARER_TOKEN`：单 App 使用原始 Token，多 App 使用同一变量内按别名索引的 JSON 对象；提供 `app add|remove|list|doctor` 与 `mcp`，不保存或输出 Token。生产 API 根固定为 `https://api.x.com`，配置不能把 Token 重定向到其他 Endpoint。
@@ -161,7 +182,7 @@
 
 完成条件：确定性工程验收已经通过；补齐上述两个低权限 App 的真实服务验收后，将本节删除并把最终行为并入基线。
 
-### P2：可选产品能力
+### P3：可选产品能力
 
 - [ ] 支持 macOS 专用、默认关闭的 `sandbox.allowAppleEvents`，并确保该例外不会放宽文件系统、网络或其他平台的边界。
 
