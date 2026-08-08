@@ -165,6 +165,8 @@ Bash/PowerShell 命令中的 `cd` 属于 Shell cwd 持久化规则，不会触�
 
 Channel 消息进入模型后继续使用原有轮次和合并流程；轮次完成时，最终 Assistant 文本会通过来源 Channel 对应的 `reply` 工具发送。普通终端输入不触发该流程。一次合并轮次按“来源 MCP Server + `chat_id`”去重并绑定最新 `message_id`；不同 Channel 分别发送同一最终文本。若模型在本轮已经用同一个回复工具向同一 `chat_id` 发送，则不会重复回复。配置的 `reply` 是被动发送最终回复的明确授权，但显式 `ask`、`deny` 或硬安全规则仍会阻止自动发送；工具缺失、归属不匹配、参数无效或调用失败都会明确报错，不会跨 Channel 回退。
 
+QQ、企业微信、Telegram Bot 和 Telegram User 对每个账号使用独立的跨进程连接锁，同一账号同一时刻只能由一个 Host 持有。锁同时记录 PID、进程启动时间、Host 身份、账号别名和随机 Owner ID；Windows、Linux 与 macOS 启动时会核验完整进程身份，PID 被其他进程复用时自动回收旧锁，无法确认所有权时安全拒绝。释放操作必须匹配完整 Owner ID，旧 Host 延迟退出不能删除新 Host 的锁。
+
 本地 Plugin Manifest 可用 `apiVersion` 声明所需的扩展 API SemVer 范围，例如 `"apiVersion": "^1.0.0"`。当前扩展 API 为 `1.0.0`，并与 CLI 产品版本独立；同一主版本只允许新增可选字段或能力，删除、改名、默认行为变化等破坏性修改必须升级主版本。旧 Manifest 缺少该字段时按 v1 契约继续加载。显式范围不兼容时会禁用整个 Plugin，并连带收回其 Hook、Skill、Agent、Command、MCP、LSP 和 Settings，避免组件半加载；依赖该 Plugin 的其他 Plugin 也会按依赖闭包安全降级。MCP 和 ACP 仍使用各自协议的原生版本协商，不复用 Plugin API 版本。
 
 ### chrome 插件与 Chrome 扩展

@@ -66,6 +66,7 @@ const validationScripts = [
   'scripts/validation/extension-api-compat.ts',
   'scripts/validation/mcp-lifecycle.ts',
   'scripts/validation/channel-settings.ts',
+  'scripts/validation/channel-connection-lease.ts',
   'scripts/validation/channel-reply-tool-loading.ts',
   'scripts/validation/channel-reply-routing.ts',
   'scripts/validation/channel-local-env.ts',
