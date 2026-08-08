@@ -84,6 +84,9 @@
 - Telegram User 是独立的按需历史读取插件，固定使用 GramJS `2.26.22`（commit `3aedb2e6ef216d307607f3d0f3f5b0ace6701378`，生成 MTProto Layer 198），仅使用 TypeScript/Bun 并可编译为 Windows standalone，不引入 Python、Telethon、TDLib 或额外运行时。它只注册 `telegram-user-control` MCP，提供 `list_chats`、`set_chat_access` 和 `get_chat_history`；Session、账号和 allowlist 逐别名隔离，模型通过 Session HMAC 生成的不透明 `chatRef` 访问目标，最多读取 100 条且不下载附件。
 - Telegram User 不注册 Channel MCP，不监听或转换实时 Update，不向模型自动注入新消息，也不提供回复、主动发送、媒体下载或权限回传。未来若确有需要，可另行设计基于历史拉取的近实时模拟；当前没有后台轮询或补偿逻辑，该方向不列为待开发任务。
 - Telegram Bot 与 Telegram User 已通过真实低权限账号和本地代理验收：Bot 的鉴权与长轮询走 HTTP CONNECT，User 的鉴权、StringSession 恢复、对话列表、allowlist 与历史读取走 SOCKS5；失败不回退直连，诊断与日志不暴露 Token、API Hash、手机号、Session、代理凭据或消息正文。固定代理 Fixture、插件边界、独立 Host、standalone 分发和统一 CI 验证继续防止回归。
+- X 能力位于可独立删除的 `plugins/x`，只使用固定 `X_BEARER_TOKEN` 执行 App-only 公开数据读取；生产 API 根固定为 `https://api.x.com`。插件提供 `x_get_post`、`x_get_thread`、`x_get_user`、`x_get_user_posts`、`x_search_recent` 和 `x_get_mentions`，最多 100 条/页、2 页、512 KiB、15 秒和 2 并发，不自动重试，不提供 OAuth、用户身份写操作、Channel、Stream、Webhook 或后台轮询。
+- X 可选 `X_PROXY_URL` 只支持 HTTP/HTTPS CONNECT，配置后所有请求和分页均经代理且失败不回退直连；SOCKS5 明确拒绝。错误区分鉴权、套餐、限流、服务端、DNS、TCP/代理、TLS 和超时，输出与日志不得包含 Token、Authorization、完整查询或响应正文。官方 XDK `0.6.6` 仅作为审计基线，因其私有传输不能安全注入插件代理，生产 Host 使用插件内固定 GET-only 传输且不打包 XDK。
+- X 的真实服务验收标准固定为“一个低权限真实 App + 套餐拒绝 Fixture”：真实 App 必须覆盖六个只读工具、分页、Rate Limit、HTTP CONNECT 代理和代理失败不回退；`403`/套餐拒绝及多 App/Token 隔离由确定性 Fixture 覆盖，不要求为验收额外申请账号或降低真实账号套餐。standalone、自动发现、Host EOF、秘密脱敏和 XDK 禁入继续纳入统一验证。
 - 本地 Plugin Manifest 使用可选 `apiVersion` SemVer 范围协商声明式扩展 API；当前版本为 `1.0.0`，缺省按旧 v1 契约兼容。显式不兼容时整插件及其组件不可达，依赖降级继续按固定点传播；MCP 与 ACP 保持各自协议协商。
 - `/cd` 有意保持为本项目的临时 cwd 命令，不对齐官方的跨项目会话迁移：它只改变主会话后续工具使用的当前目录，不改变启动项目根、Session ID、Transcript/Resume 归属、权限根、Settings、CLAUDE.md、Hook、Skill、Plugin、MCP、Memory、Plan 或 Checkpoint 作用域。
 - `/cd` 不改变已运行子 Agent 的 cwd；新建 Agent 从稳定的会话/工作树根启动，不继承主会话的临时 `/cd`，子 Agent 的 cwd 变化也不得回写主会话。`/clear` 和进程重启恢复到启动项目目录；无参数只报告当前 cwd，失败不得改变现有 cwd。
@@ -151,18 +154,7 @@
 
 完成条件：删除 `plugins/openai-proxy` 即可完整移除该能力且主项目模型链无需回滚；插件不引入新语言，登录凭据和订阅 Token 不进入主进程、配置、日志或模型上下文；本地网关、Responses 适配、代理 fail-closed、生命周期、Windows 独立发行和上游审计均有确定性验证，真实低权限账号验收单独留证，且 `bun run verify --ci` 全部通过。
 
-### P1：X 只读 MCP 工具插件真实服务验收
-
-- [x] 已新增可删除式移除的独立 `plugins/x`、标准 Plugin Manifest、stdio MCP、`x-host`、workspace、standalone 分发和自动发现；主 CLI 没有静态注册或 X 运行时依赖。官方 XDK `0.6.6`（commit `9b312949e7edf4da32bfbaffda575f0eb7bc1525`）已冻结审计，但其声明的实例 `httpClient` 与运行时模块级私有传输不一致，无法在 Bun standalone 安全注入插件代理，因此按既定后备方案改用插件内固定 GET-only 官方 X API 传输，XDK 不进入依赖或产物。
-- [x] App 配置支持唯一别名和固定 `X_BEARER_TOKEN`：单 App 使用原始 Token，多 App 使用同一变量内按别名索引的 JSON 对象；提供 `app add|remove|list|doctor` 与 `mcp`，不保存或输出 Token。生产 API 根固定为 `https://api.x.com`，配置不能把 Token 重定向到其他 Endpoint。
-- [x] 可选 `X_PROXY_URL` 使用 Bun 原生 HTTP/HTTPS 代理传输，未配置时直连，配置后所有请求和分页均经同一代理，代理不可用时明确失败且不回退直连。代理凭据脱敏；当前 Bun standalone 无可靠 SOCKS5 支持，配置 SOCKS5 会 fail-closed 并提示改用 HTTP/HTTPS CONNECT。
-- [x] 仅提供 `x_get_post`、`x_get_thread`、`x_get_user`、`x_get_user_posts`、`x_search_recent` 与 `x_get_mentions` 六个 App-only 公开数据读取工具；固定 fields/expansions、最多 100 条/页、2 页、512 KiB、15 秒和 2 并发，不自动重试，不提供 OAuth、写操作、Channel、Stream、Webhook 或后台轮询。Thread 明确标记 recent-search 时间窗口造成的部分结果。
-- [x] 错误区分 `401`、`403`/套餐、`404`、`429`、服务端、DNS、TCP/代理、TLS、超时与代理认证；返回脱敏 Rate Limit 摘要，不记录 Token、Authorization、完整查询或响应正文。`scripts/validation/x-*.ts` 已覆盖多 App/Token 隔离、字段与能力边界、代理成功、代理失败不回退、SOCKS5 安全拒绝、脱敏、Host EOF、XDK 禁入、standalone 分发和自动发现；`bun run verify -- --ci` 于 2026-08-06 全部通过。
-- [ ] 使用至少两个低权限 X 测试 App，经真实 HTTP/HTTPS 代理对真实 X API 验收用户/Post 查询、近期搜索、分页、限流、套餐拒绝、多 Token 隔离、代理出口和代理失败行为；当前环境未配置 `X_BEARER_TOKEN`，不得以 Fixture 结果冒充真实服务验收。
-
-完成条件：确定性工程验收已经通过；补齐上述两个低权限 App 的真实服务验收后，将本节删除并把最终行为并入基线。
-
-### P2：可选产品能力
+### P1：可选产品能力
 
 - [ ] 支持 macOS 专用、默认关闭的 `sandbox.allowAppleEvents`，并确保该例外不会放宽文件系统、网络或其他平台的边界。
 

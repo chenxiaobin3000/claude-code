@@ -32,6 +32,15 @@ const api = createHttpServer((request, response) => {
   response.setHeader('x-rate-limit-limit', '450')
   response.setHeader('x-rate-limit-remaining', '449')
   response.setHeader('x-rate-limit-reset', '2000000000')
+  if (request.url?.includes('/2/users/by/username/plan-denied')) {
+    response.statusCode = 403
+    response.end(
+      JSON.stringify({
+        detail: 'fixture-plan-secret-must-not-be-forwarded',
+      }),
+    )
+    return
+  }
   if (request.url?.includes('/2/users/by/username/')) {
     response.end(JSON.stringify({ data: { id: '42', username: 'fixture' } }))
     return
@@ -122,6 +131,16 @@ try {
   await direct.searchRecent({ query: 'fixture', maxResults: 10 })
   const thread = await direct.getThread('1')
   assert(thread.partial, 'thread must disclose partial recent-search coverage')
+  let planDenied = false
+  try {
+    await direct.getUser({ username: 'plan-denied' })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    planDenied =
+      message.startsWith('X API permission_or_plan error (403)') &&
+      !message.includes('fixture-plan-secret')
+  }
+  assert(planDenied, '403 plan denial is classified without forwarding body')
 
   process.env.NO_PROXY = ''
   process.env.no_proxy = ''
@@ -150,7 +169,7 @@ try {
     'proxy failure never falls back to direct API access',
   )
 
-  assert(apiRequests >= 9, 'direct and proxy API requests reached fixture')
+  assert(apiRequests >= 10, 'direct and proxy API requests reached fixture')
 } finally {
   api.closeAllConnections()
   proxy.closeAllConnections()

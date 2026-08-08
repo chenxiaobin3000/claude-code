@@ -437,6 +437,10 @@ bun run dev -- --plugin-dir plugins/x
 采用插件内固定 GET-only 传输且不打包 XDK。完整边界见
 [`plugins/x/README.md`](plugins/x/README.md)。
 
+真实服务验收只要求一个低权限 App 覆盖六个只读工具、分页、Rate Limit、HTTP CONNECT
+代理和代理失败不回退；`403`/套餐拒绝及多 App/Token 隔离使用确定性 Fixture 验证，不要求
+为了验收额外申请账号或降低真实账号套餐。
+
 ## 构建与验证
 
 ```powershell
