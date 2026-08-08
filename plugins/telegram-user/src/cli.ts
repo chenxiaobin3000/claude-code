@@ -21,7 +21,7 @@ import type { TelegramUserPeerType } from './types.js'
 
 function usage(): void {
   process.stdout.write(
-    'Usage:\n  telegram-user-host mcp\n  telegram-user-host account add <alias> <api-id-env> <api-hash-env> <phone-env>\n  telegram-user-host account login [alias]\n  telegram-user-host account logout [alias]\n  telegram-user-host account remove <alias>\n  telegram-user-host account list\n  telegram-user-host account doctor [alias]\n  telegram-user-host access allow|deny <alias> <user|group|channel> <peer-id> [topic-id]\n  telegram-user-host access list <alias>\n',
+    'Usage:\n  telegram-user-host mcp\n  telegram-user-host proxy capabilities\n  telegram-user-host account add <alias> <api-id-env> <api-hash-env> <phone-env>\n  telegram-user-host account login [alias]\n  telegram-user-host account logout [alias]\n  telegram-user-host account remove <alias>\n  telegram-user-host account list\n  telegram-user-host account doctor [alias]\n  telegram-user-host access allow|deny <alias> <user|group|channel> <peer-id> [topic-id]\n  telegram-user-host access list <alias>\n',
   )
 }
 async function promptLine(label: string): Promise<string> {
@@ -76,6 +76,10 @@ export async function handleTelegramUserCli(
   version: string,
 ): Promise<void> {
   try {
+    if (args[0] === 'proxy' && args[1] === 'capabilities') {
+      process.stdout.write('Telegram User proxy: SOCKS5 supported; HTTP/HTTPS unsupported (fail-closed).\n')
+      return
+    }
     if (args[0] === 'mcp') {
       await runTelegramUserMcpServer(version)
       return
@@ -141,7 +145,7 @@ export async function handleTelegramUserCli(
       try {
         const result = await client.doctor()
         process.stdout.write(
-          `Telegram user account ${account.alias}: authorized as ${result.username ? `@${result.username}` : result.userId}.\n`,
+          `Telegram user account ${account.alias}: authorized as ${result.username ? `@${result.username}` : result.userId}; stage=mtproto, proxy=${client.proxyMode} (${client.proxyDisplay}).\n`,
         )
       } finally {
         await client.stop()

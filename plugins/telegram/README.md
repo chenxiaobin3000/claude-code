@@ -20,6 +20,19 @@ bun run dev -- --plugin-dir plugins/telegram --dangerously-load-development-chan
 变量未注入时，会按已保存的变量名回退读取用户级 `settings.json.env`。项目和管理级设置
 不参与该回退。
 
+可选代理只从 Host 进程环境或用户级 `settings.json.env` 读取：
+
+```powershell
+$env:TELEGRAM_PROXY_URL = "http://user:password@127.0.0.1:8080"
+telegram-host proxy capabilities
+telegram-host bot doctor primary
+```
+
+Bot Host 在当前 Bun standalone 中支持 HTTP/HTTPS 代理，不支持 SOCKS5；配置不支持或
+不可用的代理会明确失败且不会回退直连。代理统一覆盖 Bot API、长轮询、发送、上传、
+`getFile` 和文件下载。`TELEGRAM_API_ROOT` 仍只表示替代 Bot API 根地址，不是代理配置。
+代理凭据和查询参数不会出现在 doctor、错误或日志中；修改代理后需重启 Host。
+
 生产分发：
 
 ```powershell

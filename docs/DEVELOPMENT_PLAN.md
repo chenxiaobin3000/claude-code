@@ -78,6 +78,7 @@
 - Telegram 路由固定为 `bot-alias::private::chat-id`、`bot-alias::group::chat-id` 或带 `::topic::thread-id` 的群组 Topic；群聊只接收明确 `@` Bot、回复 Bot 或带 Bot 用户名的命令。首版覆盖文本、图片、文档、音频、语音和视频，保留引用与附件元数据；`reply` 和 `send_typing` 必须绑定 15 分钟内的入站上下文，不提供主动发送。
 - Telegram 文本使用纯文本并按 4096 个 Unicode 字符确定性拆分；入站与出站单文件上限 20 MiB，本地文件只能来自 `TELEGRAM_ALLOWED_FILE_ROOTS`。`429` 只按 `retry_after` 有界重试一次，网络结果不确定的发送不重放；每个出站操作生成不含敏感数据的本地操作 ID，错误区分 API、网络、冲突、权限和配置，日志不记录 Token、完整消息或含 Token 的文件 URL。
 - Telegram 固定传输 Fixture 已覆盖双 Bot 配置/租约、Token/Update/Chat/Topic 隔离、`getMe`、Webhook 冲突、`409`、长轮询、群聊过滤、排重、Unicode 拆分、附件、媒体目录/上限、`429`、权限越界、Token 脱敏、Host EOF、standalone 分发与自动发现，并统一并入 `bun run verify`。生产来源为 `telegram@local`，开发显式加载为 `telegram@inline`；后续升级只允许人工冻结版本、审计差异并更新 Fixture。
+- Telegram Bot 可选 `TELEGRAM_PROXY_URL` 使用 Bun 原生 HTTP/HTTPS 代理传输，统一覆盖 doctor、Bot API、长轮询、回复、typing、上传、`getFile` 和文件下载；Telegram User 可选 `TELEGRAM_USER_PROXY_URL` 使用 GramJS 原生 SOCKS5，统一覆盖登录、Session 恢复、DC 迁移、Update、消息、媒体及重连。两者只从 Host 进程环境或用户级 `settings.json.env` 读取，代理在 Host 启动时固定，失败不回退直连，凭据与查询参数统一脱敏。Bot SOCKS5 与 User HTTP/HTTPS 在当前 standalone 中显式拒绝；本地 HTTP/SOCKS5 Fixture、认证、拒绝、取消、失败不回退、双账号绑定和 standalone 能力检查已进入 `bun run verify`。
 - 本地 Plugin Manifest 使用可选 `apiVersion` SemVer 范围协商声明式扩展 API；当前版本为 `1.0.0`，缺省按旧 v1 契约兼容。显式不兼容时整插件及其组件不可达，依赖降级继续按固定点传播；MCP 与 ACP 保持各自协议协商。
 - `/cd` 有意保持为本项目的临时 cwd 命令，不对齐官方的跨项目会话迁移：它只改变主会话后续工具使用的当前目录，不改变启动项目根、Session ID、Transcript/Resume 归属、权限根、Settings、CLAUDE.md、Hook、Skill、Plugin、MCP、Memory、Plan 或 Checkpoint 作用域。
 - `/cd` 不改变已运行子 Agent 的 cwd；新建 Agent 从稳定的会话/工作树根启动，不继承主会话的临时 `/cd`，子 Agent 的 cwd 变化也不得回写主会话。`/clear` 和进程重启恢复到启动项目目录；无参数只报告当前 cwd，失败不得改变现有 cwd。
@@ -126,12 +127,13 @@
 
 ### P0：Telegram Bot / User 代理支持与用户账号验收
 
-- [ ] 为 `telegram` Bot 插件增加显式 `TELEGRAM_PROXY_URL`，为 `telegram-user` 插件增加显式 `TELEGRAM_USER_PROXY_URL`；两项均为可选用户级环境配置，未配置时保持现有直连行为。代理值只允许来自 Host 进程环境或用户级 `settings.json.env`，项目和管理级设置不得为外部 Channel 注入代理。配置了代理但代理不可用时必须明确失败，禁止静默回退直连造成网络出口或 DNS 泄漏。
-- [ ] 实施前冻结 Bun standalone、grammY/底层 `fetch`、GramJS/MTProto 与候选代理实现的兼容矩阵，至少覆盖 HTTP/HTTPS CONNECT 和 SOCKS5；某类协议不能在当前 Bun standalone 稳定工作时应明确报“不支持”，不得把普通代理 URL 当作 `TELEGRAM_API_ROOT`。代理 URL 的用户名、密码和查询参数按凭据处理，禁止进入索引、列表、错误、日志、诊断或模型上下文。
-- [ ] Telegram Bot 的代理必须统一覆盖 `bot doctor`、`getMe`、`getWebhookInfo`、`getUpdates` 长轮询、回复、typing、上传以及 Telegram 文件下载；`TELEGRAM_API_ROOT` 继续只表示 Bot API 替代根地址，与传输代理保持正交。超时、取消、`429`、Webhook/长轮询冲突和发送结果不确定边界保持现有语义，禁止因代理断线自动重放可能已成功的发送。
-- [ ] Telegram User 的代理必须覆盖 GramJS 初次鉴权、验证码/2FA、既有 StringSession 恢复、DC 发现与迁移、Update、消息和媒体收发及重连；所有账号共享 Host 级代理出口，但 Session、Peer、Update、权限和连接状态继续逐账号隔离。代理变化只在 Host 重启后生效，不在线迁移连接，不通过代理绕过 FloodWait、平台限制或账号风控。
-- [ ] 扩展 `telegram-host bot doctor` 与 `telegram-user-host account doctor`，分别报告脱敏的代理模式、代理连接阶段、Telegram API/MTProto 阶段和明确错误分类；不得把 DNS/TCP/TLS/代理认证/Telegram 鉴权统一折叠为普通网络失败。诊断仅显示协议和脱敏地址，不显示代理凭据、Bot Token、API Hash、手机号或 Session。
-- [ ] 在 `scripts/validation` 增加可注入的本地 HTTP CONNECT/SOCKS5 Fixture，覆盖直连基线、代理成功、代理认证、代理拒绝、超时、取消、DNS 不直连、禁止失败回退、Bot API/文件链路、MTProto 登录/恢复/DC 迁移、双账号隔离、秘密脱敏、Host EOF 和 Windows standalone 分发；统一并入 `bun run verify`，不依赖真实 Telegram、真实代理或测试框架。完成固定 Fixture 后，再使用低权限 Bot 和测试用户账号通过真实本地代理验收。
+- [x] `telegram` Bot 插件已增加显式 `TELEGRAM_PROXY_URL`，`telegram-user` 插件已增加显式 `TELEGRAM_USER_PROXY_URL`；两项均为可选用户级环境配置，未配置时保持直连。代理值只来自 Host 进程环境或用户级 `settings.json.env`，项目和管理级设置不参与注入；代理不可用时明确失败且不回退直连。
+- [x] 已冻结兼容矩阵：Bot 使用 Bun standalone/grammY 自定义 `fetch` 的 HTTP/HTTPS 代理，SOCKS5 显式拒绝；Telegram User 使用 GramJS 原生 SOCKS5，HTTP/HTTPS 显式拒绝。`TELEGRAM_API_ROOT` 与代理保持正交；代理用户名、密码和查询参数统一按凭据脱敏。
+- [x] Telegram Bot 代理已统一覆盖 `bot doctor`、`getMe`、`getWebhookInfo`、`getUpdates` 长轮询、回复、typing、上传、`getFile` 和文件下载；保留原有超时、取消、`429`、Webhook/长轮询冲突及发送不自动重放语义。
+- [x] Telegram User 代理在 GramJS 客户端创建时绑定，覆盖初次鉴权、验证码/2FA、StringSession 恢复、DC 发现与迁移、Update、消息、媒体和重连；所有账号共享 Host 级出口但状态继续逐账号隔离，代理变化只在 Host 重启后生效。
+- [x] `telegram-host bot doctor` 与 `telegram-user-host account doctor` 已报告脱敏代理模式、地址、连接阶段与错误分类；诊断不显示代理凭据、Bot Token、API Hash、手机号或 Session。
+- [x] `scripts/validation/telegram-proxy.ts` 与 `telegram-user-proxy.ts` 已提供本地 HTTP/SOCKS5 Fixture，覆盖直连、代理成功、代理认证、代理拒绝、超时、取消、禁止失败回退、Bot API/文件链路、GramJS SOCKS 传输、Session/双账号代理绑定、秘密脱敏与 standalone 能力；Host EOF 和 Windows standalone 分发继续由分发验证覆盖并统一进入 `bun run verify`。`bun run verify --ci` 已于 2026-08-08 全部通过。
+- [ ] 使用低权限 Bot 与测试用户账号通过真实本地代理验收 Bot API、登录、2FA、Session 重启恢复、DC 迁移、私聊/群组/频道/Topic、断线恢复及媒体收发；不得以固定 Fixture 冒充真实服务验收。
 
 - [x] 新增独立的 `telegram-user` 插件，使用 TypeScript 的 GramJS（npm 包 `telegram`）连接 Telegram MTProto，不使用 grammY Bot API，也不与 `telegram` Bot 插件共享代码路径、配置、凭据、Session、路由或权限状态。GramJS 是插件内正式运行时依赖，只能进入 `plugins/telegram-user` 和独立 Host，不得进入根包、主 CLI、其他插件或非 Telegram User 生产 Bundle。
 - [ ] 已冻结 GramJS `2.26.22`、commit `3aedb2e6ef216d307607f3d0f3f5b0ace6701378`、生成 MTProto Layer 198、Telegram API/Auth 文档和 `2026-08-04` 审计日期；Bun 直接加载和 Windows `bun build --compile` standalone 已通过。仍需使用低权限真实账号完成 `api_id`/`api_hash`、手机号验证码、2FA、StringSession 重启恢复、私聊/群组/频道/Topic、消息与媒体收发及断线重连验收。

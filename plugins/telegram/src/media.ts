@@ -23,7 +23,12 @@ export async function downloadTelegramAttachment(
   const root = apiRoot()
   const url = new URL(`${root}/file/bot${token}/${file.file_path}`)
   if (!process.env.TELEGRAM_API_ROOT && (url.protocol !== 'https:' || url.hostname !== 'api.telegram.org')) throw new Error('Telegram attachment URL failed the HTTPS/host allowlist.')
-  const response = await fetchImpl(url, { signal: AbortSignal.timeout(30_000), redirect: 'error' })
+  let response: Response
+  try {
+    response = await fetchImpl(url, { signal: AbortSignal.timeout(30_000), redirect: 'error' })
+  } catch {
+    throw new Error('Telegram attachment network request failed.')
+  }
   if (!response.ok) throw new Error(`Telegram attachment download failed with HTTP ${response.status}.`)
   const declared = Number(response.headers.get('content-length') || 0)
   if (declared > TELEGRAM_MEDIA_LIMIT) throw new Error('Telegram attachment exceeds 20 MiB.')

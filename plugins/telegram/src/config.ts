@@ -9,7 +9,12 @@ import {
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { resolveConfiguredEnvValue } from '../../userSettingsEnv.js'
+import {
+  getUserSettingsEnvValue,
+  resolveConfiguredEnvValue,
+} from '../../userSettingsEnv.js'
+
+export const TELEGRAM_PROXY_URL_ENV = 'TELEGRAM_PROXY_URL'
 
 export interface TelegramBotConfig {
   alias: string
@@ -164,6 +169,16 @@ export function resolveTelegramToken(bot: TelegramBotConfig): string {
     token,
     `Token environment variable ${bot.tokenEnv}`,
   )
+}
+
+export function resolveTelegramProxyUrl(): string | undefined {
+  const processValue = process.env[TELEGRAM_PROXY_URL_ENV]?.trim()
+  if (processValue) return processValue
+  try {
+    return getUserSettingsEnvValue(TELEGRAM_PROXY_URL_ENV)?.trim() || undefined
+  } catch {
+    return undefined
+  }
 }
 function validateTelegramToken(value: string, label: string): string {
   const token = value.trim()

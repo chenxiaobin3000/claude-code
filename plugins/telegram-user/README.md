@@ -16,6 +16,19 @@ telegram-user-host account doctor personal
 `settings.json.env`。项目和管理级设置不参与该回退。一次性验证码与 2FA 密码只在
 `account login` 时交互输入。
 
+可选代理只从 Host 进程环境或用户级 `settings.json.env` 读取：
+
+```text
+TELEGRAM_USER_PROXY_URL=socks5://user:password@127.0.0.1:1080
+telegram-user-host proxy capabilities
+telegram-user-host account doctor personal
+```
+
+GramJS Host 支持 SOCKS5（含用户名/密码认证），不支持 HTTP/HTTPS 代理。代理在 Host
+启动时绑定到客户端，统一覆盖登录、Session 恢复、DC 迁移、Update、消息、媒体和重连；
+代理变化需要重启 Host。配置不支持或不可用的代理会明确失败且不会回退直连。代理凭据
+不会写入账号索引、doctor、错误或日志。
+
 The one-time code and optional 2FA password are read interactively and are not persisted. The resulting StringSession is a long-lived credential stored privately under `~/.claude/channels/telegram-user/accounts/<alias>` (or `TELEGRAM_USER_STATE_DIR`). Protect and back up that directory as you would a password.
 
 Only allowlisted peers are delivered to Claude Code. The MCP tool can reply only to a recent inbound message and cannot initiate a conversation, bulk-send, manage contacts/groups/channels, or modify the account. Outbound files must be inside `TELEGRAM_USER_ALLOWED_FILE_ROOTS` and at most 20 MiB. Use a low-privilege test account for initial acceptance.

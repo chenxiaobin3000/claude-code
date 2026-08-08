@@ -329,6 +329,10 @@ Telegram Bot API 10.2。只使用 `getUpdates` 长轮询，不建立 Webhook，�
 抢占已有 Webhook；grammY `bot.start()` 内部的删除调用会在本地确认而不发送到网络，
 启动前仍通过 `getWebhookInfo` 明确拒绝冲突配置。
 
+可选 `TELEGRAM_PROXY_URL` 支持 HTTP/HTTPS 代理，并统一覆盖 Bot API、长轮询、发送、
+上传、`getFile` 和文件下载；当前 Bun standalone 不支持 SOCKS5，配置后失败会明确报错
+且不回退直连。代理仅从进程环境或用户级 `settings.json.env` 读取，凭据会脱敏。
+
 Token 始终按配置的环境变量名读取。可使用唯一别名配置多个 Bot，
 Token、Update 排重、Chat/Topic 路由、媒体、配对、权限和连接租约逐 Bot 隔离：
 
@@ -359,6 +363,8 @@ Telegram User Channel 位于 [`plugins/telegram-user`](plugins/telegram-user)，
 `telegram@2.26.22`（GramJS，commit
 `3aedb2e6ef216d307607f3d0f3f5b0ace6701378`，生成 MTProto Layer 198）连接普通
 Telegram 用户账号。它与 grammY Bot 插件完全分离，不共享配置、Session、路由或权限。
+可选 `TELEGRAM_USER_PROXY_URL` 支持 GramJS SOCKS5 代理，统一覆盖登录、Session 恢复、
+DC 迁移、Update、消息、媒体和重连；不支持 HTTP/HTTPS 代理，失败时不回退直连。
 
 先从 `my.telegram.org` 获取应用 API ID/API Hash。`account add` 保存 API ID、API
 Hash 和 E.164 手机号对应的环境变量名。验证码与可选 2FA 密码由私有交互输入读取，
@@ -374,7 +380,7 @@ bun plugins/telegram-user/host/entry.ts access allow personal user 123456789
 bun run dev -- --plugin-dir plugins/telegram-user --dangerously-load-development-channels plugin:telegram-user@inline
 ```
 
-四个插件的索引只保存环境变量名，不保存长期凭据。运行时优先读取进程环境变量；独立执行
+各插件的索引只保存环境变量名，不保存长期凭据。运行时优先读取进程环境变量；独立执行
 Host 的 `doctor`、`login` 或 `mcp` 时，缺失变量会按已保存的变量名回退读取用户级
 `~/.claude/settings.json`（或 `CLAUDE_CONFIG_DIR/settings.json`）的 `env`。项目和管理级
 设置不参与该回退。
