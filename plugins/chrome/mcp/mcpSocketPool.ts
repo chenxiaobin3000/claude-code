@@ -9,6 +9,7 @@ import type {
   PermissionMode,
   PermissionOverrides,
 } from './types.js'
+import type { InternalChromeBridgeMethodName } from '../protocol/index.js'
 
 export function chromeTabRouteKey(profileId: string, tabId: number): string {
   return `${profileId}\u0000${tabId}`
@@ -161,6 +162,30 @@ export class McpSocketPool {
       )
     }
     return client.callTool(name, args)
+  }
+
+  public async callBridgeMethod(
+    method: InternalChromeBridgeMethodName,
+    args: Record<string, unknown>,
+  ): Promise<unknown> {
+    const connected = this.getConnectedEntries()
+    const endpointId = selectChromeEndpointId(
+      args,
+      connected.map(entry => entry.endpoint),
+      this.tabRoutes,
+    )
+    if (!endpointId) {
+      throw new SocketConnectionError(
+        `[${this.context.serverName}] No connected sockets available`,
+      )
+    }
+    const client = this.clients.get(endpointId)
+    if (!client?.isConnected()) {
+      throw new SocketConnectionError(
+        `[${this.context.serverName}] Selected Chrome profile disconnected before the bridge request`,
+      )
+    }
+    return client.callBridgeMethod(method, args)
   }
 
   public async setPermissionMode(

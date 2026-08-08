@@ -1,4 +1,7 @@
-import type { ChromeSocketEndpoint } from '../protocol/index.js'
+import type {
+  ChromeSocketEndpoint,
+  InternalChromeBridgeMethodName,
+} from '../protocol/index.js'
 
 /**
  * 插件 MCP Logger 第二参数的可选类型。
@@ -86,6 +89,10 @@ export interface SocketClient {
     name: string,
     args: Record<string, unknown>,
     permissionOverrides?: PermissionOverrides,
+  ): Promise<unknown>
+  callBridgeMethod(
+    method: InternalChromeBridgeMethodName,
+    args: Record<string, unknown>,
   ): Promise<unknown>
   isConnected(): boolean
   disconnect(): void

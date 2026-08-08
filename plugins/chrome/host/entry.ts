@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { runChromeMcpServer } from './mcpServer.js'
+import { runChromeDomMcpServer } from './domMcpServer.js'
 import { runChromeNativeHost } from './nativeHost.js'
 import {
   doctorNativeHost,
@@ -17,6 +18,7 @@ function printHelp(): void {
 Usage:
   chrome-host                  Run as Chrome Native Messaging Host
   chrome-host mcp              Run stdio MCP Server
+  chrome-host dom-mcp          Run read-only Chrome DOM stdio MCP Server
   chrome-host register         Register this executable for Chrome
   chrome-host unregister       Remove this Host registration
   chrome-host doctor           Validate Host registration
@@ -41,6 +43,10 @@ async function main(): Promise<void> {
   const command = args[0]
   if (command === 'mcp') {
     await runChromeMcpServer()
+    return
+  }
+  if (command === 'dom-mcp') {
+    await runChromeDomMcpServer()
     return
   }
   if (command === 'register') {

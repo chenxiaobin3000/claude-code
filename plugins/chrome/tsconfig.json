@@ -1,5 +1,5 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["host/**/*.ts", "mcp/**/*.ts", "protocol/**/*.ts"],
+  "include": ["host/**/*.ts", "mcp/**/*.ts", "dom/**/*.ts", "protocol/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

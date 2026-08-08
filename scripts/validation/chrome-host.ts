@@ -36,6 +36,7 @@ const sources = await Promise.all(
     'nativeHost.ts',
     'paths.ts',
     'registration.ts',
+    'domMcpServer.ts',
   ].map(file => readFile(join(hostRoot, file), 'utf8')),
 )
 const combinedSource = sources.join('\n')
@@ -69,7 +70,7 @@ for (const forbidden of [
     )
   }
 }
-for (const command of ['mcp', 'register', 'unregister', 'doctor']) {
+for (const command of ['mcp', 'dom-mcp', 'register', 'unregister', 'doctor']) {
   if (!sources[0]!.includes(`command === '${command}'`)) {
     throw new Error(`[chrome-host] missing Host command: ${command}`)
   }
@@ -89,8 +90,10 @@ for (const marker of [
   'if (this.mcpClients.size === 0)',
   'Dropping oversized Chrome notification',
   'request.auth_token !== this.endpoint?.token',
-  'Chrome tool request exceeds the $' +
-    '{MAX_CHROME_BRIDGE_MESSAGE_BYTES}-byte bridge limit.',
+  'Chrome bridge request exceeds the $' +
+    '{MAX_CHROME_BRIDGE_MESSAGE_BYTES}-byte limit.',
+  'isAuthenticatedChromeBridgeRequest(request)',
+  "request.method === 'execute_tool'",
 ]) {
   if (!combinedSource.includes(marker)) {
     throw new Error(

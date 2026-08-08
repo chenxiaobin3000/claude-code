@@ -10,11 +10,17 @@ import type {
 import { toLoggerDetail } from './types.js'
 import {
   CHROME_TOOL_TIMEOUT_MS,
+  CHROME_DOM_PROTOCOL_VERSION,
+  isChromeDomSnapshotParams,
+  isChromeDomSnapshotResult,
+  isInternalChromeBridgeMethodName,
   isImplementedChromeToolName,
   MAX_CHROME_BRIDGE_MESSAGE_BYTES,
-  type AuthenticatedChromeBridgeToolRequest,
+  type AuthenticatedChromeBridgeRequest,
+  type ChromeBridgeResponse,
   type ChromeBridgeToolRequest,
-  type ChromeBridgeToolResponse,
+  type ChromeDomSnapshotRequest,
+  type InternalChromeBridgeMethodName,
 } from '../protocol/index.js'
 
 export class SocketConnectionError extends Error {
@@ -24,17 +30,19 @@ export class SocketConnectionError extends Error {
   }
 }
 
-type ToolRequestWithoutId = Omit<ChromeBridgeToolRequest, 'request_id'>
-type ToolResponse = ChromeBridgeToolResponse
+type BridgeRequestWithoutId =
+  | Omit<ChromeBridgeToolRequest, 'request_id'>
+  | Omit<ChromeDomSnapshotRequest, 'request_id'>
+type BridgeResponse = ChromeBridgeResponse
 
 interface Notification {
   method: string
   params?: Record<string, unknown>
 }
 
-type SocketMessage = ToolResponse | Notification
+type SocketMessage = BridgeResponse | Notification
 
-function isToolResponse(message: SocketMessage): message is ToolResponse {
+function isToolResponse(message: SocketMessage): message is BridgeResponse {
   return (
     'request_id' in message &&
     typeof message.request_id === 'string' &&
@@ -53,7 +61,7 @@ class McpSocketClient {
   private pendingResponses = new Map<
     string,
     {
-      resolve: (response: ToolResponse) => void
+      resolve: (response: BridgeResponse) => void
       reject: (error: Error) => void
       timeout: NodeJS.Timeout
     }
@@ -248,7 +256,7 @@ class McpSocketClient {
     }, delay)
   }
 
-  private handleResponse(response: ToolResponse): void {
+  private handleResponse(response: BridgeResponse): void {
     const pending = this.pendingResponses.get(response.request_id)
     if (!pending) return
     this.pendingResponses.delete(response.request_id)
@@ -301,9 +309,9 @@ class McpSocketClient {
   }
 
   private async sendRequest(
-    requestWithoutId: ToolRequestWithoutId,
+    requestWithoutId: BridgeRequestWithoutId,
     timeoutMs = CHROME_TOOL_TIMEOUT_MS,
-  ): Promise<ToolResponse> {
+  ): Promise<BridgeResponse> {
     const { serverName } = this.context
 
     if (!this.socket) {
@@ -314,11 +322,18 @@ class McpSocketClient {
 
     const socket = this.socket
 
-    const request: AuthenticatedChromeBridgeToolRequest = {
-      request_id: randomUUID(),
-      auth_token: this.context.endpoint?.token ?? '',
-      ...requestWithoutId,
-    }
+    const request: AuthenticatedChromeBridgeRequest =
+      requestWithoutId.method === 'execute_tool'
+        ? {
+            request_id: randomUUID(),
+            auth_token: this.context.endpoint?.token ?? '',
+            ...requestWithoutId,
+          }
+        : {
+            request_id: randomUUID(),
+            auth_token: this.context.endpoint?.token ?? '',
+            ...requestWithoutId,
+          }
     const requestJson = JSON.stringify(request)
     const requestBytes = Buffer.from(requestJson, 'utf-8')
     if (
@@ -362,7 +377,7 @@ class McpSocketClient {
     if (!isImplementedChromeToolName(name)) {
       throw new Error(`Chrome tool "${name}" is not implemented`)
     }
-    const request: ToolRequestWithoutId = {
+    const request: BridgeRequestWithoutId = {
       method: 'execute_tool',
       params: {
         client_id: this.context.clientTypeId,
@@ -374,6 +389,36 @@ class McpSocketClient {
     return this.sendRequestWithRetry(request)
   }
 
+  public async callBridgeMethod(
+    method: InternalChromeBridgeMethodName,
+    args: Record<string, unknown>,
+  ): Promise<unknown> {
+    if (!isInternalChromeBridgeMethodName(method)) {
+      throw new Error(`Chrome bridge method "${method}" is not implemented`)
+    }
+    const params = {
+      client_id: this.context.clientTypeId,
+      ...args,
+    }
+    if (!isChromeDomSnapshotParams(params)) {
+      throw new Error('Chrome DOM snapshot parameters failed validation')
+    }
+    const request: BridgeRequestWithoutId = {
+      protocol_version: CHROME_DOM_PROTOCOL_VERSION,
+      method,
+      params,
+    }
+    const response = await this.sendRequestWithRetry(request)
+    if (response.error !== undefined) return response
+    if (
+      response.protocol_version !== CHROME_DOM_PROTOCOL_VERSION ||
+      !isChromeDomSnapshotResult(response.result)
+    ) {
+      throw new Error('Chrome DOM snapshot response failed validation')
+    }
+    return response
+  }
+
   /**
    * Send a request with automatic retry on connection errors.
    *
@@ -382,8 +427,8 @@ class McpSocketClient {
    * and retry once.
    */
   private async sendRequestWithRetry(
-    request: ToolRequestWithoutId,
-  ): Promise<unknown> {
+    request: BridgeRequestWithoutId,
+  ): Promise<BridgeResponse> {
     const { serverName, logger } = this.context
 
     try {

@@ -20,10 +20,9 @@ import {
 import { createServer, type Server, type Socket } from 'node:net'
 import { join } from 'node:path'
 import {
-  isImplementedChromeToolName,
+  isAuthenticatedChromeBridgeRequest,
   MAX_CHROME_BRIDGE_MESSAGE_BYTES,
-  type AuthenticatedChromeBridgeToolRequest,
-} from '../mcp/index.js'
+} from '../protocol/index.js'
 import { z } from 'zod'
 import type { ChromeSocketEndpoint } from '../protocol/index.js'
 import {
@@ -326,7 +325,8 @@ export class ChromeNativeHost {
         )
         break
 
-      case 'tool_response': {
+      case 'tool_response':
+      case 'bridge_response': {
         const requestId = message.request_id
         if (typeof requestId !== 'string' || requestId.length === 0) {
           log('Dropping tool response without request_id')
@@ -438,19 +438,14 @@ export class ChromeNativeHost {
         client.buffer = client.buffer.slice(4 + length)
 
         try {
-          const request = jsonParse(
-            messageBytes.toString('utf-8'),
-          ) as Partial<AuthenticatedChromeBridgeToolRequest>
+          const request = jsonParse(messageBytes.toString('utf-8'))
           if (
-            typeof request.request_id !== 'string' ||
-            request.request_id.length === 0 ||
+            !isAuthenticatedChromeBridgeRequest(request) ||
             request.auth_token !== this.endpoint?.token ||
-            request.method !== 'execute_tool' ||
-            !request.params ||
-            typeof request.params.tool !== 'string' ||
-            !isImplementedChromeToolName(request.params.tool)
+            (request.method === 'dom_snapshot' &&
+              request.params.profileId !== this.endpoint?.profileId)
           ) {
-            log(`Rejecting invalid tool request from MCP client ${clientId}`)
+            log(`Rejecting invalid bridge request from MCP client ${clientId}`)
             socket.destroy()
             return
           }
@@ -466,8 +461,14 @@ export class ChromeNativeHost {
 
           // Forward to Chrome
           const nativeRequest = jsonStringify({
-            type: 'tool_request',
+            type:
+              request.method === 'execute_tool'
+                ? 'tool_request'
+                : 'bridge_request',
             request_id: request.request_id,
+            ...('protocol_version' in request
+              ? { protocol_version: request.protocol_version }
+              : {}),
             method: request.method,
             params: request.params,
           })
@@ -482,7 +483,7 @@ export class ChromeNativeHost {
                 content: [
                   {
                     type: 'text',
-                    text: `Chrome tool request exceeds the ${MAX_CHROME_BRIDGE_MESSAGE_BYTES}-byte bridge limit.`,
+                    text: `Chrome bridge request exceeds the ${MAX_CHROME_BRIDGE_MESSAGE_BYTES}-byte limit.`,
                   },
                 ],
               },

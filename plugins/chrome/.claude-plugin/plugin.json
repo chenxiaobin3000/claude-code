@@ -12,6 +12,11 @@
       "type": "stdio",
       "command": "bun",
       "args": ["${CLAUDE_PLUGIN_ROOT}/host/entry.ts", "mcp"]
+    },
+    "chrome-dom": {
+      "type": "stdio",
+      "command": "bun",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/host/entry.ts", "dom-mcp"]
     }
   }
 }

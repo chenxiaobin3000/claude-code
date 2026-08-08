@@ -51,10 +51,21 @@ if (
   !mcpSpec ||
   typeof mcpSpec === 'string' ||
   Array.isArray(mcpSpec) ||
-  !('claude-in-chrome' in mcpSpec)
+  !('claude-in-chrome' in mcpSpec) ||
+  !('chrome-dom' in mcpSpec)
 ) {
   throw new Error(
     '[chrome-distribution] distributable MCP declaration is missing',
+  )
+}
+const domServer = mcpSpec['chrome-dom']
+if (
+  domServer.type !== 'stdio' ||
+  domServer.command !== `\${CLAUDE_PLUGIN_ROOT}/${hostFilename}` ||
+  JSON.stringify(domServer.args) !== JSON.stringify(['dom-mcp'])
+) {
+  throw new Error(
+    '[chrome-distribution] distributable DOM MCP still depends on a source runtime',
   )
 }
 const server = mcpSpec['claude-in-chrome']
@@ -88,11 +99,15 @@ const scopedServers = await extractMcpServersFromPlugins(
   await rm(pluginCache, { recursive: true, force: true })
 })
 const scoped = scopedServers['plugin:chrome:claude-in-chrome']
+const scopedDom = scopedServers['plugin:chrome:chrome-dom']
 if (
   errors.length > 0 ||
-  Object.keys(rawServers ?? {}).join(',') !== 'claude-in-chrome' ||
+  Object.keys(rawServers ?? {}).join(',') !== 'claude-in-chrome,chrome-dom' ||
   scoped?.type !== 'stdio' ||
-  resolve(scoped.command) !== resolve(hostPath)
+  resolve(scoped.command) !== resolve(hostPath) ||
+  scopedDom?.type !== 'stdio' ||
+  resolve(scopedDom.command) !== resolve(hostPath) ||
+  scopedDom.args?.at(-1) !== 'dom-mcp'
 ) {
   throw new Error(
     `[chrome-distribution] standard Plugin lifecycle failed: ${JSON.stringify(errors)}`,

@@ -1,5 +1,8 @@
 const NATIVE_HOST = 'com.anthropic.claude_code_browser_extension'
 const MAX_BRIDGE_MESSAGE_BYTES = 1024 * 1024
+const DOM_PROTOCOL_VERSION = 1
+const MAX_DOM_SNAPSHOT_NODES = 5000
+const MAX_DOM_SNAPSHOT_BYTES = 512 * 1024
 const PROFILE_STORAGE_KEY = 'chromeProfile'
 
 let nativePort = null
@@ -141,6 +144,18 @@ function handleNativeMessage(message) {
           sendToolResponse(message.request_id, failure(errorMessage(error))),
         )
       break
+    case 'bridge_request':
+      requestQueue = requestQueue
+        .then(() => executeBridgeRequest(message))
+        .catch(error =>
+          sendBridgeResponse(message.request_id, {
+            error: {
+              code: 'DOM_SNAPSHOT_FAILED',
+              message: errorMessage(error),
+            },
+          }),
+        )
+      break
     case 'error':
       console.error('Native host error:', message.error)
       break
@@ -167,6 +182,137 @@ function sendToolResponse(requestId, response) {
     }
   }
   nativePort.postMessage(message)
+}
+
+function sendBridgeResponse(
+  requestId,
+  response,
+  outputLimit = MAX_DOM_SNAPSHOT_BYTES,
+) {
+  if (!nativePort) return
+  const effectiveLimit = Math.min(outputLimit, MAX_DOM_SNAPSHOT_BYTES)
+  let message = {
+    type: 'bridge_response',
+    protocol_version: DOM_PROTOCOL_VERSION,
+    request_id: requestId,
+    ...response,
+  }
+  if (
+    new TextEncoder().encode(JSON.stringify(message)).byteLength >
+    effectiveLimit
+  ) {
+    message = {
+      type: 'bridge_response',
+      protocol_version: DOM_PROTOCOL_VERSION,
+      request_id: requestId,
+      error: {
+        code: 'DOM_SNAPSHOT_TOO_LARGE',
+        message: `DOM snapshot exceeds the ${effectiveLimit}-byte output limit. Narrow scopeSelector or lower maxNodes.`,
+        limitBytes: effectiveLimit,
+      },
+    }
+  }
+  nativePort.postMessage(message)
+}
+
+function isValidDomSnapshotParams(params) {
+  const include = params?.include
+  return (
+    typeof params?.profileId === 'string' &&
+    params.profileId.length >= 1 &&
+    params.profileId.length <= 128 &&
+    Number.isSafeInteger(params.tabId) &&
+    params.tabId >= 0 &&
+    typeof params.scopeSelector === 'string' &&
+    params.scopeSelector.length >= 1 &&
+    params.scopeSelector.length <= 2048 &&
+    include &&
+    typeof include.tables === 'boolean' &&
+    typeof include.lists === 'boolean' &&
+    typeof include.links === 'boolean' &&
+    typeof include.forms === 'boolean' &&
+    typeof params.visibleOnly === 'boolean' &&
+    Number.isInteger(params.maxNodes) &&
+    params.maxNodes >= 1 &&
+    params.maxNodes <= MAX_DOM_SNAPSHOT_NODES &&
+    Number.isInteger(params.maxBytes) &&
+    params.maxBytes >= 1024 &&
+    params.maxBytes <= MAX_DOM_SNAPSHOT_BYTES &&
+    (params.metadataOnly === undefined ||
+      typeof params.metadataOnly === 'boolean') &&
+    (params.matchSelectors === undefined ||
+      (typeof params.matchSelectors === 'object' &&
+        params.matchSelectors !== null &&
+        !Array.isArray(params.matchSelectors) &&
+        Object.keys(params.matchSelectors).length <= 32 &&
+        Object.entries(params.matchSelectors).every(
+          ([name, selector]) =>
+            /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(name) &&
+            typeof selector === 'string' &&
+            selector.length >= 1 &&
+            selector.length <= 2048 &&
+            !/\p{Cc}/u.test(selector) &&
+            !/:has\s*\(|:host(?:-context)?\s*\(|::part\s*\(/i.test(selector),
+        )))
+  )
+}
+
+async function executeBridgeRequest(message) {
+  if (
+    typeof message.request_id !== 'string' ||
+    message.request_id.length === 0
+  ) {
+    console.error('Native bridge request is missing request_id')
+    return
+  }
+  if (
+    message.protocol_version !== DOM_PROTOCOL_VERSION ||
+    message.method !== 'dom_snapshot'
+  ) {
+    sendBridgeResponse(message.request_id, {
+      error: {
+        code: 'UNSUPPORTED_BRIDGE_METHOD',
+        message: `Unsupported native bridge method or protocol version: ${message.method}`,
+      },
+    })
+    return
+  }
+  if (!isValidDomSnapshotParams(message.params)) {
+    sendBridgeResponse(message.request_id, {
+      error: {
+        code: 'INVALID_DOM_SNAPSHOT_REQUEST',
+        message: 'DOM snapshot parameters failed validation.',
+      },
+    })
+    return
+  }
+  if (message.params.profileId !== profileIdentity?.profileId) {
+    sendBridgeResponse(message.request_id, {
+      error: {
+        code: 'CHROME_PROFILE_MISMATCH',
+        message: 'DOM snapshot request does not match this Chrome profile.',
+      },
+    })
+    return
+  }
+  try {
+    const result = await sendPageMessage(
+      message.params.tabId,
+      'dom_snapshot',
+      message.params,
+    )
+    sendBridgeResponse(message.request_id, { result }, message.params.maxBytes)
+  } catch (error) {
+    sendBridgeResponse(message.request_id, {
+      error: {
+        code:
+          error && typeof error.code === 'string'
+            ? error.code
+            : 'DOM_SNAPSHOT_FAILED',
+        message: errorMessage(error),
+      },
+    })
+  }
 }
 
 async function executeToolRequest(message) {
@@ -227,13 +373,28 @@ async function sendPageMessage(tabId, action, args = {}) {
       args,
     })
     if (!response?.ok) {
-      throw new Error(response?.error || `Page action "${action}" failed.`)
+      const pageError = response?.error
+      const error = new Error(
+        typeof pageError === 'object' &&
+        typeof pageError?.message === 'string'
+          ? pageError.message
+          : typeof pageError === 'string'
+            ? pageError
+            : `Page action "${action}" failed.`,
+      )
+      error.code =
+        typeof pageError === 'object' && typeof pageError?.code === 'string'
+          ? pageError.code
+          : 'PAGE_ACTION_FAILED'
+      throw error
     }
     return response.result
   } catch (error) {
-    throw new Error(
+    const wrapped = new Error(
       `Cannot access tab ${tabId}. Reload the page after installing the extension. ${errorMessage(error)}`,
     )
+    if (error && typeof error.code === 'string') wrapped.code = error.code
+    throw wrapped
   }
 }
 

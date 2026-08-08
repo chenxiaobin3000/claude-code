@@ -156,14 +156,14 @@
 
 ### P1：Chrome DOM 结构化抓取链路
 
-- [ ] 在现有 `plugins/chrome` 内新增第二个本地 MCP Server `chrome-dom`，由 `chrome-host dom-mcp` 启动；它与现有 `claude-in-chrome` MCP 并列，复用 Socket 端点发现、连接池、Token、Chrome Profile、Tab 路由和 standalone 分发能力，不允许 MCP 调用另一个 MCP，也不改变现有 11 个 Chrome 工具的名称和行为。
-- [ ] 在扩展桥接协议中增加版本化、只读的内部方法 `dom_snapshot`，并将内部桥接方法注册表与现有公开工具注册表分开。请求必须显式携带 `profileId`、`tabId`、作用域 Selector、内容类型、`visibleOnly`、`maxNodes` 和 `maxBytes`；响应必须携带 `profileId`、`tabId`、URL、Title、`documentId`、抓取时间、内容哈希以及明确的 `partial`/`partialReasons`。
-- [ ] `dom_snapshot` 只返回经过清洗的规范化 DOM Snapshot，不返回整页原始 HTML。保留节点层级、Tag、Role、可见文本、ARIA、允许的 `data-*`、链接、可见性、Bounds、表格行列关系、列表关系和短生命周期 Ref；排除 Script、Style、事件处理器、页面全局变量、Cookie、Local/Session Storage、IndexedDB、密码字段、Token、Authorization 和隐藏敏感值，不提供任意 JavaScript 执行入口。
-- [ ] 为节点数、桥接消息和 MCP 输出设置固定上限；超过上限时必须通过分页 Cursor 或结构化超限错误返回，不得静默截断。Cursor 必须绑定 `profileId + tabId + documentId + contentHash`，页面导航或内容版本变化后立即失效。
-- [ ] 在 `plugins/chrome/dom` 抽出可独立验证的 Snapshot Schema、清洗、表格解析、列表解析、Selector 和分页纯函数。表格解析须覆盖多级表头、无表头、`rowspan`/`colspan`、空值、重复列名和 Unicode；金融数字默认保留原始字符串，不擅自转换为浮点数。
-- [ ] `chrome-dom` 首期只公开四个只读工具：`dom_inspect` 返回页面结构摘要，`dom_extract_table` 按 Selector、列别名和最大行数返回结构化行，`dom_extract_list` 按条目及字段 Selector 返回结构化列表，`dom_wait` 按 Selector、状态、静默窗口和超时等待 SPA 稳定。存在多个 Chrome Profile 时必须显式选择，禁止自动回退到其他 Profile 或 Tab。
-- [ ] 动态页面采用“读取—滚动—等待—继续读取”的显式流程处理虚拟列表；支持 Open Shadow Root，并对 Closed Shadow Root 返回明确的不完整原因；同源 Iframe 可读取，跨源 Iframe 明确标记为不可读取。Canvas、WebGL、图片和纯视觉布局不伪装成 DOM 数据，交由现有截图加多模态模型链路处理。
-- [ ] DOM 与视觉识别保持两条独立链路：表格、列表和文章优先使用 DOM，Canvas、图片和视觉位置使用截图；需要交叉核验时分别保留 `domValue`、`visualValue` 和一致性结论，不静默合并冲突结果。本能力只负责读取与解析，不执行点击、输入、导航、交易或跨 Profile 操作。
+- [x] 第一阶段已在现有 `plugins/chrome` 内新增第二个本地 MCP Server `chrome-dom`，由 `chrome-host dom-mcp` 启动；它与现有 `claude-in-chrome` MCP 并列，直接复用 Socket 端点发现、连接池、Token、Chrome Profile、Tab 路由和 standalone 分发能力，不进行 MCP 嵌套调用，也未改变现有 11 个 Chrome 工具的名称和行为。独立 Server 的生命周期、作用域和 standalone 分发边界已由轻量验证固化。
+- [x] 第二阶段已在扩展桥接协议中增加版本化、只读的内部方法 `dom_snapshot`，使用独立的 `bridge_request`/`bridge_response` 信封，并将内部桥接方法注册表与现有 11 个公开工具注册表分开。请求强制校验 `profileId`、`tabId`、作用域 Selector、内容类型、`visibleOnly`、`maxNodes` 和 `maxBytes`；响应固定携带 `profileId`、`tabId`、URL、Title、`documentId`、抓取时间、内容哈希以及明确的 `partial`/`partialReasons`，并由第三阶段的清洗器填充规范化节点内容。
+- [x] 第三阶段已让 `dom_snapshot` 返回经过清洗的规范化 DOM Snapshot，不返回整页原始 HTML。结果使用单次 Snapshot 内有效的 `node_*` Ref、`parentId`/`childIds` 和根节点列表保留层级，并包含 Tag、Role、直接可见文本、限定 ARIA、白名单 `data-*`、脱敏 HTTP(S) 链接、可见性、Bounds、表格行列及列表关系。扩展在页面隔离世界中排除 Script、Style、事件处理器、页面全局变量、Cookie、Local/Session Storage、IndexedDB、密码/隐藏/疑似凭据字段、Token、Authorization、URL 凭据和敏感查询参数；不读取表单 Value，也不增加任意 JavaScript 入口。节点或字节超限返回结构化错误，无法读取的嵌套边界和视觉内容通过 `partialReasons` 明确报告。
+- [x] 第二至第四阶段已分别固定 5,000 节点、1 MiB 桥接消息和 512 KiB Snapshot/MCP 输出上限；超过上限时返回带错误码及实际/限制字节数的结构化错误，不静默截断。HMAC 分页 Cursor 已绑定 `profileId + tabId + documentId + contentHash + offset`，签名篡改、页面导航、文档重载或内容版本变化后立即失效。
+- [x] 第四阶段已在 `plugins/chrome/dom` 抽出可独立验证的 Snapshot Schema/索引、文本清洗、表格解析、列表解析、Selector 约束和 HMAC 分页 Cursor 纯函数。表格解析覆盖多级表头、无表头、`rowspan`/`colspan`、空值、重复列名、列别名、行数上限和 Unicode；金融数字始终保留原始字符串，不转换为浮点数。分页 Cursor 固定绑定 `profileId + tabId + documentId + contentHash + offset`，签名篡改或页面版本变化时安全拒绝。
+- [x] 第五阶段已让 `chrome-dom` 只公开四个带只读/非破坏性声明的工具：`dom_inspect` 返回页面结构摘要，`dom_extract_table` 按 Selector、列别名和最大行数返回结构化字符串行，`dom_extract_list` 通过受限的条目及命名字段 Selector 返回结构化列表，`dom_wait` 按 `exists`/`not_exists`/`stable`、静默窗口和最长 25 秒超时等待 SPA 状态。四个工具都强制显式传入 `profileId` 和 `tabId`，禁止自动回退到其他 Profile 或 Tab；Selector 只在扩展隔离世界中转为不含原始 Selector 的短期匹配标记，不读取原始 HTML 或执行页面脚本。
+- [x] 第六阶段已为动态页面固化“读取—外部滚动—`dom_wait stable`—重新读取”的显式流程：`dom_extract_list` 使用绑定 Profile、Tab、文档和清洗后内容哈希的 HMAC Cursor 分页，不调用浏览器控制工具，不在内容变化后复用旧 Cursor；Snapshot 返回滚动容器指标并提示虚拟列表需要外部翻页。Open Shadow Root 会保留 `shadow-root` 树作用域，同源 Iframe 会按 Frame 深度并入清洗结果；Closed Shadow 边界和跨源 Iframe 分别标记 `closed_shadow_root_unavailable`、`cross_origin_iframe_unavailable`。Canvas、SVG、图片、视频和纯视觉布局不伪装成 DOM 数据。
+- [x] 第七阶段已固化 DOM 与视觉识别的双链路边界：四个 DOM 工具统一返回只读 DOM 来源信息及视觉回退说明，绝不自动截图、滚动、点击、输入、导航、交易或跨 Profile 操作；Canvas、图片和视觉位置继续由现有截图加多模态链路处理。需要交叉核验时使用纯函数分别保留 `domValue`、`visualValue` 和 `consistent`，禁止生成静默合并值；固定 Fixture 同时验证 DOM MCP 不调用浏览器控制工具。
 - [ ] 在 `scripts/validation` 增加不依赖测试框架的固定 Fixture，覆盖表格跨行跨列、无表头、嵌套列表、Unicode、SPA 稳定等待、虚拟列表分页、Shadow DOM、Iframe、敏感字段脱敏、节点/字节上限、过期 Cursor、文档变化、多 Profile 路由、畸形消息和 standalone Host EOF；同时验证现有 11 个 Chrome 工具未增加、删除或改变语义。
 - [ ] 增加真实 Chrome 本地 Fixture 端到端验收，覆盖扩展连接、指定 Profile/Tab、结构化表格和列表提取、动态内容更新、超限恢复、跨源拒绝及连接重建；插件未加载时不得在主程序中宣传或暴露 `chrome-dom` 工具。
 

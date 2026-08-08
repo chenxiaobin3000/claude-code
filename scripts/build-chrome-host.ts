@@ -91,6 +91,11 @@ sourceManifest.mcpServers = {
     command: `\${CLAUDE_PLUGIN_ROOT}/${hostFilename}`,
     args: ['mcp'],
   },
+  'chrome-dom': {
+    type: 'stdio',
+    command: `\${CLAUDE_PLUGIN_ROOT}/${hostFilename}`,
+    args: ['dom-mcp'],
+  },
 }
 await mkdir(join(outputDirectory, '.claude-plugin'), { recursive: true })
 await writeFile(

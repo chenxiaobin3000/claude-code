@@ -14,6 +14,11 @@ import { parseFrontmatter } from '../../src/utils/frontmatterParser.js'
 import { parseSlashCommandToolsFromFrontmatter } from '../../src/utils/markdownConfigLoader.js'
 import { buildMcpToolName } from '../../src/services/mcp/mcpStringUtils.js'
 import { IMPLEMENTED_CHROME_TOOL_NAMES } from '../../plugins/chrome/protocol/index.js'
+import { createChromeDomMcpServer } from '../../plugins/chrome/dom/index.js'
+import { IMPLEMENTED_CHROME_DOM_TOOL_NAMES } from '../../plugins/chrome/dom/tools.js'
+import type { SocketClient } from '../../plugins/chrome/mcp/types.js'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 
 const root = resolve(import.meta.dir, '../..')
 const pluginRoot = join(root, 'plugins', 'chrome')
@@ -29,11 +34,13 @@ const expectedExtensionId = 'dlpofjonbnceelbmpelkfblmnghclmkm'
 for (const path of [
   manifestPath,
   extensionManifestPath,
+  join(pluginRoot, 'chrome-extension', 'dom-snapshot.js'),
   join(pluginRoot, 'README.md'),
   join(pluginRoot, 'mcp', 'README.md'),
   join(pluginRoot, 'skills', 'claude-in-chrome', 'SKILL.md'),
   join(pluginRoot, 'protocol', 'index.ts'),
   join(pluginRoot, 'host', 'entry.ts'),
+  join(pluginRoot, 'host', 'domMcpServer.ts'),
   join(pluginRoot, 'host', 'mcpServer.ts'),
   join(pluginRoot, 'host', 'nativeHost.ts'),
   join(pluginRoot, 'host', 'paths.ts'),
@@ -41,6 +48,8 @@ for (const path of [
   join(pluginRoot, 'mcp', 'index.ts'),
   join(pluginRoot, 'mcp', 'mcpServer.ts'),
   join(pluginRoot, 'mcp', 'mcpSocketClient.ts'),
+  join(pluginRoot, 'dom', 'index.ts'),
+  join(pluginRoot, 'dom', 'mcpServer.ts'),
 ]) {
   await access(path)
 }
@@ -72,10 +81,22 @@ if (
   !mcpSpec ||
   typeof mcpSpec === 'string' ||
   Array.isArray(mcpSpec) ||
-  !('claude-in-chrome' in mcpSpec)
+  !('claude-in-chrome' in mcpSpec) ||
+  !('chrome-dom' in mcpSpec)
 ) {
   throw new Error(
-    '[chrome-plugin-boundary] standard claude-in-chrome MCP server is missing',
+    '[chrome-plugin-boundary] required Chrome MCP servers are missing',
+  )
+}
+const declaredDomServer = mcpSpec['chrome-dom']
+if (
+  declaredDomServer.type !== 'stdio' ||
+  declaredDomServer.command !== 'bun' ||
+  !declaredDomServer.args.includes(sourceHostArgument) ||
+  declaredDomServer.args.at(-1) !== 'dom-mcp'
+) {
+  throw new Error(
+    '[chrome-plugin-boundary] source DOM MCP entry is not the local Host development entry',
   )
 }
 const declaredServer = mcpSpec['claude-in-chrome']
@@ -110,7 +131,7 @@ const loadErrors: Parameters<typeof loadPluginMcpServers>[1] = []
 const rawServers = await loadPluginMcpServers(loaded.plugin, loadErrors)
 if (
   loadErrors.length > 0 ||
-  Object.keys(rawServers ?? {}).join(',') !== 'claude-in-chrome'
+  Object.keys(rawServers ?? {}).join(',') !== 'claude-in-chrome,chrome-dom'
 ) {
   throw new Error(
     `[chrome-plugin-boundary] plugin MCP load failed: ${JSON.stringify(loadErrors)}`,
@@ -128,6 +149,7 @@ const scopedServers = await extractMcpServersFromPlugins(
   await rm(pluginCache, { recursive: true, force: true })
 })
 const scopedServer = scopedServers['plugin:chrome:claude-in-chrome']
+const scopedDomServer = scopedServers['plugin:chrome:chrome-dom']
 if (
   !scopedServer ||
   scopedServer.type !== 'stdio' ||
@@ -136,6 +158,17 @@ if (
 ) {
   throw new Error(
     '[chrome-plugin-boundary] plugin MCP environment was not resolved inside the plugin root',
+  )
+}
+if (
+  !scopedDomServer ||
+  scopedDomServer.type !== 'stdio' ||
+  resolve(scopedDomServer.args?.[0] ?? '') !==
+    resolve(pluginRoot, 'host', 'entry.ts') ||
+  scopedDomServer.args?.at(-1) !== 'dom-mcp'
+) {
+  throw new Error(
+    '[chrome-plugin-boundary] DOM MCP environment was not resolved inside the plugin root',
   )
 }
 const skillSource = await readFile(
@@ -352,6 +385,64 @@ for (const marker of [
       `[chrome-plugin-boundary] profile-local identity storage is missing: ${marker}`,
     )
   }
+}
+
+const validationSocket: SocketClient = {
+  ensureConnected: async () => false,
+  callTool: async () => {
+    throw new Error('phase-one DOM MCP must not call Chrome tools')
+  },
+  callBridgeMethod: async () => {
+    throw new Error('DOM MCP boundary listing must not call the Chrome bridge')
+  },
+  isConnected: () => false,
+  disconnect: () => {},
+  setNotificationHandler: () => {},
+}
+const domMcp = createChromeDomMcpServer(
+  {
+    serverName: 'chrome-dom',
+    logger: {
+      silly: () => {},
+      debug: () => {},
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+    },
+    clientTypeId: 'claude-code',
+    onAuthenticationError: () => {},
+    onToolCallDisconnected: () => 'disconnected',
+  },
+  validationSocket,
+)
+const domClient = new Client({
+  name: 'chrome-dom-boundary-validation',
+  version: '1.0.0',
+})
+const [domClientTransport, domServerTransport] =
+  InMemoryTransport.createLinkedPair()
+await Promise.all([
+  domMcp.server.connect(domServerTransport),
+  domClient.connect(domClientTransport),
+])
+try {
+  const tools = await domClient.listTools()
+  if (
+    JSON.stringify(tools.tools.map(tool => tool.name)) !==
+      JSON.stringify(IMPLEMENTED_CHROME_DOM_TOOL_NAMES) ||
+    tools.tools.some(
+      tool =>
+        tool.annotations?.readOnlyHint !== true ||
+        tool.annotations?.destructiveHint !== false,
+    )
+  ) {
+    throw new Error(
+      '[chrome-plugin-boundary] Chrome DOM MCP tool surface or read-only annotations changed',
+    )
+  }
+} finally {
+  await domClient.close()
+  await domMcp.server.close()
 }
 
 console.log('[chrome-plugin-boundary] PASS')

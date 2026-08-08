@@ -7,7 +7,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { format } from 'node:util'
 import { getAvailableSocketEndpoints } from './paths.js'
 
-class StderrLogger implements Logger {
+export class StderrLogger implements Logger {
   silly(message: string, detail?: LoggerDetail): void {
     this.write('debug', message, detail)
   }

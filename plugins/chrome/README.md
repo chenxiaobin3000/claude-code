@@ -14,7 +14,8 @@ Chrome 操作；生产 standalone 从 `claude.exe` 同级 `plugins` 下的一级
 - `chrome-extension/`：Manifest V3 扩展实现已经完成并位于插件目录，固定扩展 ID
   为 `dlpofjonbnceelbmpelkfblmnghclmkm`；已实现标签页、导航、页面读取与交互、
   截图和窗口缩放等浏览器端能力。
-- `.claude-plugin/plugin.json`：已声明标准本地 stdio MCP；源码目录可通过
+- `.claude-plugin/plugin.json`：已声明现有浏览器控制 MCP 与独立的只读
+  `chrome-dom` stdio MCP；源码目录可通过
   `--plugin-dir plugins/chrome` 开发加载；生产分发目录由 standalone 自动
   发现，无需传该参数。
 - `protocol/`：已经固定扩展实际实现的 11 个工具、Native Host 名称、1 MiB
@@ -24,6 +25,20 @@ Chrome 操作；生产 standalone 从 `claude.exe` 同级 `plugins` 下的一级
   Windows 分发产物位于 `dist/plugins/chrome`。
 - `mcp/`：MCP 引擎、11 个工具声明、TCP Socket 生命周期和多实例端点池均已归入
   插件，不依赖旧 workspace 包或主程序 Chrome 实现。
+- `dom/`：`chrome-dom` MCP 的独立入口已经建立，并复用现有端点发现、鉴权、
+  Profile 和 Tab 路由基础设施；版本 1 的只读 `dom_snapshot` 已通过独立内部桥接
+  信封连通 Host 与扩展，并强制 Profile、Tab、Selector、节点数和字节上限。当前
+  页面端已返回经过清洗的规范化 DOM 节点、层级、ARIA、允许的 Data 属性、链接、
+  Bounds、表格及列表关系；密码、隐藏凭据、表单 Value、脚本、存储和敏感 URL
+  参数不会进入结果，超限或暂不支持的嵌套内容会明确报错或标记不完整。该目录
+  同时提供独立 Snapshot Schema/索引、表格与列表解析、Selector 约束和绑定
+  Profile、Tab、文档版本及清洗内容哈希的签名分页 Cursor，并由独立 `chrome-dom` MCP 公开
+  `dom_inspect`、`dom_extract_table`、`dom_extract_list` 和 `dom_wait` 四个只读工具。
+  所有调用必须显式提供 Profile 与 Tab，不自动选择或跨账户回退。Open Shadow Root
+  和同源 Iframe 会进入同一份清洗快照；Closed Shadow 边界、跨源 Iframe 和视觉内容
+  会明确标记不完整。虚拟列表必须由现有浏览器控制链路显式滚动后等待并重新读取，
+  DOM MCP 不会主动滚动。DOM 与截图/多模态结果始终保留独立来源，不静默合并，
+  DOM 工具也不会执行点击、输入、导航或交易。
 - `skills/claude-in-chrome/`：标准 Plugin Skill 已建立，仅随插件加载。
 
 标准 Plugin MCP/Skill 生命周期、独立分发结构、真实 Chrome 连接、授权、Host
@@ -49,6 +64,7 @@ Domain Socket。这个结构允许多个 Chrome 个人资料分别启动 Host �
 
 ```powershell
 bun run build:chrome-host
+.\dist\plugins\chrome\chrome-host.exe dom-mcp
 .\dist\plugins\chrome\chrome-host.exe register
 .\dist\plugins\chrome\chrome-host.exe doctor
 .\dist\plugins\chrome\chrome-host.exe unregister

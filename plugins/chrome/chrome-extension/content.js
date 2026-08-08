@@ -12,6 +12,43 @@ const INTERACTIVE_SELECTOR = [
   '[tabindex]',
 ].join(',')
 let nextRefId = 1
+const domDocumentId = crypto.randomUUID()
+let domDocumentRevision = 0
+new MutationObserver(() => {
+  domDocumentRevision++
+}).observe(document.documentElement, {
+  attributes: true,
+  childList: true,
+  characterData: true,
+  subtree: true,
+})
+
+function domContentHash() {
+  const input = `${domDocumentId}\u0000${domDocumentRevision}\u0000${location.href}\u0000${document.title}`
+  let hash = 2166136261
+  for (let index = 0; index < input.length; index++) {
+    hash ^= input.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return `fnv1a32:${(hash >>> 0).toString(16).padStart(8, '0')}`
+}
+
+function domSnapshot(args) {
+  const snapshot = globalThis.__CLAUDE_CHROME_DOM_SNAPSHOT__
+  if (!snapshot || typeof snapshot.create !== 'function') {
+    throw new Error('DOM snapshot sanitizer is unavailable.')
+  }
+  return snapshot.create(args, {
+    schemaVersion: 1,
+    profileId: args.profileId,
+    tabId: args.tabId,
+    url: location.href,
+    title: document.title,
+    documentId: domDocumentId,
+    capturedAt: new Date().toISOString(),
+    contentHash: domContentHash(),
+  })
+}
 
 function visible(element) {
   const style = getComputedStyle(element)
@@ -298,13 +335,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         0,
         100000,
       )
+    } else if (message.action === 'dom_snapshot') {
+      result = domSnapshot(message.args)
     } else if (message.action === 'computer') result = runComputer(message.args)
     else throw new Error(`Unsupported page action: ${message.action}`)
     sendResponse({ ok: true, result })
   } catch (error) {
     sendResponse({
       ok: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: {
+        code:
+          error && typeof error.code === 'string'
+            ? error.code
+            : 'PAGE_ACTION_FAILED',
+        message: error instanceof Error ? error.message : String(error),
+      },
     })
   }
 })
