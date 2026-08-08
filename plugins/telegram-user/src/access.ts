@@ -7,6 +7,19 @@ export function isTelegramUserRouteAllowed(alias: string, route: TelegramUserRou
   if (route.accountAlias !== alias) return false
   return loadTelegramUserAccess(alias).allowPeers.some(entry => entry.peerType === route.peerType && entry.peerId === route.peerId && (entry.topicId === undefined || entry.topicId === route.topicId) && (!entry.allowSenders?.length || entry.allowSenders.includes(senderId)))
 }
+export function isTelegramUserHistoryAllowed(
+  alias: string,
+  peerType: TelegramUserPeerType,
+  peerId: string,
+): boolean {
+  return loadTelegramUserAccess(alias).allowPeers.some(
+    entry =>
+      entry.peerType === peerType &&
+      entry.peerId === peerId &&
+      entry.topicId === undefined &&
+      !entry.allowSenders?.length,
+  )
+}
 export function setTelegramUserRouteAllowed(alias: string, entry: TelegramUserAccessEntry, allowed: boolean): void {
   if (!['user', 'group', 'channel'].includes(entry.peerType) || !/^-?\d+$/.test(entry.peerId)) throw new Error('Invalid Telegram Peer allowlist entry.')
   if (entry.topicId !== undefined && (!Number.isSafeInteger(entry.topicId) || entry.topicId <= 0)) throw new Error('Invalid Telegram Topic allowlist entry.')
@@ -16,4 +29,3 @@ export function setTelegramUserRouteAllowed(alias: string, entry: TelegramUserAc
   if (allowed) config.allowPeers.push({ ...entry, allowSenders: entry.allowSenders?.slice().sort() })
   saveTelegramUserState(alias, 'access.json', config)
 }
-

@@ -5,6 +5,7 @@ import { EditedMessage } from 'telegram/events/EditedMessage.js'
 import { Logger, LogLevel } from 'telegram/extensions/Logger.js'
 import { StringSession } from 'telegram/sessions'
 import type { TelegramUserAccountConfig, TelegramUserCredentials } from './config.js'
+import { isTelegramUserHistoryAllowed } from './access.js'
 import {
   loadTelegramUserSession,
   resolveTelegramUserProxyUrl,
@@ -31,6 +32,10 @@ export interface TelegramUserDialogTransport {
   connect(): Promise<unknown>
   checkAuthorization(): Promise<boolean>
   getDialogs(params?: Record<string, never>): Promise<readonly TelegramUserDialogLike[]>
+  getMessages(
+    entity: EntityLike,
+    params: { limit: number },
+  ): Promise<readonly TelegramUserHistorySource[]>
   disconnect(): Promise<void>
 }
 export interface TelegramUserDialogLike {
@@ -39,11 +44,27 @@ export interface TelegramUserDialogLike {
   title?: string
   isGroup: boolean
   isChannel: boolean
+  isUser?: boolean
+  inputEntity?: EntityLike
 }
 export interface TelegramUserGroup {
   type: 'group' | 'supergroup' | 'channel'
   id: string
   name: string
+}
+export interface TelegramUserHistoryMessage {
+  messageId: number
+  date: string
+  senderId?: string
+  text: string
+  hasMedia: boolean
+}
+export interface TelegramUserHistorySource {
+  id: number
+  date: number
+  senderId?: { toString(): string }
+  message?: string
+  media?: unknown
 }
 // GramJS consumes a request attempt when Telegram redirects login to the
 // account's data center. Keep enough attempts for that internal migration and
@@ -107,6 +128,55 @@ export async function listTelegramUserGroups(
     if (!(await client.checkAuthorization()))
       throw new Error('Telegram user session is not authorized; run account login.')
     return selectTelegramUserGroups(await client.getDialogs({}))
+  } catch (error) {
+    throw new Error(classifyTelegramUserError(error))
+  } finally {
+    await client.disconnect().catch(() => undefined)
+  }
+}
+
+export function selectTelegramUserHistory(
+  messages: readonly TelegramUserHistorySource[],
+): TelegramUserHistoryMessage[] {
+  return messages.map(message => ({
+    messageId: message.id,
+    date: new Date(message.date * 1000).toISOString(),
+    ...(message.senderId ? { senderId: message.senderId.toString() } : {}),
+    text: message.message ?? '',
+    hasMedia: Boolean(message.media),
+  }))
+}
+
+export async function listTelegramUserHistory(
+  account: TelegramUserAccountConfig,
+  credentials: TelegramUserCredentials,
+  peerType: TelegramUserPeerType,
+  peerId: string,
+  limit: number,
+  factory: (
+    credentials: Pick<TelegramUserCredentials, 'apiId' | 'apiHash'>,
+    session: string,
+  ) => TelegramUserDialogTransport = createGramJsClient,
+): Promise<TelegramUserHistoryMessage[]> {
+  if (!isTelegramUserHistoryAllowed(account.alias, peerType, peerId))
+    throw new Error(
+      'Telegram history target is not in the unrestricted peer allowlist.',
+    )
+  const client = factory(credentials, loadTelegramUserSession(account.alias))
+  try {
+    await client.connect()
+    if (!(await client.checkAuthorization()))
+      throw new Error('Telegram user session is not authorized; run account login.')
+    const dialog = (await client.getDialogs({})).find(candidate => {
+      if (candidate.id?.toString() !== peerId) return false
+      if (peerType === 'user') return candidate.isUser
+      if (peerType === 'group') return candidate.isGroup
+      return candidate.isChannel && !candidate.isGroup
+    })
+    if (!dialog?.inputEntity)
+      throw new Error('Telegram history target is not available to this account.')
+    const messages = await client.getMessages(dialog.inputEntity, { limit })
+    return selectTelegramUserHistory([...messages].reverse())
   } catch (error) {
     throw new Error(classifyTelegramUserError(error))
   } finally {

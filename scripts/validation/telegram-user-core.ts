@@ -2,8 +2,8 @@
 import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { isTelegramUserRouteAllowed, loadTelegramUserAccess, setTelegramUserRouteAllowed } from '../../plugins/telegram-user/src/access.js'
-import { classifyTelegramUserError, createGramJsClient, loginTelegramUserAccount, selectTelegramUserGroups, type TelegramUserLoginTransport } from '../../plugins/telegram-user/src/client.js'
+import { isTelegramUserHistoryAllowed, isTelegramUserRouteAllowed, loadTelegramUserAccess, setTelegramUserRouteAllowed } from '../../plugins/telegram-user/src/access.js'
+import { classifyTelegramUserError, createGramJsClient, listTelegramUserHistory, loginTelegramUserAccount, selectTelegramUserGroups, selectTelegramUserHistory, type TelegramUserDialogTransport, type TelegramUserLoginTransport } from '../../plugins/telegram-user/src/client.js'
 import { listTelegramUserAccounts, loadTelegramUserSession, resolveTelegramUserCredentials, saveTelegramUserAccount, saveTelegramUserSession } from '../../plugins/telegram-user/src/config.js'
 import { rememberTelegramUserSentMessage, rememberTelegramUserUpdate } from '../../plugins/telegram-user/src/dedupe.js'
 import { acquireTelegramUserLease } from '../../plugins/telegram-user/src/lease.js'
@@ -32,6 +32,13 @@ try {
     { type: 'supergroup', id: '-10020', name: 'Super Group' },
     { type: 'channel', id: '-10030', name: 'News' },
   ], 'group dialog classification and safe tabular names')
+  assertDeepEqual(selectTelegramUserHistory([
+    { id: 7, date: 1_700_000_000, senderId: { toString: () => '300' }, message: 'hello' },
+    { id: 8, date: 1_700_000_001, message: '', media: {} },
+  ]), [
+    { messageId: 7, date: '2023-11-14T22:13:20.000Z', senderId: '300', text: 'hello', hasMedia: false },
+    { messageId: 8, date: '2023-11-14T22:13:21.000Z', text: '', hasMedia: true },
+  ], 'history projection contains bounded metadata without media payloads')
   saveTelegramUserSession('alpha', 'alpha-session'); saveTelegramUserSession('beta', 'beta-session'); assertEqual(loadTelegramUserSession('alpha'), 'alpha-session', 'alpha session isolated'); assertEqual(loadTelegramUserSession('beta'), 'beta-session', 'beta session isolated')
   if (process.platform !== 'win32') assertEqual(statSync(join(state, 'accounts', 'alpha', 'session.txt')).mode & 0o777, 0o600, 'private session mode')
   let observedSession = ''; let observedCode = ''; let observedPassword = ''
@@ -44,6 +51,10 @@ try {
   assertEqual(topicRoute.topicId, 42, 'topic route'); assert(!parseTelegramUserChatId('alpha::group::-200::topic::bad'), 'invalid topic rejected')
   assert(!isTelegramUserRouteAllowed('alpha', privateRoute, '100'), 'default deny'); setTelegramUserRouteAllowed('alpha', { peerType: 'user', peerId: '100', allowSenders: ['100'] }, true); assert(isTelegramUserRouteAllowed('alpha', privateRoute, '100'), 'exact Peer/sender allowed'); assert(!isTelegramUserRouteAllowed('alpha', privateRoute, '101'), 'sender isolation'); assert(!isTelegramUserRouteAllowed('beta', { ...privateRoute, accountAlias: 'beta' }, '100'), 'account access isolation')
   setTelegramUserRouteAllowed('alpha', { peerType: 'group', peerId: '-200', topicId: 42 }, true); assert(isTelegramUserRouteAllowed('alpha', topicRoute, '300'), 'topic allowed'); assert(!isTelegramUserRouteAllowed('alpha', { ...topicRoute, topicId: 43 }, '300'), 'topic isolation'); assertEqual(loadTelegramUserAccess('alpha').allowPeers.length, 2, 'allowlist persisted')
+  assert(!isTelegramUserHistoryAllowed('alpha', 'group', '-200'), 'topic-scoped rule cannot authorize whole-peer history'); setTelegramUserRouteAllowed('alpha', { peerType: 'group', peerId: '-201' }, true); assert(isTelegramUserHistoryAllowed('alpha', 'group', '-201'), 'unrestricted peer authorizes history')
+  let historyLimit = 0; let historyDisconnected = false
+  const historyFactory = (): TelegramUserDialogTransport => ({ async connect() {}, async checkAuthorization() { return true }, async getDialogs() { return [{ id: { toString: () => '-201' }, title: 'History', isGroup: true, isChannel: true, inputEntity: {} as never }] }, async getMessages(_entity, params) { historyLimit = params.limit; return [{ id: 8, date: 1_700_000_001, message: 'new' }, { id: 7, date: 1_700_000_000, message: 'old' }] }, async disconnect() { historyDisconnected = true } })
+  const history = await listTelegramUserHistory(alpha, resolveTelegramUserCredentials(alpha), 'group', '-201', 12, historyFactory); assertDeepEqual(history.map(message => message.messageId), [7, 8], 'history returned oldest to newest'); assertEqual(historyLimit, 12, 'history limit forwarded'); assert(historyDisconnected, 'history client disconnected')
   assert(rememberTelegramUserUpdate('alpha', '100:1:0', 1000), 'first update accepted'); assert(!rememberTelegramUserUpdate('alpha', '100:1:0', 1001), 'duplicate update rejected'); assert(rememberTelegramUserUpdate('beta', '100:1:0', 1001), 'update isolated by account'); rememberTelegramUserSentMessage('alpha', '100', 2, 1002); assert(!rememberTelegramUserUpdate('alpha', '100:2', 1003), 'plugin reply echo suppressed')
   clearTelegramUserPermissionStateForTests(); const chatId = formatTelegramUserChatId('alpha', 'user', '100'); setTelegramUserActiveChat('alpha', chatId, '100'); assertEqual(resolveTelegramUserActiveChat()?.accountAlias, 'alpha', 'single active target')
   const request = { request_id: 'abcde', tool_name: 'Bash', description: 'run', input_preview: 'echo ok' }; saveTelegramUserPermission(request, { accountAlias: 'alpha', chatId, senderId: '100', updatedAt: Date.now() }); assertEqual(parseTelegramUserPermissionReply('yes abcde')?.behavior, 'allow', 'permission parsing'); assert(!consumeTelegramUserPermission('beta', chatId, '100', 'abcde'), 'cross-account permission rejected'); assert(!consumeTelegramUserPermission('alpha', chatId, '101', 'abcde'), 'cross-sender permission rejected'); assertEqual(consumeTelegramUserPermission('alpha', chatId, '100', 'abcde')?.tool_name, 'Bash', 'scoped permission consumed')

@@ -9,6 +9,7 @@ telegram-user-host account add personal TELEGRAM_API_ID TELEGRAM_API_HASH TELEGR
 telegram-user-host account login personal
 telegram-user-host account groups personal
 telegram-user-host access allow personal user 123456789
+telegram-user-host account history personal group -1001234567890 20
 telegram-user-host account doctor personal
 ```
 
@@ -20,6 +21,11 @@ telegram-user-host account doctor personal
 `account groups [alias]` 使用已保存的 Session 只读列出当前账号可访问的普通群、超级群和
 频道的 Peer ID 与名称；它不读取消息历史，也不会自动修改 allowlist。取得 ID 后，使用
 `access allow <alias> group|channel <peer-id>` 显式允许接收新消息。
+
+`account history <alias> <user|group|channel> <peer-id> [limit]` 只读取已经加入无限制 Peer
+allowlist 的目标，默认返回最近 20 条、最多 100 条，并按时间从旧到新输出 JSON Lines。
+每行只包含消息 ID、UTC 时间、发送者 ID、文本和是否带媒体；命令不会下载附件。Topic
+限定或发送者限定的 allowlist 不授权读取整个 Peer 的历史。
 
 可选代理只从 Host 进程环境或用户级 `settings.json.env` 读取：
 

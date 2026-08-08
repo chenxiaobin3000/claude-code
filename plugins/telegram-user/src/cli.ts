@@ -4,6 +4,7 @@ import {
   setTelegramUserRouteAllowed,
 } from './access.js'
 import {
+  listTelegramUserHistory,
   listTelegramUserGroups,
   loginTelegramUserAccount,
   TelegramUserRuntimeClient,
@@ -22,7 +23,7 @@ import type { TelegramUserPeerType } from './types.js'
 
 function usage(): void {
   process.stdout.write(
-    'Usage:\n  telegram-user-host mcp\n  telegram-user-host proxy capabilities\n  telegram-user-host account add <alias> <api-id-env> <api-hash-env> <phone-env>\n  telegram-user-host account login [alias]\n  telegram-user-host account logout [alias]\n  telegram-user-host account remove <alias>\n  telegram-user-host account list\n  telegram-user-host account groups [alias]\n  telegram-user-host account doctor [alias]\n  telegram-user-host access allow|deny <alias> <user|group|channel> <peer-id> [topic-id]\n  telegram-user-host access list <alias>\n',
+    'Usage:\n  telegram-user-host mcp\n  telegram-user-host proxy capabilities\n  telegram-user-host account add <alias> <api-id-env> <api-hash-env> <phone-env>\n  telegram-user-host account login [alias]\n  telegram-user-host account logout [alias]\n  telegram-user-host account remove <alias>\n  telegram-user-host account list\n  telegram-user-host account groups [alias]\n  telegram-user-host account history <alias> <user|group|channel> <peer-id> [limit]\n  telegram-user-host account doctor [alias]\n  telegram-user-host access allow|deny <alias> <user|group|channel> <peer-id> [topic-id]\n  telegram-user-host access list <alias>\n',
   )
 }
 async function promptLine(label: string): Promise<string> {
@@ -148,6 +149,35 @@ export async function handleTelegramUserCli(
         groups.length
           ? `TYPE\tID\tNAME\n${groups.map(group => `${group.type}\t${group.id}\t${group.name}`).join('\n')}\n`
           : 'No Telegram groups or channels are available to this account.\n',
+      )
+      return
+    }
+    if (args[0] === 'account' && args[1] === 'history') {
+      const account = accountOrThrow(args[2])
+      const peerType = args[3]
+      const peerId = args[4]
+      if (
+        !peerId ||
+        !['user', 'group', 'channel'].includes(peerType ?? '') ||
+        !/^-?\d+$/.test(peerId)
+      )
+        throw new Error(
+          'Expected: account history <alias> <user|group|channel> <peer-id> [limit]',
+        )
+      const limit = args[5] === undefined ? 20 : Number(args[5])
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+        throw new Error('Telegram history limit must be an integer from 1 to 100.')
+      const messages = await listTelegramUserHistory(
+        account,
+        resolveTelegramUserCredentials(account),
+        peerType as 'user' | 'group' | 'channel',
+        peerId,
+        limit,
+      )
+      process.stdout.write(
+        messages.length
+          ? `${messages.map(message => JSON.stringify(message)).join('\n')}\n`
+          : 'No Telegram messages found.\n',
       )
       return
     }

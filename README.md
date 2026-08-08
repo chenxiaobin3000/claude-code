@@ -397,6 +397,7 @@ bun plugins/telegram-user/host/entry.ts account add personal TELEGRAM_API_ID TEL
 bun plugins/telegram-user/host/entry.ts account login personal
 bun plugins/telegram-user/host/entry.ts account groups personal
 bun plugins/telegram-user/host/entry.ts access allow personal user 123456789
+bun plugins/telegram-user/host/entry.ts account history personal group -1001234567890 20
 bun run dev -- --plugin-dir plugins/telegram-user --dangerously-load-development-channels plugin:telegram-user@inline
 ```
 
