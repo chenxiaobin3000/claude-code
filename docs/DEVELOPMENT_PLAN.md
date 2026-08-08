@@ -157,8 +157,8 @@
 - [ ] 提供仅监听 `127.0.0.1` 的 OpenAI 兼容网关，至少实现 `POST /v1/chat/completions`、`GET /v1/models`、`GET /health` 和 `GET /doctor`；未安装、未运行或认证失败时明确报错，不回退到其他模型或外部地址。
 - [ ] 使用本地 Bearer capability token 限制同机其他进程滥用订阅；Token 不得写入 `models.json`、日志、模型上下文或子进程参数，所有错误输出必须脱敏。
 - [ ] 将现有 Chat Completions 请求转换为官方 Codex Responses 请求，并把 Responses SSE 稳定适配回现有流事件，覆盖文本、reasoning、工具调用、并行工具、工具结果、Usage、finish reason、取消和断流；插件不得接管项目自身的 Agent 循环或工具执行。
-- [ ] 以 TypeScript 语义重写官方开源 Codex 中必要的登录能力：浏览器 OAuth、device-code、PKCE/state、回调、Token 交换/刷新/撤销，以及账号、workspace 和 plan 信息解析；提供 `setup`、`login`、`login --device-code`、`status`、`doctor`、`logout`、`serve`、`stop` 命令。
-- [ ] Session 固定保存到 `~/.claude/openai-proxy/auth.json`，采用原子替换、并发刷新互斥和最小权限保护；POSIX 使用 `0600`，Windows 使用当前用户 ACL。不得读取、导入或覆盖 `~/.codex/auth.json`，不得把 OAuth Token 暴露给主项目进程。
+- [x] 第二阶段已用 TypeScript 语义重写官方开源 Codex 的必要登录能力：浏览器 OAuth、device-code、S256 PKCE、严格 state/允许的官方回调后缀、Token 交换/刷新/撤销，以及账号、workspace 和 plan 信息解析；已提供 `setup`、`login`、`login --device-code`、`status`、`doctor`、`logout`、`serve` 和 MCP 生命周期入口。`stop` 随下一阶段单实例守护进程一起实现。本阶段只通过固定 Fixture 验证协议，不使用真实账号或把测试结果冒充真实验收。
+- [x] Session 固定保存到 `~/.claude/openai-proxy/auth.json`，已采用同目录原子替换、跨进程有界锁、刷新竞争串行化、符号链接拒绝和最小权限保护；POSIX 使用目录 `0700`/文件 `0600`，Windows 使用当前用户 ACL。实现不读取、导入或覆盖 Codex 自身凭据文件，OAuth Token 不暴露给主项目进程、配置、状态输出或日志。
 - [ ] 复用现有本地 Plugin/MCP 生命周期能力管理单实例服务，记录 PID、锁、端点和版本，支持多 CLI 客户端安全共享、租约和空闲退出；服务异常终止后必须可诊断、可重启且不损坏 Session。
 - [ ] 支持显式 `OPENAI_PROXY_URL`，配置来源仅限进程环境或用户 `settings.json.env`；沿用现有代理策略实现 HTTP、HTTPS CONNECT 和代理认证，SOCKS5 未实现时明确拒绝。
 - [ ] 代理覆盖 OAuth Token 交换、device-code 轮询、刷新/撤销、模型目录、Responses/SSE 及必要的账号/额度请求；localhost 回调、本地网关和系统浏览器自身不经过该代理。

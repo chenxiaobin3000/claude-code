@@ -100,6 +100,7 @@ const validationScripts = [
   'scripts/validation/x-api-fixture.ts',
   'scripts/validation/openai-proxy-plugin-boundary.ts',
   'scripts/validation/openai-proxy-gateway.ts',
+  'scripts/validation/openai-proxy-auth.ts',
   'scripts/validation/chrome-protocol.ts',
   'scripts/validation/chrome-profiles.ts',
   'scripts/validation/chrome-host.ts',

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { access, mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 import {
   extractMcpServersFromPlugins,
   loadPluginMcpServers,
@@ -37,6 +37,15 @@ for (const file of files) {
     `Cargo metadata is forbidden: ${normalized}`,
   )
 }
+const authSources = await Promise.all(
+  files
+    .filter(file => file.startsWith(`src${sep}auth`) && file.endsWith('.ts'))
+    .map(file => readFile(join(plugin, file), 'utf8')),
+)
+assert(
+  !authSources.join('\n').includes(".codex/auth.json"),
+  'Plugin auth source must not read the Codex credential store',
+)
 
 const loaded = await createPluginFromPath(
   plugin,
