@@ -146,6 +146,7 @@
 - [x] 产品范围只包含显式 allowlist 的私聊、群组和频道入站，以及文本和受支持媒体的定向回复；未授权 Update 在本地立即丢弃。没有批量群发、联系人导入、自动加群、陌生人主动私聊、账号资料修改、删除消息、群/频道管理、通话、Secret Chat、账号注册或风控规避入口。
 - [x] MTProto Update 转换为标准 Channel 通知，路由固定编码账号别名、Peer 类型、Peer ID 和可选 Topic ID，并保留消息 ID、发送者、引用、编辑状态和附件元数据。本账号出站、插件回复和重复 Update 均被过滤；回复使用原入站账号作用域内的 InputPeer，不解析或复用其他账号的 access hash。
 - [x] MCP 首版只提供绑定 15 分钟内原入站消息的 `reply` 与受限媒体回复，不提供主动发送。权限按账号、Peer、Topic、发送者和 Request ID 隔离，审批文本明确标注“将以你的 Telegram 用户身份执行”。
+- [x] Telegram User 的管理面与 Channel 回复面分离：独立 `telegram-user-control` MCP Server 按需提供 `list_chats`、`set_chat_access` 和 `get_chat_history`；模型只接触 Session HMAC 生成的 `chatRef`，不接触 Peer ID。历史读取仅限无限制 Peer allowlist、最多 100 条且不下载附件，allowlist 写操作不声明为只读。
 - [x] 网络连接与自动重连次数有界，GramJS 隐式请求重试和 FloodWait 自动等待关闭；FloodWait、DC 迁移、Session、验证码和 2FA 错误统一分类并脱敏。发送操作不自动重放，禁止无限重连和规避平台限制。
 - [x] `scripts/validation/telegram-user-*.ts` 已覆盖 GramJS/Bun 边界、可注入登录状态机、Session 安全、双账号隔离、路由/Topic、回声/Update 排重、媒体、权限、FloodWait/DC 分类、秘密脱敏、Host EOF、standalone 分发/自动发现和根 Bundle 依赖禁入，并统一并入 `bun run verify`；真实账号仍作为下一项附加验收。
 - [x] 后续升级固定为人工同步：先冻结 Telegram MTProto Layer、GramJS 版本/commit 和文档基线，再审计协议、生成类型、Session、依赖、Bundle 与产品风险并更新 Fixture；禁止自动下载、覆盖插件、更新 Session 或触发 CLI 自更新。

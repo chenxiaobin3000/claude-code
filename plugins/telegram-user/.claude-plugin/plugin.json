@@ -14,6 +14,11 @@
       "type": "stdio",
       "command": "bun",
       "args": ["${CLAUDE_PLUGIN_ROOT}/host/entry.ts", "mcp"]
+    },
+    "telegram-user-control": {
+      "type": "stdio",
+      "command": "bun",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/host/entry.ts", "control-mcp"]
     }
   }
 }

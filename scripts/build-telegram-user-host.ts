@@ -9,6 +9,9 @@ const result = await buildStandaloneWithRetry({ label: 'telegram-user-host', out
 if (!result.success) { for (const item of result.logs) console.error(item); process.exit(1) }
 const output = await stat(outfile); await cp(join(plugin, 'README.md'), join(directory, 'README.md'))
 const manifest = JSON.parse(await readFile(join(plugin, '.claude-plugin', 'plugin.json'), 'utf8')) as Record<string, unknown>
-manifest.mcpServers = { 'telegram-user': { type: 'stdio', command: `\${CLAUDE_PLUGIN_ROOT}/${filename}`, args: ['mcp'] } }
+manifest.mcpServers = {
+  'telegram-user': { type: 'stdio', command: `\${CLAUDE_PLUGIN_ROOT}/${filename}`, args: ['mcp'] },
+  'telegram-user-control': { type: 'stdio', command: `\${CLAUDE_PLUGIN_ROOT}/${filename}`, args: ['control-mcp'] },
+}
 await mkdir(join(directory, '.claude-plugin'), { recursive: true }); await writeFile(join(directory, '.claude-plugin', 'plugin.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 console.log(`Generated distributable plugin ${directory} (${(output.size / 1024 / 1024).toFixed(1)} MiB Host, standalone Bun runtime)`)

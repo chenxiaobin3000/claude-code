@@ -416,6 +416,11 @@ Host 的 `doctor`、`login` 或 `mcp` 时，缺失变量会按已保存的变量
 审批会明确标注操作“将以你的 Telegram 用户身份执行”。首次真实验收应使用低权限测试账号。
 完整配置与安全边界见 [`plugins/telegram-user/README.md`](plugins/telegram-user/README.md)。
 
+Telegram User 另带独立的 `telegram-user-control` MCP Server，按需提供 `list_chats`、
+`set_chat_access` 和 `get_chat_history`。模型只能看到群名称、类型、allowlist 状态和由
+本地 Session HMAC 生成的 `chatRef`，不会看到真实 Peer ID；历史读取仍限定于已加入无限制
+Peer allowlist 的目标，最多 100 条且不下载附件。
+
 ### X 只读 MCP 插件
 
 X 插件位于 [`plugins/x`](plugins/x)，只使用固定的 `X_BEARER_TOKEN` 执行 App-only

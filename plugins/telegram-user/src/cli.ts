@@ -19,11 +19,12 @@ import {
   saveTelegramUserAccount,
 } from './config.js'
 import { runTelegramUserMcpServer } from './server.js'
+import { runTelegramUserControlMcpServer } from './control.js'
 import type { TelegramUserPeerType } from './types.js'
 
 function usage(): void {
   process.stdout.write(
-    'Usage:\n  telegram-user-host mcp\n  telegram-user-host proxy capabilities\n  telegram-user-host account add <alias> <api-id-env> <api-hash-env> <phone-env>\n  telegram-user-host account login [alias]\n  telegram-user-host account logout [alias]\n  telegram-user-host account remove <alias>\n  telegram-user-host account list\n  telegram-user-host account groups [alias]\n  telegram-user-host account history <alias> <user|group|channel> <peer-id> [limit]\n  telegram-user-host account doctor [alias]\n  telegram-user-host access allow|deny <alias> <user|group|channel> <peer-id> [topic-id]\n  telegram-user-host access list <alias>\n',
+    'Usage:\n  telegram-user-host mcp\n  telegram-user-host control-mcp\n  telegram-user-host proxy capabilities\n  telegram-user-host account add <alias> <api-id-env> <api-hash-env> <phone-env>\n  telegram-user-host account login [alias]\n  telegram-user-host account logout [alias]\n  telegram-user-host account remove <alias>\n  telegram-user-host account list\n  telegram-user-host account groups [alias]\n  telegram-user-host account history <alias> <user|group|channel> <peer-id> [limit]\n  telegram-user-host account doctor [alias]\n  telegram-user-host access allow|deny <alias> <user|group|channel> <peer-id> [topic-id]\n  telegram-user-host access list <alias>\n',
   )
 }
 async function promptLine(label: string): Promise<string> {
@@ -85,6 +86,10 @@ export async function handleTelegramUserCli(
     }
     if (args[0] === 'mcp') {
       await runTelegramUserMcpServer(version)
+      return
+    }
+    if (args[0] === 'control-mcp') {
+      await runTelegramUserControlMcpServer(version)
       return
     }
     if (args[0] === 'account' && args[1] === 'add') {

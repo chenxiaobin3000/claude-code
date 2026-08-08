@@ -27,6 +27,20 @@ allowlist 的目标，默认返回最近 20 条、最多 100 条，并按时间�
 每行只包含消息 ID、UTC 时间、发送者 ID、文本和是否带媒体；命令不会下载附件。Topic
 限定或发送者限定的 allowlist 不授权读取整个 Peer 的历史。
 
+插件同时提供独立的 `telegram-user-control` MCP Server。它不会常驻连接账号，也不会替代
+负责 Channel 入站和 `reply` 的 `telegram-user` Server。控制 Server 按需提供：
+
+- `list_chats`：按账号列出群、超级群和频道的名称、类型、allowlist 状态及不透明
+  `chatRef`；不向模型返回 Peer ID。
+- `set_chat_access`：使用 `chatRef` 增加或删除无限制 Peer allowlist；这是配置写操作，
+  不声明为只读工具。
+- `get_chat_history`：使用 `chatRef` 读取已 allow 的目标最近 1–100 条文本和附件存在性，
+  不下载附件。
+
+`chatRef` 使用当前账号 Session 作为本地 HMAC 密钥生成，不是 Peer ID 的编码；退出并重新
+登录导致 Session 改变时应重新调用 `list_chats`。三个控制工具均不设置
+`anthropic/alwaysLoad`，模型需要时再加载。
+
 可选代理只从 Host 进程环境或用户级 `settings.json.env` 读取：
 
 ```text
