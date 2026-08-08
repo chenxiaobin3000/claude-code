@@ -299,6 +299,7 @@ async function inbound(
           message.chatId,
           message.messageId,
           fileId => client.getFile(fileId),
+          client.transportFetch,
         ),
       )
     } catch (error) {

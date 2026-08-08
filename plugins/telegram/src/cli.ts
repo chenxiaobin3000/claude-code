@@ -11,7 +11,7 @@ import { runTelegramMcpServer } from './server.js'
 
 function usage(): void {
   process.stdout.write(
-    'Usage:\n  telegram-host mcp\n  telegram-host bot add <alias> <token-env>\n  telegram-host bot remove <alias>\n  telegram-host bot list\n  telegram-host bot doctor [alias]\n  telegram-host access pair <alias> <code>\n',
+    'Usage:\n  telegram-host mcp\n  telegram-host proxy capabilities\n  telegram-host bot add <alias> <token-env>\n  telegram-host bot remove <alias>\n  telegram-host bot list\n  telegram-host bot doctor [alias]\n  telegram-host access pair <alias> <code>\n',
   )
 }
 export async function handleTelegramCli(
@@ -19,6 +19,10 @@ export async function handleTelegramCli(
   version: string,
 ): Promise<void> {
   try {
+    if (args[0] === 'proxy' && args[1] === 'capabilities') {
+      process.stdout.write('Telegram Bot proxy: HTTP/HTTPS supported; SOCKS5 unsupported (fail-closed).\n')
+      return
+    }
     if (args[0] === 'mcp') {
       await runTelegramMcpServer(version)
       return
@@ -53,7 +57,7 @@ export async function handleTelegramCli(
       const client = new TelegramClient(bot.alias, resolveTelegramToken(bot))
       const result = await client.doctor()
       process.stdout.write(
-        `Telegram bot ${bot.alias}: @${result.bot.username}, long polling available, pending updates ${result.pendingUpdates}.\n`,
+        `Telegram bot ${bot.alias}: @${result.bot.username}, long polling available, pending updates ${result.pendingUpdates}; stage=bot-api, proxy=${client.proxyMode} (${client.proxyDisplay}).\n`,
       )
       return
     }

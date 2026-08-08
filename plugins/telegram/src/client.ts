@@ -1,8 +1,15 @@
 import { basename } from 'node:path'
 import { Bot, GrammyError, HttpError, InputFile, type Context } from 'grammy'
 import type { UserFromGetMe } from 'grammy/types'
+import { resolveTelegramProxyUrl } from './config.js'
 import { inferTelegramMediaKind, validateTelegramOutboundFile } from './media.js'
 import { classifyTelegramError, telegramRetryAfter } from './protocol.js'
+import {
+  classifyTelegramTransportError,
+  createTelegramTransport,
+  redactTelegramTransportSecret,
+  type TelegramProxyMode,
+} from './transport.js'
 import type { TelegramAttachment, TelegramInboundMessage, TelegramRoute } from './types.js'
 
 interface Entity { type: string; offset: number; length: number; user?: { id: number } }
@@ -72,12 +79,34 @@ export type TelegramInboundHandler = (message: TelegramInboundMessage) => Promis
 
 export class TelegramClient {
   readonly bot: Bot
+  readonly transportFetch: typeof fetch
+  readonly proxyMode: TelegramProxyMode
+  readonly proxyDisplay: string
   private botInfo: UserFromGetMe | null = null
   private polling: Promise<void> | null = null
   private operationSequence = 0
 
-  constructor(readonly alias: string, readonly token: string) {
-    this.bot = new Bot(token, { client: { apiRoot: process.env.TELEGRAM_API_ROOT || 'https://api.telegram.org', timeoutSeconds: 40 } })
+  constructor(
+    readonly alias: string,
+    readonly token: string,
+    options: { apiRoot?: string; proxyUrl?: string } = {},
+  ) {
+    const transport = createTelegramTransport(
+      options.proxyUrl ?? resolveTelegramProxyUrl(),
+    )
+    this.transportFetch = transport.fetch
+    this.proxyMode = transport.proxyMode
+    this.proxyDisplay = transport.proxyDisplay
+    this.bot = new Bot(token, {
+      client: {
+        apiRoot:
+          options.apiRoot ??
+          process.env.TELEGRAM_API_ROOT ??
+          'https://api.telegram.org',
+        timeoutSeconds: 40,
+        fetch: transport.fetch,
+      },
+    })
     // grammY bot.start() unconditionally invokes deleteWebhook during setup.
     // This plugin has a stricter boundary: doctor rejects an active webhook and
     // startup must never mutate it, so acknowledge only that internal call locally.
@@ -88,7 +117,16 @@ export class TelegramClient {
   }
 
   async doctor(): Promise<TelegramDoctorResult> {
-    const [bot, webhook] = await Promise.all([this.bot.api.getMe(), this.bot.api.getWebhookInfo()])
+    let bot: UserFromGetMe
+    let webhook: Awaited<ReturnType<typeof this.bot.api.getWebhookInfo>>
+    try {
+      ;[bot, webhook] = await Promise.all([
+        this.bot.api.getMe(),
+        this.bot.api.getWebhookInfo(),
+      ])
+    } catch (error) {
+      throw this.redactedError(error)
+    }
     this.botInfo = bot
     if (webhook.url) throw new Error(`Telegram bot ${this.alias} has an active Webhook; remove it explicitly before using long polling.`)
     return { bot, webhookUrl: webhook.url || '', pendingUpdates: webhook.pending_update_count }
@@ -164,8 +202,19 @@ export class TelegramClient {
 
   redactedError(error: unknown): Error {
     if (error instanceof GrammyError) return Object.assign(new Error(`Telegram API ${error.error_code}: ${error.description}`), { kind: classifyTelegramError(error), error_code: error.error_code })
-    if (error instanceof HttpError) return Object.assign(new Error('Telegram Bot API network request failed.'), { kind: 'network' })
+    if (error instanceof HttpError) {
+      return Object.assign(
+        new Error(
+          `Telegram Bot API network request failed (transport=${this.proxyMode}, kind=${classifyTelegramTransportError(error.error)}).`,
+        ),
+        { kind: classifyTelegramTransportError(error.error) },
+      )
+    }
     const text = error instanceof Error ? error.message : String(error)
-    return new Error(text.split(this.token).join('[REDACTED]'))
+    return new Error(
+      redactTelegramTransportSecret(
+        text.split(this.token).join('[REDACTED]'),
+      ),
+    )
   }
 }

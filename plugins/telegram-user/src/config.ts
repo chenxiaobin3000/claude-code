@@ -9,7 +9,12 @@ import {
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { resolveConfiguredEnvValue } from '../../userSettingsEnv.js'
+import {
+  getUserSettingsEnvValue,
+  resolveConfiguredEnvValue,
+} from '../../userSettingsEnv.js'
+
+export const TELEGRAM_USER_PROXY_URL_ENV = 'TELEGRAM_USER_PROXY_URL'
 
 export interface TelegramUserAccountConfig {
   alias: string
@@ -191,6 +196,18 @@ export function resolveTelegramUserCredentials(
     { apiId: rawApiId, apiHash, phone },
     `Environment credentials for ${account.alias}`,
   )
+}
+
+export function resolveTelegramUserProxyUrl(): string | undefined {
+  const processValue = process.env[TELEGRAM_USER_PROXY_URL_ENV]?.trim()
+  if (processValue) return processValue
+  try {
+    return (
+      getUserSettingsEnvValue(TELEGRAM_USER_PROXY_URL_ENV)?.trim() || undefined
+    )
+  } catch {
+    return undefined
+  }
 }
 function validateTelegramUserCredentials(
   input: { apiId?: string | number; apiHash?: string; phone?: string },

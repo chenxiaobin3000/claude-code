@@ -34,6 +34,11 @@ const telegramUserPluginPath = join(
   'telegram-user',
 )
 const xPluginPath = join(distributionRoot, 'plugins', 'x')
+const openAIProxyPluginPath = join(
+  distributionRoot,
+  'plugins',
+  'openai-proxy',
+)
 const hiddenPluginPath = join(
   distributionRoot,
   `.chrome-validation-hidden-${process.pid}`,
@@ -61,6 +66,7 @@ await access(qqPluginPath)
 await access(telegramPluginPath)
 await access(telegramUserPluginPath)
 await access(xPluginPath)
+await access(openAIProxyPluginPath)
 
 const automatic = listPlugins()
 assert(
@@ -135,6 +141,23 @@ assertEqual(
   resolve(xPluginPath),
   'x automatic plugin path',
 )
+const automaticOpenAIProxy = automatic.find(
+  plugin => plugin.name === 'openai-proxy',
+)
+assert(
+  automaticOpenAIProxy,
+  'standalone must automatically discover openai-proxy',
+)
+assertEqual(
+  automaticOpenAIProxy.source,
+  'openai-proxy@local',
+  'openai-proxy automatic source',
+)
+assertEqual(
+  resolve(automaticOpenAIProxy.path),
+  resolve(openAIProxyPluginPath),
+  'openai-proxy automatic plugin path',
+)
 assertEqual(
   resolve(automaticChrome.path),
   resolve(pluginPath),
@@ -188,6 +211,10 @@ try {
   assert(
     withoutAutomaticPlugin.some(plugin => plugin.name === 'x'),
     'removing chrome must not remove the independent x plugin',
+  )
+  assert(
+    withoutAutomaticPlugin.some(plugin => plugin.name === 'openai-proxy'),
+    'removing chrome must not remove the independent openai-proxy plugin',
   )
 } finally {
   if (moved) await rename(hiddenPluginPath, pluginPath)

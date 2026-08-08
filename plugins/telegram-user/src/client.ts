@@ -5,8 +5,19 @@ import { EditedMessage } from 'telegram/events/EditedMessage.js'
 import { Logger, LogLevel } from 'telegram/extensions/Logger.js'
 import { StringSession } from 'telegram/sessions'
 import type { TelegramUserAccountConfig, TelegramUserCredentials } from './config.js'
-import { loadTelegramUserSession, saveTelegramUserSession, saveTelegramUserState } from './config.js'
+import {
+  loadTelegramUserSession,
+  resolveTelegramUserProxyUrl,
+  saveTelegramUserSession,
+  saveTelegramUserState,
+} from './config.js'
 import { redactTelegramUserError } from './protocol.js'
+import {
+  classifyTelegramUserTransportError,
+  createTelegramUserTransport,
+  type TelegramUserProxyMode,
+  type TelegramUserTransport,
+} from './transport.js'
 import type { TelegramUserAttachment, TelegramUserInboundMessage, TelegramUserPeerType } from './types.js'
 
 export interface TelegramUserPrompts { code(viaApp?: boolean): Promise<string>; password(hint?: string): Promise<string> }
@@ -17,7 +28,12 @@ export interface TelegramUserLoginTransport {
   disconnect(): Promise<void>
 }
 const clientOptions = { connectionRetries: 3, reconnectRetries: 3, requestRetries: 0, downloadRetries: 2, retryDelay: 1000, autoReconnect: true, floodSleepThreshold: 0, sequentialUpdates: true, baseLogger: new Logger(LogLevel.NONE), deviceModel: 'Claude Code Telegram User Plugin', appVersion: '1.0.0' } as const
-export function createGramJsClient(credentials: Pick<TelegramUserCredentials, 'apiId' | 'apiHash'>, session: string): TelegramClient { return new TelegramClient(new StringSession(session), credentials.apiId, credentials.apiHash, clientOptions) }
+function createGramJsClientWithTransport(credentials: Pick<TelegramUserCredentials, 'apiId' | 'apiHash'>, session: string, transport: TelegramUserTransport): TelegramClient {
+  return new TelegramClient(new StringSession(session), credentials.apiId, credentials.apiHash, { ...clientOptions, ...(transport.proxy ? { proxy: transport.proxy } : {}) })
+}
+export function createGramJsClient(credentials: Pick<TelegramUserCredentials, 'apiId' | 'apiHash'>, session: string, proxyUrl = resolveTelegramUserProxyUrl()): TelegramClient {
+  return createGramJsClientWithTransport(credentials, session, createTelegramUserTransport(proxyUrl))
+}
 export function classifyTelegramUserError(error: unknown): string {
   const name = error instanceof Error ? error.name : ''
   const message = redactTelegramUserError(error)
@@ -34,6 +50,8 @@ export async function loginTelegramUserAccount(account: TelegramUserAccountConfi
     const session = client.session.save() as unknown as string; saveTelegramUserSession(account.alias, session)
     const me = await client.getMe(); const result = { userId: me.id.toString(), ...(me.username ? { username: me.username } : {}) }
     saveTelegramUserState(account.alias, 'identity.json', result); return result
+  } catch (error) {
+    throw new Error(classifyTelegramUserError(error))
   } finally { await client.disconnect().catch(() => undefined) }
 }
 
@@ -56,8 +74,25 @@ async function convert(accountAlias: string, event: NewMessageEvent, edited: boo
 
 export class TelegramUserRuntimeClient {
   readonly client: TelegramClient
-  constructor(readonly account: TelegramUserAccountConfig, credentials: TelegramUserCredentials) { this.client = createGramJsClient(credentials, loadTelegramUserSession(account.alias)) }
-  async doctor(): Promise<{ userId: string; username?: string }> { await this.client.connect(); if (!await this.client.checkAuthorization()) throw new Error('Telegram user session is not authorized; run account login.'); const me = await this.client.getMe(); return { userId: me.id.toString(), ...(me.username ? { username: me.username } : {}) } }
+  readonly proxyMode: TelegramUserProxyMode
+  readonly proxyDisplay: string
+  constructor(readonly account: TelegramUserAccountConfig, credentials: TelegramUserCredentials) {
+    const transport = createTelegramUserTransport(resolveTelegramUserProxyUrl())
+    this.proxyMode = transport.proxyMode
+    this.proxyDisplay = transport.proxyDisplay
+    this.client = createGramJsClientWithTransport(credentials, loadTelegramUserSession(account.alias), transport)
+  }
+  async doctor(): Promise<{ userId: string; username?: string }> {
+    try {
+      await this.client.connect()
+      if (!await this.client.checkAuthorization()) throw new Error('Telegram user session is not authorized; run account login.')
+      const me = await this.client.getMe()
+      return { userId: me.id.toString(), ...(me.username ? { username: me.username } : {}) }
+    } catch (error) {
+      const safe = redactTelegramUserError(error)
+      throw new Error(`Telegram User doctor failed (stage=mtproto, transport=${this.proxyMode}, kind=${classifyTelegramUserTransportError(error)}): ${safe}`)
+    }
+  }
   async start(handler: (message: TelegramUserInboundMessage) => Promise<void>, onError: (error: Error) => void): Promise<void> {
     await this.doctor()
     const receive = async (event: NewMessageEvent, edited: boolean): Promise<void> => { try { const message = await convert(this.account.alias, event, edited); if (message) await handler(message) } catch (error) { onError(new Error(classifyTelegramUserError(error))) } }
