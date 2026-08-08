@@ -27,7 +27,10 @@ export interface TelegramUserLoginTransport {
   getMe(): Promise<{ id: { toString(): string }; username?: string }>
   disconnect(): Promise<void>
 }
-const clientOptions = { connectionRetries: 3, reconnectRetries: 3, requestRetries: 1, downloadRetries: 2, retryDelay: 1000, autoReconnect: true, floodSleepThreshold: 0, sequentialUpdates: true, baseLogger: new Logger(LogLevel.NONE), deviceModel: 'Claude Code Telegram User Plugin', appVersion: '1.0.0' } as const
+// GramJS consumes a request attempt when Telegram redirects login to the
+// account's data center. Keep enough attempts for that internal migration and
+// one transient reconnect; this does not replay channel messages.
+const clientOptions = { connectionRetries: 3, reconnectRetries: 3, requestRetries: 3, downloadRetries: 2, retryDelay: 1000, autoReconnect: true, floodSleepThreshold: 0, sequentialUpdates: true, baseLogger: new Logger(LogLevel.NONE), deviceModel: 'Claude Code Telegram User Plugin', appVersion: '1.0.0' } as const
 function createGramJsClientWithTransport(credentials: Pick<TelegramUserCredentials, 'apiId' | 'apiHash'>, session: string, transport: TelegramUserTransport): TelegramClient {
   return new TelegramClient(new StringSession(session), credentials.apiId, credentials.apiHash, { ...clientOptions, ...(transport.proxy ? { proxy: transport.proxy } : {}) })
 }
