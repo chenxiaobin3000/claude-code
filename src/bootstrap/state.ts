@@ -29,8 +29,14 @@ import type { SessionId } from 'src/types/ids.js'
 // hasDevChannels bit) so passing both flags doesn't let the dev dialog's
 // acceptance leak allowlist-bypass to the --channels entries.
 export type ChannelEntry =
-  | { kind: 'plugin'; name: string; marketplace: string; dev?: boolean }
-  | { kind: 'server'; name: string; dev?: boolean }
+  | {
+      kind: 'plugin'
+      name: string
+      marketplace: string
+      reply?: string
+      dev?: boolean
+    }
+  | { kind: 'server'; name: string; reply?: string; dev?: boolean }
 
 type State = {
   originalCwd: string
@@ -330,7 +336,8 @@ function getInitialState(): State {
     lastEmittedDate: null,
     // Additional directories from --add-dir flag (for CLAUDE.md loading)
     additionalDirectoriesForClaudeMd: [],
-    // Channel server allowlist from --channels flag
+    // Channel selections from CLI/user/managed settings, optionally including
+    // the deterministic final-response tool configured by channels.reply.
     allowedChannels: [],
     hasDevChannels: false,
     // Session project dir (null = derive from originalCwd)

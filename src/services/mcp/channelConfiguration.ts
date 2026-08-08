@@ -5,19 +5,36 @@ import type { SettingsJson } from '../../utils/settings/types.js'
 type PersistentChannelSource = 'userSettings' | 'policySettings'
 type ChannelSettings = Pick<SettingsJson, 'channels'>
 
+export type ChannelSelection = {
+  plugin: string
+  reply?: string
+}
+
 export type ChannelSettingsReader = (
   source: PersistentChannelSource,
 ) => ChannelSettings | null
 
-function appendUnique(
-  destination: string[],
-  seen: Set<string>,
-  values: readonly string[] | undefined,
+function appendSelections(
+  destination: ChannelSelection[],
+  indexes: Map<string, number>,
+  values: readonly ChannelSelection[],
 ): void {
-  for (const value of values ?? []) {
-    if (seen.has(value)) continue
-    seen.add(value)
-    destination.push(value)
+  for (const value of values) {
+    const existingIndex = indexes.get(value.plugin)
+    if (existingIndex === undefined) {
+      indexes.set(value.plugin, destination.length)
+      destination.push(value)
+      continue
+    }
+    const existing = destination[existingIndex]!
+    if (existing.reply && value.reply && existing.reply !== value.reply) {
+      throw new Error(
+        `Channel ${value.plugin} configures conflicting reply tools: ${existing.reply} and ${value.reply}.`,
+      )
+    }
+    if (!existing.reply && value.reply) {
+      destination[existingIndex] = { ...existing, reply: value.reply }
+    }
   }
 }
 
@@ -30,22 +47,34 @@ export function resolveChannelSelections(
   cliChannels: readonly string[] | undefined,
   readSettings: ChannelSettingsReader,
   userSettingsEnabled = true,
-): string[] {
-  const resolved: string[] = []
-  const seen = new Set<string>()
+): ChannelSelection[] {
+  const resolved: ChannelSelection[] = []
+  const indexes = new Map<string, number>()
 
-  appendUnique(resolved, seen, cliChannels)
+  appendSelections(
+    resolved,
+    indexes,
+    (cliChannels ?? []).map(plugin => ({ plugin })),
+  )
   if (userSettingsEnabled) {
-    appendUnique(resolved, seen, readSettings('userSettings')?.channels)
+    appendSelections(
+      resolved,
+      indexes,
+      readSettings('userSettings')?.channels ?? [],
+    )
   }
-  appendUnique(resolved, seen, readSettings('policySettings')?.channels)
+  appendSelections(
+    resolved,
+    indexes,
+    readSettings('policySettings')?.channels ?? [],
+  )
 
   return resolved
 }
 
 export function getChannelSelections(
   cliChannels: readonly string[] | undefined,
-): string[] {
+): ChannelSelection[] {
   return resolveChannelSelections(
     cliChannels,
     source => getSettingsForSource(source),

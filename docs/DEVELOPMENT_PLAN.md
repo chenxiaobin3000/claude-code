@@ -54,7 +54,8 @@
 
 - 主题仅来自内置主题和 `~/.claude/themes/*.json`；重启读取，不提供编辑器、热更新或插件主题安装。
 - 插件仅支持本地插件。Windows standalone 只扫描 `claude.exe` 同级 `plugins` 下含 `.claude-plugin/plugin.json` 的一级直接子目录，不递归、不扫描 cwd 或 `~/.claude/plugins`；目录缺失或为空时静默跳过，链接、Junction 和路径逃逸 fail-closed。源码/Bun 开发模式不自动扫描，继续使用 `--plugin-dir`。
-- 稳定 Channel 可通过用户级 `~/.claude/settings.json` 或管理级 `managed-settings.json`/`managed-settings.d/*.json` 的 `channels` 列表随主程序启动，也可继续使用 `--channels`；三者合并去重。项目 `.claude/settings.json`、`.claude/settings.local.json` 与 `--settings` 中的同名字段一律忽略，仓库不能自行启用外部消息入口；开发 Channel 仍只能通过交互式命令行参数临时启用。
+- 稳定 Channel 可通过用户级 `~/.claude/settings.json` 或管理级 `managed-settings.json`/`managed-settings.d/*.json` 的 `channels` 对象列表随主程序启动；每项固定为 `{ "plugin": "plugin:<name>@<source>", "reply": "mcp__<server>__reply" }`，不兼容旧字符串数组。命令行 `--channels` 仍接受插件字符串，三种来源按 `plugin` 合并，并允许配置文件为命令行选择补充 `reply`；回复工具冲突时启动失败。项目 `.claude/settings.json`、`.claude/settings.local.json` 与 `--settings` 中的同名字段一律忽略，仓库不能自行启用外部消息入口；开发 Channel 仍只能通过交互式命令行参数临时启用。
+- Channel 入站保持既有模型轮次和批量合并语义；最终 Assistant 文本按来源 Channel 的 `reply` 工具确定性发送，非 Channel 输入保持原流程。同一合并轮次按 MCP Server 与 `chat_id` 去重、使用最新 `message_id`，不同 Channel 分别发送；模型已对同一会话调用匹配回复工具时禁止重复发送。配置项授权被动最终回复，但显式 `ask`、`deny` 与硬安全结果优先；工具缺失、归属不匹配、参数无效或调用失败均明确失败，禁止跨 Channel 猜测或回退。
 - `qq-host`、`wxwork-host`、`telegram-host` 与 `telegram-user-host` 只保存环境变量名，不保存长期凭据。后续运行优先读取进程环境变量，独立 Host 未获得 `claude.exe` 注入时按变量名回退读取用户级 `settings.json.env`；项目和管理级设置不参与该回退。
 - 所有 Channel 插件的核心 `reply` MCP 工具通过 `anthropic/alwaysLoad` 始终进入模型工具列表，外部消息回复不依赖延迟工具搜索；非必要 Channel 工具继续按需加载。
 - 插件优先级固定为显式 `--plugin-dir`（`@inline`）> standalone 自动发现（`@local`）> 内置（`@builtin`）。同级重名禁用歧义项，高优先级插件失败时不回退同名低优先级实现；`--bare` 禁用自动发现但保留显式插件，`/reload-plugins` 会重新扫描并裁剪已移除的全部插件组件。

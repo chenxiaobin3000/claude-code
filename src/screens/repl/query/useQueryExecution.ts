@@ -10,6 +10,7 @@ import {
   getTurnHookDurationMs,
   getTurnToolCount,
   getTurnToolDurationMs,
+  getAllowedChannels,
   resetTurnClassifierDuration,
   resetTurnHookDuration,
   resetTurnToolDuration,
@@ -26,6 +27,11 @@ import type { CanUseToolFn } from '../../../hooks/useCanUseTool.js'
 import { mergeClients } from '../../../hooks/useMergedClients.js'
 import { query } from '../../../query.js'
 import type { MCPServerConnection } from '../../../services/mcp/types.js'
+import {
+  collectChannelReplyTargets,
+  dispatchConfiguredChannelReplies,
+  resolveChannelReplyPlan,
+} from '../../../services/mcp/channelReply.js'
 import type {
   useAppStateStore,
   useSetAppState,
@@ -56,6 +62,7 @@ import { buildEffectiveSystemPrompt } from '../../../utils/systemPrompt.js'
 import { maybeMarkProjectOnboardingComplete } from '../../../projectOnboardingState.js'
 import type { ApiMetric } from './useQueryMetrics.js'
 import type { PipeMessage } from '../../../utils/pipeTransport.js'
+import { logError } from '../../../utils/log.js'
 
 const getCoordinatorUserContext: (
   clients: ReadonlyArray<{ name: string }>,
@@ -303,6 +310,11 @@ export function useQueryExecution({
       resetTurnHookDuration()
       resetTurnToolDuration()
       resetTurnClassifierDuration()
+      const channelTargets = collectChannelReplyTargets(
+        newMessages,
+        getAllowedChannels(),
+      )
+      const channelEvents: MessageType[] = []
       for await (const event of query({
         messages: messagesIncludingNewMessages,
         systemPrompt,
@@ -312,7 +324,32 @@ export function useQueryExecution({
         toolUseContext,
         querySource: getQuerySourceForREPL(),
       })) {
+        if (event.type === 'assistant')
+          channelEvents.push(event as MessageType)
         onQueryEvent(event)
+      }
+
+      if (!abortController.signal.aborted && channelTargets.length > 0) {
+        const replyPlan = resolveChannelReplyPlan(channelEvents, channelTargets)
+        if (replyPlan) {
+          try {
+            await dispatchConfiguredChannelReplies({
+              plan: replyPlan,
+              tools,
+              context: toolUseContext,
+              canUseTool,
+            })
+          } catch (error) {
+            logError(error)
+            toolUseContext.addNotification?.({
+              key: 'channel-reply-failed',
+              priority: 'high',
+              color: 'error',
+              timeoutMs: 12000,
+              text: `Channel reply failed: ${error instanceof Error ? error.message : String(error)}`,
+            })
+          }
+        }
       }
 
       if (

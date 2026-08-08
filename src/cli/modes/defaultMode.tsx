@@ -81,7 +81,10 @@ import {
 } from '../../interactiveHelpers.js';
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { getMcpToolsCommandsAndResources, prefetchAllMcpResources } from '../../services/mcp/client.js';
-import { getChannelSelections } from '../../services/mcp/channelConfiguration.js';
+import {
+  getChannelSelections,
+  type ChannelSelection,
+} from '../../services/mcp/channelConfiguration.js';
 import { initBundledSkills } from '../../skills/bundled/index.js';
 import type { AgentColorName } from '@claude-code/builtin-tools/tools/AgentTool/agentColorManager.js';
 import {
@@ -719,8 +722,9 @@ export async function runDefaultMode(
   // Store additional directories for CLAUDE.md loading (controlled by env var)
   setAdditionalDirectoriesForClaudeMd(addDir);
 
-  // Channel server allowlist from --channels flag — servers whose
-  // inbound push notifications should register this session. The option
+  // Channel server selections from CLI/user/managed settings — servers whose
+  // inbound push notifications should register this session. Settings entries
+  // may also name the deterministic final-response tool. The CLI option
   // is added inside a feature() block so TS doesn't know about it
   // on the options type — same pattern as --assistant at main.tsx:1824.
   // devChannels is deferred: showSetupScreens shows a confirmation dialog
@@ -733,10 +737,14 @@ export async function runDefaultMode(
   // Untagged or marketplace-less plugin entries are hard errors —
   // silently not-matching in the gate would look like channels are
   // "on" but nothing ever fires.
-  const parseChannelEntries = (raw: string[], flag: string): ChannelEntry[] => {
+  const parseChannelEntries = (
+    raw: ChannelSelection[],
+    flag: string,
+  ): ChannelEntry[] => {
     const entries: ChannelEntry[] = [];
     const bad: string[] = [];
-    for (const c of raw) {
+    for (const selection of raw) {
+      const c = selection.plugin;
       if (c.startsWith('plugin:')) {
         const rest = c.slice(7);
         const at = rest.indexOf('@');
@@ -747,10 +755,11 @@ export async function runDefaultMode(
             kind: 'plugin',
             name: rest.slice(0, at),
             marketplace: rest.slice(at + 1),
+            reply: selection.reply,
           });
         }
       } else if (c.startsWith('server:') && c.length > 7) {
-        entries.push({ kind: 'server', name: c.slice(7) });
+        entries.push({ kind: 'server', name: c.slice(7), reply: selection.reply });
       } else {
         bad.push(c);
       }
@@ -787,7 +796,10 @@ export async function runDefaultMode(
   setAllowedChannels(channelEntries);
   if (!isNonInteractiveSession) {
     if (rawDev && rawDev.length > 0) {
-      devChannels = parseChannelEntries(rawDev, '--dangerously-load-development-channels');
+      devChannels = parseChannelEntries(
+        rawDev.map(plugin => ({ plugin })),
+        '--dangerously-load-development-channels',
+      );
     }
   }
   // Flag-usage telemetry. Plugin identifiers are logged (same tier as

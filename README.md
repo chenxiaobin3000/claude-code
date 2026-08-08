@@ -130,23 +130,40 @@ Bash/PowerShell 命令中的 `cd` 属于 Shell cwd 持久化规则，不会触�
 
 ### Channel 启动配置
 
-稳定 Channel 可以在用户级 `~/.claude/settings.json` 的 `channels` 字段中持久化。以后只需启动 `claude.exe`，不必每次传入 `--channels`：
+稳定 Channel 可以在用户级 `~/.claude/settings.json` 的 `channels` 字段中持久化。每项同时声明要加载的插件和该 Channel 的回复工具；以后只需启动 `claude.exe`，不必每次传入 `--channels`：
 
 ```json
 {
   "channels": [
-    "plugin:weixin@local",
-    "plugin:wxwork@local",
-    "plugin:qq@local",
-    "plugin:telegram@local",
-    "plugin:telegram-user@local"
+    {
+      "plugin": "plugin:weixin@local",
+      "reply": "mcp__plugin_weixin_weixin__reply"
+    },
+    {
+      "plugin": "plugin:wxwork@local",
+      "reply": "mcp__plugin_wxwork_wxwork__reply"
+    },
+    {
+      "plugin": "plugin:qq@local",
+      "reply": "mcp__plugin_qq_qq__reply"
+    },
+    {
+      "plugin": "plugin:telegram@local",
+      "reply": "mcp__plugin_telegram_telegram__reply"
+    },
+    {
+      "plugin": "plugin:telegram-user@local",
+      "reply": "mcp__plugin_telegram-user_telegram-user__reply"
+    }
   ]
 }
 ```
 
 管理员也可以在管理级 `managed-settings.json` 或 `managed-settings.d/*.json` 中配置同一字段。Windows 文件位置为 `C:\\Program Files\\ClaudeCode\\managed-settings.json`；macOS 为 `/Library/Application Support/ClaudeCode/managed-settings.json`；Linux 为 `/etc/claude-code/managed-settings.json`。
 
-`channels` 明确不能在项目中配置：仓库内的 `.claude/settings.json`、`.claude/settings.local.json` 以及 `--settings` 指定的临时配置即使包含该字段也会被忽略，避免打开项目时由仓库自行启动外部消息入口。命令行 `--channels` 继续支持，并与用户级、管理级列表合并去重；`--dangerously-load-development-channels` 仍只用于当前交互式开发会话，不允许持久化。
+`channels` 明确不能在项目中配置：仓库内的 `.claude/settings.json`、`.claude/settings.local.json` 以及 `--settings` 指定的临时配置即使包含该字段也会被忽略，避免打开项目时由仓库自行启动外部消息入口。配置文件只接受上面的对象格式，不兼容旧字符串数组。命令行 `--channels` 仍接受插件字符串，并与用户级、管理级列表按 `plugin` 合并；同一插件可由配置文件补充 `reply`，冲突的回复工具会报错退出。`--dangerously-load-development-channels` 仍只用于当前交互式开发会话，不允许持久化。
+
+Channel 消息进入模型后继续使用原有轮次和合并流程；轮次完成时，最终 Assistant 文本会通过来源 Channel 对应的 `reply` 工具发送。普通终端输入不触发该流程。一次合并轮次按“来源 MCP Server + `chat_id`”去重并绑定最新 `message_id`；不同 Channel 分别发送同一最终文本。若模型在本轮已经用同一个回复工具向同一 `chat_id` 发送，则不会重复回复。配置的 `reply` 是被动发送最终回复的明确授权，但显式 `ask`、`deny` 或硬安全规则仍会阻止自动发送；工具缺失、归属不匹配、参数无效或调用失败都会明确报错，不会跨 Channel 回退。
 
 本地 Plugin Manifest 可用 `apiVersion` 声明所需的扩展 API SemVer 范围，例如 `"apiVersion": "^1.0.0"`。当前扩展 API 为 `1.0.0`，并与 CLI 产品版本独立；同一主版本只允许新增可选字段或能力，删除、改名、默认行为变化等破坏性修改必须升级主版本。旧 Manifest 缺少该字段时按 v1 契约继续加载。显式范围不兼容时会禁用整个 Plugin，并连带收回其 Hook、Skill、Agent、Command、MCP、LSP 和 Settings，避免组件半加载；依赖该 Plugin 的其他 Plugin 也会按依赖闭包安全降级。MCP 和 ACP 仍使用各自协议的原生版本协商，不复用 Plugin API 版本。
 

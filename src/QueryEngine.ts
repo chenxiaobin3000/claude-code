@@ -3,6 +3,7 @@ import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs
 import { randomUUID } from 'crypto'
 import last from 'lodash-es/last.js'
 import {
+  getAllowedChannels,
   getSessionId,
   isSessionPersistenceDisabled,
 } from 'src/bootstrap/state.js'
@@ -39,6 +40,11 @@ import { hasAutoMemPathOverride } from './memdir/paths.js'
 import { query } from './query.js'
 import { categorizeRetryableAPIError } from './services/api/errors.js'
 import type { MCPServerConnection } from './services/mcp/types.js'
+import {
+  collectChannelReplyTargets,
+  dispatchConfiguredChannelReplies,
+  resolveChannelReplyPlan,
+} from './services/mcp/channelReply.js'
 import type { AppState } from './state/AppState.js'
 import { type Tools, type ToolUseContext, toolMatchesName } from './Tool.js'
 import type { AgentDefinition } from '@claude-code/builtin-tools/tools/AgentTool/loadAgentsDir.js'
@@ -454,6 +460,10 @@ export class QueryEngine {
 
     // Push new messages, including user input and any attachments
     this.mutableMessages.push(...messagesFromUserInput)
+    const channelTargets = collectChannelReplyTargets(
+      messagesFromUserInput,
+      getAllowedChannels(),
+    )
 
     // Update params to reflect updates from processing /slash commands
     const messages = [...this.mutableMessages]
@@ -699,6 +709,7 @@ export class QueryEngine {
     const initialStructuredOutputCalls = jsonSchema
       ? countToolCalls(this.mutableMessages, SYNTHETIC_OUTPUT_TOOL_NAME)
       : 0
+    const channelEvents: Message[] = []
 
     for await (const message of query({
       messages,
@@ -793,6 +804,7 @@ export class QueryEngine {
           // streamed responses, this is null at content_block_stop time;
           // the real value arrives via message_delta (handled below).
           const msg = message as Message
+          channelEvents.push(msg)
           const stopReason = msg.message?.stop_reason as
             | string
             | null
@@ -1186,6 +1198,18 @@ export class QueryEngine {
         })(),
       }
       return
+    }
+
+    if (!this.abortController.signal.aborted && channelTargets.length > 0) {
+      const replyPlan = resolveChannelReplyPlan(channelEvents, channelTargets)
+      if (replyPlan) {
+        await dispatchConfiguredChannelReplies({
+          plan: replyPlan,
+          tools,
+          context: processUserInputContext,
+          canUseTool: wrappedCanUseTool,
+        })
+      }
     }
 
     // Extract the text result based on message type

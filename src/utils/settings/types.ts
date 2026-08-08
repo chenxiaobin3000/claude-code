@@ -811,11 +811,28 @@ export const SettingsSchema = lazySchema(() =>
             'Set true to allow; users then select servers via --channels.',
         ),
       channels: z
-        .array(z.string().trim().min(1))
+        .array(
+          z.object({
+            plugin: z
+              .string()
+              .trim()
+              .regex(
+                /^plugin:[^@\s]+@[^@\s]+$/,
+                'channel plugin must use plugin:<name>@<marketplace>',
+              ),
+            reply: z
+              .string()
+              .trim()
+              .regex(
+                /^mcp__[a-zA-Z0-9_-]+__[a-zA-Z0-9_-]+$/,
+                'channel reply must be a fully qualified MCP tool name',
+              ),
+          }),
+        )
         .optional()
         .describe(
-          'Channel servers to activate at startup, using plugin:<name>@<marketplace> ' +
-            'or server:<name>. Only user settings and managed settings are read; ' +
+          'Channel plugins to activate at startup and their final-response MCP reply tools. ' +
+            'Only user settings and managed settings are read; ' +
             'project, project-local, and --settings sources are ignored.',
         ),
       // Org-level channel plugin allowlist. When set, REPLACES the

@@ -7,11 +7,13 @@
  *
  * The notification handler wraps the content in a <channel> tag and
  * enqueues it. SleepTool polls hasCommandsInQueue() and wakes within 1s.
- * The model sees where the message came from and decides which tool to reply
- * with (the channel's MCP tool, SendUserMessage, or both).
+ * The structured origin records where the message came from. When that active
+ * Channel has a configured reply tool, the final assistant text is delivered
+ * through it; an explicit matching tool call suppresses duplicate delivery.
  *
- * Channel delivery is local MCP traffic and requires an explicit --channels
- * session allowlist. It has no account or cloud authentication dependency.
+ * Channel delivery is local MCP traffic and requires an active selection from
+ * --channels, user settings, or managed settings. It has no account or cloud
+ * authentication dependency.
  */
 
 import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js'
