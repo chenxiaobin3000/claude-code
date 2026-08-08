@@ -104,7 +104,7 @@ export async function handleOpenAIProxyCli(
         gateway = 'stopped'
       }
       process.stdout.write(
-        `auth=${session ? 'logged-in' : 'logged-out'}; gateway=${gateway}; forwarding=not-implemented.\n`,
+        `auth=${session ? 'logged-in' : 'logged-out'}; gateway=${gateway}; forwarding=responses.\n`,
       )
       return
     }

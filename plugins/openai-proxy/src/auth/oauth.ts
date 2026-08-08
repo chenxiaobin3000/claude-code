@@ -159,16 +159,30 @@ export class OpenAIProxyAuth {
       ) {
         return current
       }
-      const tokens = await this.tokenRequest(
-        new URLSearchParams({
-          grant_type: 'refresh_token',
-          refresh_token: current.tokens.refreshToken,
-          client_id: this.clientId,
-        }),
-      )
-      const refreshed = this.sessionFromTokens(tokens, current)
-      await this.store.save(refreshed)
-      return refreshed
+      return this.refreshSession(current)
+    })
+  }
+
+  private async refreshSession(
+    current: OpenAIProxySession,
+  ): Promise<OpenAIProxySession> {
+    const tokens = await this.tokenRequest(
+      new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: current.tokens.refreshToken,
+        client_id: this.clientId,
+      }),
+    )
+    const refreshed = this.sessionFromTokens(tokens, current)
+    await this.store.save(refreshed)
+    return refreshed
+  }
+
+  async forceRefreshSession(): Promise<OpenAIProxySession> {
+    return this.store.withLock(async () => {
+      const current = await this.store.load()
+      if (!current) throw new Error('openai-proxy is not logged in.')
+      return this.refreshSession(current)
     })
   }
 

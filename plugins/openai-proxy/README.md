@@ -4,11 +4,11 @@
 ChatGPT/Codex subscription through the OpenAI-compatible model configuration
 already supported by this project.
 
-Phase 1 provides only the TypeScript/Bun Plugin boundary, standalone Host,
-loopback-only authenticated gateway, diagnostics, and fail-closed placeholder
-for model requests. Phase 2 adds an isolated ChatGPT browser/device-code login,
-token refresh/revocation, JWT account metadata parsing, and private atomic
-session storage. It never reads or imports Codex's own auth file.
+Phase 1 provides the TypeScript/Bun Plugin boundary and loopback-only gateway.
+Phase 2 adds isolated ChatGPT browser/device-code login and private atomic
+session storage. Phase 3 forwards ordinary streaming Chat Completions requests
+to the official Codex Responses endpoint and adapts Responses SSE back to the
+existing model stream. It never reads or imports Codex's own auth file.
 
 ## Development commands
 
@@ -22,12 +22,25 @@ bun run plugins/openai-proxy/host/entry.ts status
 bun run plugins/openai-proxy/host/entry.ts logout
 ```
 
-The local base URL is fixed to `http://127.0.0.1:48181/v1`. Until a later phase
-implements the audited Responses transport, `POST /v1/chat/completions` returns
-a deterministic `503 openai_proxy_not_ready` error and never falls back to a
-remote endpoint.
+The local base URL is fixed to `http://127.0.0.1:48181/v1`. Configure the
+subscription model as an ordinary OpenAI-compatible model; no Provider or
+proxy-specific model type is required:
 
-The phase 1 MCP entry is intentionally inert and does not bind the gateway
+```json
+{
+  "model": "<slug returned by /v1/models>",
+  "baseUrl": "http://127.0.0.1:48181/v1",
+  "apiKeyEnv": "OPENAI_PROXY_LOCAL_TOKEN"
+}
+```
+
+The gateway implements `GET /v1/models` and streaming
+`POST /v1/chat/completions`. Unsupported Chat Completions fields are rejected
+explicitly instead of being silently removed. Upstream authentication, errors,
+timeouts, cancellation and interrupted streams fail closed; there is no model
+or endpoint fallback.
+
+The MCP entry remains intentionally inert and does not bind the gateway
 port. Automatic single-instance startup is deferred until the daemon lease and
 multi-client lifecycle are implemented, so installing this Plugin cannot cause
 port conflicts between existing CLI sessions.

@@ -153,10 +153,10 @@
 ### P1：openai-proxy ChatGPT/Codex 订阅模型代理
 
 - [x] 第一阶段已新增独立本地插件 `plugins/openai-proxy`，服务进程命名为 `openai-proxy-host`；实现仅使用 TypeScript、Bun 和现有项目构建链，不引入 Rust、Cargo、`.rs` 文件或其他语言运行时。插件已具备本地 MCP 生命周期入口、loopback-only 鉴权网关、`serve/status/doctor`、安全的未就绪响应、独立 Host 构建及边界/网关/分发验证；本阶段不读取 Codex 凭据、不执行 OAuth、不请求 OpenAI。
-- [ ] 保持现有模型调用主链不变，不新增 Provider 或代理模型类型，不修改 QueryEngine、OpenAI Provider、工具循环、权限、Sandbox、Session 或 UI 的权威职责；在 `models.json` 中仍按普通 OpenAI 兼容模型配置，仅将 `baseUrl` 指向 `http://127.0.0.1:48181/v1`，并通过 `OPENAI_PROXY_LOCAL_TOKEN` 提供本地访问凭据。
-- [ ] 提供仅监听 `127.0.0.1` 的 OpenAI 兼容网关，至少实现 `POST /v1/chat/completions`、`GET /v1/models`、`GET /health` 和 `GET /doctor`；未安装、未运行或认证失败时明确报错，不回退到其他模型或外部地址。
-- [ ] 使用本地 Bearer capability token 限制同机其他进程滥用订阅；Token 不得写入 `models.json`、日志、模型上下文或子进程参数，所有错误输出必须脱敏。
-- [ ] 将现有 Chat Completions 请求转换为官方 Codex Responses 请求，并把 Responses SSE 稳定适配回现有流事件，覆盖文本、reasoning、工具调用、并行工具、工具结果、Usage、finish reason、取消和断流；插件不得接管项目自身的 Agent 循环或工具执行。
+- [x] 保持现有模型调用主链不变，不新增 Provider 或代理模型类型，不修改 QueryEngine、OpenAI Provider、工具循环、权限、Sandbox、Session 或 UI 的权威职责；`plugins/openai-proxy/README.md` 已记录普通 `models.json` 配置，仅将 `baseUrl` 指向 `http://127.0.0.1:48181/v1`，并通过 `OPENAI_PROXY_LOCAL_TOKEN` 提供本地访问凭据。
+- [x] 已提供仅监听 `127.0.0.1` 的 OpenAI 兼容网关，实现 `POST /v1/chat/completions`、`GET /v1/models`、`GET /health` 和 `GET /doctor`；未安装、未运行、未登录或认证失败时明确报错，不回退到其他模型或外部地址。
+- [x] 已使用本地 Bearer capability token 限制同机其他进程滥用订阅；Token 不写入 `models.json`、日志、模型上下文或子进程参数，上游错误正文和未知内部错误不透传到本地客户端。
+- [x] 第三阶段已将现有 Chat Completions 请求转换为官方 Codex Responses 请求，并把 Responses SSE 适配回现有流事件，覆盖系统/用户/助手消息、图片、reasoning、工具定义/选择/调用/结果、并行工具、输出 Token、Usage、finish reason、401 单次刷新、403/429、超时、取消和断流；不支持的字段明确拒绝，不静默删除。固定 Fixture 已通过现有 OpenAI SDK 与 `adaptOpenAIStreamToAnthropic` 主链验证，插件不接管 Agent 循环或工具执行；真实账号验收仍按完成条件单独执行。
 - [x] 第二阶段已用 TypeScript 语义重写官方开源 Codex 的必要登录能力：浏览器 OAuth、device-code、S256 PKCE、严格 state/允许的官方回调后缀、Token 交换/刷新/撤销，以及账号、workspace 和 plan 信息解析；已提供 `setup`、`login`、`login --device-code`、`status`、`doctor`、`logout`、`serve` 和 MCP 生命周期入口。`stop` 随下一阶段单实例守护进程一起实现。本阶段只通过固定 Fixture 验证协议，不使用真实账号或把测试结果冒充真实验收。
 - [x] Session 固定保存到 `~/.claude/openai-proxy/auth.json`，已采用同目录原子替换、跨进程有界锁、刷新竞争串行化、符号链接拒绝和最小权限保护；POSIX 使用目录 `0700`/文件 `0600`，Windows 使用当前用户 ACL。实现不读取、导入或覆盖 Codex 自身凭据文件，OAuth Token 不暴露给主项目进程、配置、状态输出或日志。
 - [ ] 复用现有本地 Plugin/MCP 生命周期能力管理单实例服务，记录 PID、锁、端点和版本，支持多 CLI 客户端安全共享、租约和空闲退出；服务异常终止后必须可诊断、可重启且不损坏 Session。

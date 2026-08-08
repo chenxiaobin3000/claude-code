@@ -5,15 +5,23 @@ import {
   OPENAI_PROXY_PORT,
   resolveLocalToken,
 } from './config.js'
+import { OpenAIProxyModelService } from './model/service.js'
+import { OpenAIProxyModelError } from './model/types.js'
 
 export interface OpenAIProxyGateway {
   readonly url: string
   stop(): void
 }
 
+interface GatewayModelService {
+  models(signal: AbortSignal): Promise<Response>
+  chatCompletions(request: Request): Promise<Response>
+}
+
 interface GatewayOptions {
   token?: string
   port?: number
+  modelService?: GatewayModelService
 }
 
 function json(body: unknown, status = 200): Response {
@@ -44,7 +52,9 @@ function isAuthorized(request: Request, expectedToken: string): boolean {
   if (!authorization?.startsWith('Bearer ')) return false
   const supplied = Buffer.from(authorization.slice('Bearer '.length), 'utf8')
   const expected = Buffer.from(expectedToken, 'utf8')
-  return supplied.length === expected.length && timingSafeEqual(supplied, expected)
+  return (
+    supplied.length === expected.length && timingSafeEqual(supplied, expected)
+  )
 }
 
 export function startOpenAIProxyGateway(
@@ -53,17 +63,19 @@ export function startOpenAIProxyGateway(
 ): OpenAIProxyGateway {
   const token = options.token ?? resolveLocalToken()
   const port = options.port ?? OPENAI_PROXY_PORT
+  const modelService =
+    options.modelService ?? new OpenAIProxyModelService({ version })
   const server = Bun.serve({
     hostname: OPENAI_PROXY_HOST,
     port,
-    fetch(request) {
+    async fetch(request) {
       const url = new URL(request.url)
       if (request.method === 'GET' && url.pathname === '/health') {
         return json({
           status: 'ok',
           service: 'openai-proxy',
           version,
-          phase: 'foundation',
+          phase: 'model_forwarding',
         })
       }
       if (!isAuthorized(request, token)) {
@@ -79,21 +91,25 @@ export function startOpenAIProxyGateway(
           service: 'openai-proxy',
           version,
           bind: OPENAI_PROXY_HOST,
-          forwarding: 'not_implemented',
+          forwarding: 'responses',
         })
       }
       if (request.method === 'GET' && url.pathname === '/v1/models') {
-        return json({ object: 'list', data: [] })
+        try {
+          return await modelService.models(request.signal)
+        } catch (error) {
+          return modelErrorResponse(error)
+        }
       }
       if (
         request.method === 'POST' &&
         url.pathname === '/v1/chat/completions'
       ) {
-        return openAIError(
-          'openai-proxy model forwarding is not implemented in phase 1.',
-          'openai_proxy_not_ready',
-          503,
-        )
+        try {
+          return await modelService.chatCompletions(request)
+        } catch (error) {
+          return modelErrorResponse(error)
+        }
       }
       return openAIError('Route not found.', 'route_not_found', 404)
     },
@@ -102,4 +118,15 @@ export function startOpenAIProxyGateway(
     url: port === OPENAI_PROXY_PORT ? OPENAI_PROXY_BASE_URL : server.url.origin,
     stop: () => server.stop(true),
   }
+}
+
+function modelErrorResponse(error: unknown): Response {
+  if (error instanceof OpenAIProxyModelError) {
+    return openAIError(error.message, error.code, error.status)
+  }
+  return openAIError(
+    'openai-proxy could not complete the model request.',
+    'openai_proxy_failure',
+    502,
+  )
 }

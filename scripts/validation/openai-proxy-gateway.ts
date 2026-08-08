@@ -3,17 +3,34 @@ import { startOpenAIProxyGateway } from '../../plugins/openai-proxy/src/gateway.
 import { assert, assertEqual } from './assertions.js'
 
 const token = 'fixture-local-token-that-is-at-least-32-characters'
-const gateway = startOpenAIProxyGateway('0.1.0-test', { token, port: 0 })
+const gateway = startOpenAIProxyGateway('0.1.0-test', {
+  token,
+  port: 0,
+  modelService: {
+    async models() {
+      return Response.json({ object: 'list', data: [] })
+    },
+    async chatCompletions() {
+      return Response.json(
+        { error: { code: 'fixture_not_ready' } },
+        { status: 503 },
+      )
+    },
+  },
+})
 try {
   const health = await fetch(`${gateway.url}/health`)
   assertEqual(health.status, 200, 'unauthenticated health status')
   const healthBody = (await health.json()) as Record<string, unknown>
   assertEqual(healthBody.service, 'openai-proxy', 'health identity')
-  assertEqual(healthBody.phase, 'foundation', 'foundation phase')
+  assertEqual(healthBody.phase, 'model_forwarding', 'model forwarding phase')
 
   const missing = await fetch(`${gateway.url}/doctor`)
   assertEqual(missing.status, 401, 'missing local token')
-  assert(!(await missing.text()).includes(token), 'missing-token response is secret-free')
+  assert(
+    !(await missing.text()).includes(token),
+    'missing-token response is secret-free',
+  )
 
   const wrong = await fetch(`${gateway.url}/v1/models`, {
     headers: { authorization: 'Bearer wrong-token' },
@@ -24,11 +41,7 @@ try {
   const doctor = await fetch(`${gateway.url}/doctor`, { headers })
   assertEqual(doctor.status, 200, 'authenticated doctor')
   const doctorBody = (await doctor.json()) as Record<string, unknown>
-  assertEqual(
-    doctorBody.forwarding,
-    'not_implemented',
-    'phase 1 forwarding status',
-  )
+  assertEqual(doctorBody.forwarding, 'responses', 'model forwarding status')
 
   const models = await fetch(`${gateway.url}/v1/models`, { headers })
   assertEqual(models.status, 200, 'authenticated models endpoint')
@@ -46,8 +59,8 @@ try {
   }
   assertEqual(
     completionBody.error.code,
-    'openai_proxy_not_ready',
-    'deterministic not-ready error',
+    'fixture_not_ready',
+    'injected model service error',
   )
 
   const missingRoute = await fetch(`${gateway.url}/unknown`, { headers })
