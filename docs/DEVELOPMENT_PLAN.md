@@ -56,7 +56,7 @@
 - 插件仅支持本地插件。Windows standalone 只扫描 `claude.exe` 同级 `plugins` 下含 `.claude-plugin/plugin.json` 的一级直接子目录，不递归、不扫描 cwd 或 `~/.claude/plugins`；目录缺失或为空时静默跳过，链接、Junction 和路径逃逸 fail-closed。源码/Bun 开发模式不自动扫描，继续使用 `--plugin-dir`。
 - 稳定 Channel 可通过用户级 `~/.claude/settings.json` 或管理级 `managed-settings.json`/`managed-settings.d/*.json` 的 `channels` 对象列表随主程序启动；每项固定为 `{ "plugin": "plugin:<name>@<source>", "reply": "mcp__<server>__reply" }`，不兼容旧字符串数组。命令行 `--channels` 仍接受插件字符串，三种来源按 `plugin` 合并，并允许配置文件为命令行选择补充 `reply`；回复工具冲突时启动失败。项目 `.claude/settings.json`、`.claude/settings.local.json` 与 `--settings` 中的同名字段一律忽略，仓库不能自行启用外部消息入口；开发 Channel 仍只能通过交互式命令行参数临时启用。
 - Channel 入站保持既有模型轮次和批量合并语义；最终 Assistant 文本按来源 Channel 的 `reply` 工具确定性发送，非 Channel 输入保持原流程。同一合并轮次按 MCP Server 与 `chat_id` 去重、使用最新 `message_id`，不同 Channel 分别发送；模型已对同一会话调用匹配回复工具时禁止重复发送。配置项授权被动最终回复，但显式 `ask`、`deny` 与硬安全结果优先；工具缺失、归属不匹配、参数无效或调用失败均明确失败，禁止跨 Channel 猜测或回退。
-- QQ、企业微信、Telegram Bot 与 Telegram User 统一使用账号级跨进程连接锁，锁记录 PID、进程启动时间、Host、账号别名与随机 Owner ID。Windows、Linux、macOS 均核验进程出生时间和 Host 身份，PID 复用或旧版陈旧锁可自动恢复，身份不可确认时 fail-closed；释放必须匹配完整所有权，禁止旧 Host 删除后继锁。同一账号不能被两个 Host 同时连接，不同插件或账号互不影响。
+- QQ、企业微信与 Telegram Bot 统一使用账号级跨进程连接锁，锁记录 PID、进程启动时间、Host、账号别名与随机 Owner ID。Windows、Linux、macOS 均核验进程出生时间和 Host 身份，PID 复用或旧版陈旧锁可自动恢复，身份不可确认时 fail-closed；释放必须匹配完整所有权，禁止旧 Host 删除后继锁。同一账号不能被两个 Host 同时连接，不同插件或账号互不影响。
 - `qq-host`、`wxwork-host`、`telegram-host` 与 `telegram-user-host` 只保存环境变量名，不保存长期凭据。后续运行优先读取进程环境变量，独立 Host 未获得 `claude.exe` 注入时按变量名回退读取用户级 `settings.json.env`；项目和管理级设置不参与该回退。
 - 所有 Channel 插件的核心 `reply` MCP 工具通过 `anthropic/alwaysLoad` 始终进入模型工具列表，外部消息回复不依赖延迟工具搜索；非必要 Channel 工具继续按需加载。
 - 插件优先级固定为显式 `--plugin-dir`（`@inline`）> standalone 自动发现（`@local`）> 内置（`@builtin`）。同级重名禁用歧义项，高优先级插件失败时不回退同名低优先级实现；`--bare` 禁用自动发现但保留显式插件，`/reload-plugins` 会重新扫描并裁剪已移除的全部插件组件。
@@ -80,7 +80,10 @@
 - Telegram 路由固定为 `bot-alias::private::chat-id`、`bot-alias::group::chat-id` 或带 `::topic::thread-id` 的群组 Topic；群聊只接收明确 `@` Bot、回复 Bot 或带 Bot 用户名的命令。首版覆盖文本、图片、文档、音频、语音和视频，保留引用与附件元数据；`reply` 和 `send_typing` 必须绑定 15 分钟内的入站上下文，不提供主动发送。
 - Telegram 文本使用纯文本并按 4096 个 Unicode 字符确定性拆分；入站与出站单文件上限 20 MiB，本地文件只能来自 `TELEGRAM_ALLOWED_FILE_ROOTS`。`429` 只按 `retry_after` 有界重试一次，网络结果不确定的发送不重放；每个出站操作生成不含敏感数据的本地操作 ID，错误区分 API、网络、冲突、权限和配置，日志不记录 Token、完整消息或含 Token 的文件 URL。
 - Telegram 固定传输 Fixture 已覆盖双 Bot 配置/租约、Token/Update/Chat/Topic 隔离、`getMe`、Webhook 冲突、`409`、长轮询、群聊过滤、排重、Unicode 拆分、附件、媒体目录/上限、`429`、权限越界、Token 脱敏、Host EOF、standalone 分发与自动发现，并统一并入 `bun run verify`。生产来源为 `telegram@local`，开发显式加载为 `telegram@inline`；后续升级只允许人工冻结版本、审计差异并更新 Fixture。
-- Telegram Bot 可选 `TELEGRAM_PROXY_URL` 使用 Bun 原生 HTTP/HTTPS 代理传输，统一覆盖 doctor、Bot API、长轮询、回复、typing、上传、`getFile` 和文件下载；Telegram User 可选 `TELEGRAM_USER_PROXY_URL` 使用 GramJS 原生 SOCKS5，统一覆盖登录、Session 恢复、DC 迁移、Update、消息、媒体及重连。两者只从 Host 进程环境或用户级 `settings.json.env` 读取，代理在 Host 启动时固定，失败不回退直连，凭据与查询参数统一脱敏。Bot SOCKS5 与 User HTTP/HTTPS 在当前 standalone 中显式拒绝；本地 HTTP/SOCKS5 Fixture、认证、拒绝、取消、失败不回退、双账号绑定和 standalone 能力检查已进入 `bun run verify`。
+- Telegram Bot 可选 `TELEGRAM_PROXY_URL` 使用 Bun 原生 HTTP/HTTPS 代理传输，统一覆盖 doctor、Bot API、长轮询、回复、typing、上传、`getFile` 和文件下载；Telegram User 可选 `TELEGRAM_USER_PROXY_URL` 使用 GramJS 原生 SOCKS5，覆盖登录、Session 恢复、DC 迁移、对话列表与历史读取。两者只从 Host 进程环境或用户级 `settings.json.env` 读取，失败不回退直连，凭据与查询参数统一脱敏。Bot SOCKS5 与 User HTTP/HTTPS 在当前 standalone 中显式拒绝；本地 HTTP/SOCKS5 Fixture、认证、拒绝、取消、失败不回退、双账号绑定和 standalone 能力检查已进入 `bun run verify`。
+- Telegram User 是独立的按需历史读取插件，固定使用 GramJS `2.26.22`（commit `3aedb2e6ef216d307607f3d0f3f5b0ace6701378`，生成 MTProto Layer 198），仅使用 TypeScript/Bun 并可编译为 Windows standalone，不引入 Python、Telethon、TDLib 或额外运行时。它只注册 `telegram-user-control` MCP，提供 `list_chats`、`set_chat_access` 和 `get_chat_history`；Session、账号和 allowlist 逐别名隔离，模型通过 Session HMAC 生成的不透明 `chatRef` 访问目标，最多读取 100 条且不下载附件。
+- Telegram User 不注册 Channel MCP，不监听或转换实时 Update，不向模型自动注入新消息，也不提供回复、主动发送、媒体下载或权限回传。未来若确有需要，可另行设计基于历史拉取的近实时模拟；当前没有后台轮询或补偿逻辑，该方向不列为待开发任务。
+- Telegram Bot 与 Telegram User 已通过真实低权限账号和本地代理验收：Bot 的鉴权与长轮询走 HTTP CONNECT，User 的鉴权、StringSession 恢复、对话列表、allowlist 与历史读取走 SOCKS5；失败不回退直连，诊断与日志不暴露 Token、API Hash、手机号、Session、代理凭据或消息正文。固定代理 Fixture、插件边界、独立 Host、standalone 分发和统一 CI 验证继续防止回归。
 - 本地 Plugin Manifest 使用可选 `apiVersion` SemVer 范围协商声明式扩展 API；当前版本为 `1.0.0`，缺省按旧 v1 契约兼容。显式不兼容时整插件及其组件不可达，依赖降级继续按固定点传播；MCP 与 ACP 保持各自协议协商。
 - `/cd` 有意保持为本项目的临时 cwd 命令，不对齐官方的跨项目会话迁移：它只改变主会话后续工具使用的当前目录，不改变启动项目根、Session ID、Transcript/Resume 归属、权限根、Settings、CLAUDE.md、Hook、Skill、Plugin、MCP、Memory、Plan 或 Checkpoint 作用域。
 - `/cd` 不改变已运行子 Agent 的 cwd；新建 Agent 从稳定的会话/工作树根启动，不继承主会话的临时 `/cd`，子 Agent 的 cwd 变化也不得回写主会话。`/clear` 和进程重启恢复到启动项目目录；无参数只报告当前 cwd，失败不得改变现有 cwd。
@@ -127,33 +130,7 @@
 
 ## 可选后续路线图（不影响当前验收）
 
-### P0：Telegram Bot / User 代理支持与用户账号验收
-
-- [x] `telegram` Bot 插件已增加显式 `TELEGRAM_PROXY_URL`，`telegram-user` 插件已增加显式 `TELEGRAM_USER_PROXY_URL`；两项均为可选用户级环境配置，未配置时保持直连。代理值只来自 Host 进程环境或用户级 `settings.json.env`，项目和管理级设置不参与注入；代理不可用时明确失败且不回退直连。
-- [x] 已冻结兼容矩阵：Bot 使用 Bun standalone/grammY 自定义 `fetch` 的 HTTP/HTTPS 代理，SOCKS5 显式拒绝；Telegram User 使用 GramJS 原生 SOCKS5，HTTP/HTTPS 显式拒绝。`TELEGRAM_API_ROOT` 与代理保持正交；代理用户名、密码和查询参数统一按凭据脱敏。
-- [x] Telegram Bot 代理已统一覆盖 `bot doctor`、`getMe`、`getWebhookInfo`、`getUpdates` 长轮询、回复、typing、上传、`getFile` 和文件下载；保留原有超时、取消、`429`、Webhook/长轮询冲突及发送不自动重放语义。
-- [x] Telegram User 代理在 GramJS 客户端创建时绑定，覆盖初次鉴权、验证码/2FA、StringSession 恢复、DC 发现与迁移、Update、消息、媒体和重连；所有账号共享 Host 级出口但状态继续逐账号隔离，代理变化只在 Host 重启后生效。
-- [x] `telegram-host bot doctor` 与 `telegram-user-host account doctor` 已报告脱敏代理模式、地址、连接阶段与错误分类；诊断不显示代理凭据、Bot Token、API Hash、手机号或 Session。
-- [x] `scripts/validation/telegram-proxy.ts` 与 `telegram-user-proxy.ts` 已提供本地 HTTP/SOCKS5 Fixture，覆盖直连、代理成功、代理认证、代理拒绝、超时、取消、禁止失败回退、Bot API/文件链路、GramJS SOCKS 传输、Session/双账号代理绑定、秘密脱敏与 standalone 能力；Host EOF 和 Windows standalone 分发继续由分发验证覆盖并统一进入 `bun run verify`。`bun run verify --ci` 已于 2026-08-08 全部通过。
-- [ ] 使用低权限 Bot 与测试用户账号通过真实本地代理验收 Bot API、登录、2FA、Session 重启恢复、DC 迁移、私聊/群组/频道/Topic、断线恢复及媒体收发；不得以固定 Fixture 冒充真实服务验收。
-
-- [x] 新增独立的 `telegram-user` 插件，使用 TypeScript 的 GramJS（npm 包 `telegram`）连接 Telegram MTProto，不使用 grammY Bot API，也不与 `telegram` Bot 插件共享代码路径、配置、凭据、Session、路由或权限状态。GramJS 是插件内正式运行时依赖，只能进入 `plugins/telegram-user` 和独立 Host，不得进入根包、主 CLI、其他插件或非 Telegram User 生产 Bundle。
-- [ ] 已冻结 GramJS `2.26.22`、commit `3aedb2e6ef216d307607f3d0f3f5b0ace6701378`、生成 MTProto Layer 198、Telegram API/Auth 文档和 `2026-08-04` 审计日期；Bun 直接加载和 Windows `bun build --compile` standalone 已通过。仍需使用低权限真实账号完成 `api_id`/`api_hash`、手机号验证码、2FA、StringSession 重启恢复、私聊/群组/频道/Topic、消息与媒体收发及断线重连验收。
-- [x] 在 `plugins/telegram-user` 建立标准 `telegram-user` Plugin Manifest、独立 TypeScript/Bun workspace、stdio MCP Server、`telegram-user-host` 和 standalone 分发目录。源码通过显式 `--plugin-dir plugins/telegram-user` 加载，生产通过 standalone 同级一级目录自动发现；删除插件目录即可完整移除普通 Telegram 用户账号能力。
-- [x] GramJS 已可直接打入当前 Windows Bun standalone；没有引入 Python、额外 Node Runtime、Telethon、TDLib 或 C++ 动态库，技术后备分支未触发。
-- [x] 登录使用应用级 `api_id`/`api_hash`、账号级手机号、一次性验证码和可选 2FA 密码；长期凭据只来自环境变量，验证码与 2FA 仅从当前私有交互读取且不落盘。已提供 `telegram-user-host account add|login|logout|remove|list|doctor` 和 `mcp` 生命周期。
-- [x] 支持唯一别名的多个 Telegram 用户账号；每个账号独立保存私有 MTProto Session、连接租约、Update 排重、允许列表和体验状态。Session 原子写入逐账号私有目录，诊断对 Session、API Hash、手机号和认证错误脱敏；单账号启动失败不终止其他账号。
-- [x] 产品范围只包含显式 allowlist 的私聊、群组和频道入站，以及文本和受支持媒体的定向回复；未授权 Update 在本地立即丢弃。没有批量群发、联系人导入、自动加群、陌生人主动私聊、账号资料修改、删除消息、群/频道管理、通话、Secret Chat、账号注册或风控规避入口。
-- [x] MTProto Update 转换为标准 Channel 通知，路由固定编码账号别名、Peer 类型、Peer ID 和可选 Topic ID，并保留消息 ID、发送者、引用、编辑状态和附件元数据。本账号出站、插件回复和重复 Update 均被过滤；回复使用原入站账号作用域内的 InputPeer，不解析或复用其他账号的 access hash。
-- [x] MCP 首版只提供绑定 15 分钟内原入站消息的 `reply` 与受限媒体回复，不提供主动发送。权限按账号、Peer、Topic、发送者和 Request ID 隔离，审批文本明确标注“将以你的 Telegram 用户身份执行”。
-- [x] Telegram User 的管理面与 Channel 回复面分离：独立 `telegram-user-control` MCP Server 按需提供 `list_chats`、`set_chat_access` 和 `get_chat_history`；模型只接触 Session HMAC 生成的 `chatRef`，不接触 Peer ID。历史读取仅限无限制 Peer allowlist、最多 100 条且不下载附件，allowlist 写操作不声明为只读。
-- [x] 网络连接与自动重连次数有界，GramJS 隐式请求重试和 FloodWait 自动等待关闭；FloodWait、DC 迁移、Session、验证码和 2FA 错误统一分类并脱敏。发送操作不自动重放，禁止无限重连和规避平台限制。
-- [x] `scripts/validation/telegram-user-*.ts` 已覆盖 GramJS/Bun 边界、可注入登录状态机、Session 安全、双账号隔离、路由/Topic、回声/Update 排重、媒体、权限、FloodWait/DC 分类、秘密脱敏、Host EOF、standalone 分发/自动发现和根 Bundle 依赖禁入，并统一并入 `bun run verify`；真实账号仍作为下一项附加验收。
-- [x] 后续升级固定为人工同步：先冻结 Telegram MTProto Layer、GramJS 版本/commit 和文档基线，再审计协议、生成类型、Session、依赖、Bundle 与产品风险并更新 Fixture；禁止自动下载、覆盖插件、更新 Session 或触发 CLI 自更新。
-
-完成条件：Telegram Bot 和 Telegram User 在未配置代理时保持现有直连行为，配置支持的代理时所有规定网络链路均经代理且失败不回退直连；代理凭据与 Telegram 凭据均不泄漏。GramJS 在当前支持平台的 Bun 开发运行和 standalone 产物均通过真实验证；至少两个 Telegram 用户账号可以同时连接，且不会串 Session、Peer、Update、附件、权限或秘密；插件默认只处理 allowlist 会话、不会处理自身回声，也不会提供批量或账号管理型高风险操作；`typecheck:telegram-host`、`typecheck:telegram-user-host`、两类 Host 构建、代理 Fixture、依赖边界、分发验证和 `bun run verify -- --ci` 全部通过。随后使用专门的低权限 Bot 与测试账号经真实本地代理验收 Bot API、登录、重启恢复、私聊、群组、频道、Topic、断线恢复及媒体收发，禁止直接使用重要主账号作为首次验收对象。
-
-### P1：openai-proxy ChatGPT/Codex 订阅模型代理
+### P0：openai-proxy ChatGPT/Codex 订阅模型代理
 
 - [x] 第一阶段已新增独立本地插件 `plugins/openai-proxy`，服务进程命名为 `openai-proxy-host`；实现仅使用 TypeScript、Bun 和现有项目构建链，不引入 Rust、Cargo、`.rs` 文件或其他语言运行时。插件已具备本地 MCP 生命周期入口、loopback-only 鉴权网关、`serve/status/doctor`、安全的未就绪响应、独立 Host 构建及边界/网关/分发验证；本阶段不读取 Codex 凭据、不执行 OAuth、不请求 OpenAI。
 - [x] 保持现有模型调用主链不变，不新增 Provider 或代理模型类型，不修改 QueryEngine、OpenAI Provider、工具循环、权限、Sandbox、Session 或 UI 的权威职责；`plugins/openai-proxy/README.md` 已记录普通 `models.json` 配置，仅将 `baseUrl` 指向 `http://127.0.0.1:48181/v1`，并通过 `OPENAI_PROXY_LOCAL_TOKEN` 提供本地访问凭据。
@@ -174,7 +151,7 @@
 
 完成条件：删除 `plugins/openai-proxy` 即可完整移除该能力且主项目模型链无需回滚；插件不引入新语言，登录凭据和订阅 Token 不进入主进程、配置、日志或模型上下文；本地网关、Responses 适配、代理 fail-closed、生命周期、Windows 独立发行和上游审计均有确定性验证，真实低权限账号验收单独留证，且 `bun run verify --ci` 全部通过。
 
-### P2：X 只读 MCP 工具插件真实服务验收
+### P1：X 只读 MCP 工具插件真实服务验收
 
 - [x] 已新增可删除式移除的独立 `plugins/x`、标准 Plugin Manifest、stdio MCP、`x-host`、workspace、standalone 分发和自动发现；主 CLI 没有静态注册或 X 运行时依赖。官方 XDK `0.6.6`（commit `9b312949e7edf4da32bfbaffda575f0eb7bc1525`）已冻结审计，但其声明的实例 `httpClient` 与运行时模块级私有传输不一致，无法在 Bun standalone 安全注入插件代理，因此按既定后备方案改用插件内固定 GET-only 官方 X API 传输，XDK 不进入依赖或产物。
 - [x] App 配置支持唯一别名和固定 `X_BEARER_TOKEN`：单 App 使用原始 Token，多 App 使用同一变量内按别名索引的 JSON 对象；提供 `app add|remove|list|doctor` 与 `mcp`，不保存或输出 Token。生产 API 根固定为 `https://api.x.com`，配置不能把 Token 重定向到其他 Endpoint。
@@ -185,7 +162,7 @@
 
 完成条件：确定性工程验收已经通过；补齐上述两个低权限 App 的真实服务验收后，将本节删除并把最终行为并入基线。
 
-### P3：可选产品能力
+### P2：可选产品能力
 
 - [ ] 支持 macOS 专用、默认关闭的 `sandbox.allowAppleEvents`，并确保该例外不会放宽文件系统、网络或其他平台的边界。
 

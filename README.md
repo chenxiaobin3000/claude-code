@@ -150,10 +150,6 @@ Bash/PowerShell 命令中的 `cd` 属于 Shell cwd 持久化规则，不会触�
     {
       "plugin": "plugin:telegram@local",
       "reply": "mcp__plugin_telegram_telegram__reply"
-    },
-    {
-      "plugin": "plugin:telegram-user@local",
-      "reply": "mcp__plugin_telegram-user_telegram-user__reply"
     }
   ]
 }
@@ -165,7 +161,7 @@ Bash/PowerShell 命令中的 `cd` 属于 Shell cwd 持久化规则，不会触�
 
 Channel 消息进入模型后继续使用原有轮次和合并流程；轮次完成时，最终 Assistant 文本会通过来源 Channel 对应的 `reply` 工具发送。普通终端输入不触发该流程。一次合并轮次按“来源 MCP Server + `chat_id`”去重并绑定最新 `message_id`；不同 Channel 分别发送同一最终文本。若模型在本轮已经用同一个回复工具向同一 `chat_id` 发送，则不会重复回复。配置的 `reply` 是被动发送最终回复的明确授权，但显式 `ask`、`deny` 或硬安全规则仍会阻止自动发送；工具缺失、归属不匹配、参数无效或调用失败都会明确报错，不会跨 Channel 回退。
 
-QQ、企业微信、Telegram Bot 和 Telegram User 对每个账号使用独立的跨进程连接锁，同一账号同一时刻只能由一个 Host 持有。锁同时记录 PID、进程启动时间、Host 身份、账号别名和随机 Owner ID；Windows、Linux 与 macOS 启动时会核验完整进程身份，PID 被其他进程复用时自动回收旧锁，无法确认所有权时安全拒绝。释放操作必须匹配完整 Owner ID，旧 Host 延迟退出不能删除新 Host 的锁。
+QQ、企业微信和 Telegram Bot 对每个账号使用独立的跨进程连接锁，同一账号同一时刻只能由一个 Host 持有。锁同时记录 PID、进程启动时间、Host 身份、账号别名和随机 Owner ID；Windows、Linux 与 macOS 启动时会核验完整进程身份，PID 被其他进程复用时自动回收旧锁，无法确认所有权时安全拒绝。释放操作必须匹配完整 Owner ID，旧 Host 延迟退出不能删除新 Host 的锁。
 
 本地 Plugin Manifest 可用 `apiVersion` 声明所需的扩展 API SemVer 范围，例如 `"apiVersion": "^1.0.0"`。当前扩展 API 为 `1.0.0`，并与 CLI 产品版本独立；同一主版本只允许新增可选字段或能力，删除、改名、默认行为变化等破坏性修改必须升级主版本。旧 Manifest 缺少该字段时按 v1 契约继续加载。显式范围不兼容时会禁用整个 Plugin，并连带收回其 Hook、Skill、Agent、Command、MCP、LSP 和 Settings，避免组件半加载；依赖该 Plugin 的其他 Plugin 也会按依赖闭包安全降级。MCP 和 ACP 仍使用各自协议的原生版本协商，不复用 Plugin API 版本。
 
@@ -378,12 +374,12 @@ Webhook、广播、Cron、Mini App 或 Bot 管理面板。文本按 4096 个 Uni
 
 ### telegram 用户账号插件
 
-Telegram User Channel 位于 [`plugins/telegram-user`](plugins/telegram-user)，使用固定的
+Telegram User 历史读取插件位于 [`plugins/telegram-user`](plugins/telegram-user)，使用固定的
 `telegram@2.26.22`（GramJS，commit
 `3aedb2e6ef216d307607f3d0f3f5b0ace6701378`，生成 MTProto Layer 198）连接普通
 Telegram 用户账号。它与 grammY Bot 插件完全分离，不共享配置、Session、路由或权限。
 可选 `TELEGRAM_USER_PROXY_URL` 支持 GramJS SOCKS5 代理，统一覆盖登录、Session 恢复、
-DC 迁移、Update、消息、媒体和重连；不支持 HTTP/HTTPS 代理，失败时不回退直连。
+DC 迁移、对话列表和历史消息请求；不支持 HTTP/HTTPS 代理，失败时不回退直连。
 
 先从 `my.telegram.org` 获取应用 API ID/API Hash。`account add` 保存 API ID、API
 Hash 和 E.164 手机号对应的环境变量名。验证码与可选 2FA 密码由私有交互输入读取，
@@ -398,25 +394,24 @@ bun plugins/telegram-user/host/entry.ts account login personal
 bun plugins/telegram-user/host/entry.ts account groups personal
 bun plugins/telegram-user/host/entry.ts access allow personal user 123456789
 bun plugins/telegram-user/host/entry.ts account history personal group -1001234567890 20
-bun run dev -- --plugin-dir plugins/telegram-user --dangerously-load-development-channels plugin:telegram-user@inline
 ```
 
 各插件的索引只保存环境变量名，不保存长期凭据。运行时优先读取进程环境变量；独立执行
-Host 的 `doctor`、`login` 或 `mcp` 时，缺失变量会按已保存的变量名回退读取用户级
+Host 的 `doctor`、`login` 或 `control-mcp` 时，缺失变量会按已保存的变量名回退读取用户级
 `~/.claude/settings.json`（或 `CLAUDE_CONFIG_DIR/settings.json`）的 `env`。项目和管理级
 设置不参与该回退。
 
 所有 Channel 插件的核心 `reply` MCP 工具均始终加载；收到外部消息后模型可在同一轮直接
 回复，不依赖先搜索延迟工具。`send_typing`、诊断等非必要工具仍按需加载。
 
-生产分发把 `bun` 替换为 `dist/plugins/telegram-user/telegram-user-host.exe`，并以
-`--channels plugin:telegram-user@local` 启用。Session 是长期登录凭据，逐账号私有保存于
-`~/.claude/channels/telegram-user`；只处理显式 allowlist 的 Peer/Topic，且只能回复 15 分钟
-内的入站消息。主动发送、群发、联系人/群组/频道管理、账号资料修改和风控规避均不提供。
-审批会明确标注操作“将以你的 Telegram 用户身份执行”。首次真实验收应使用低权限测试账号。
+生产分发把 `bun` 替换为 `dist/plugins/telegram-user/telegram-user-host.exe`。Session 是长期
+登录凭据，逐账号私有保存于 `~/.claude/channels/telegram-user`。插件不注册 Channel、
+不常驻监听 Update，也不提供回复或主动发送能力；需要消息时由模型显式调用历史读取工具。
+未来如需近实时效果，可基于历史拉取实现轮询，但当前没有该后台模拟能力。
+首次真实验收应使用低权限测试账号。
 完整配置与安全边界见 [`plugins/telegram-user/README.md`](plugins/telegram-user/README.md)。
 
-Telegram User 另带独立的 `telegram-user-control` MCP Server，按需提供 `list_chats`、
+Telegram User 只注册 `telegram-user-control` MCP Server，按需提供 `list_chats`、
 `set_chat_access` 和 `get_chat_history`。模型只能看到群名称、类型、allowlist 状态和由
 本地 Session HMAC 生成的 `chatRef`，不会看到真实 Peer ID；历史读取仍限定于已加入无限制
 Peer allowlist 的目标，最多 100 条且不下载附件。
@@ -478,7 +473,7 @@ bun run verify
 - telegram Plugin：`dist/plugins/telegram` 是完整分发目录，其中 grammY 与独立
   Telegram Channel MCP Host 已打入 standalone，目标机器无需 Bun 或 Node.js。
 - telegram-user Plugin：`dist/plugins/telegram-user` 是完整分发目录，其中 GramJS、
-  MTProto 客户端与独立 Telegram User Channel MCP Host 已打入 standalone，目标机器无需 Bun 或 Node.js。
+  MTProto 客户端与独立 Telegram User 历史读取 MCP Host 已打入 standalone，目标机器无需 Bun 或 Node.js。
 - x Plugin：`dist/plugins/x` 是完整分发目录，其中只读 X API MCP Host 已打入
   standalone，目标机器无需 Bun 或 Node.js。
 

@@ -5,12 +5,11 @@ import { buildStandaloneWithRetry } from './standalone-build.ts'
 const platformTarget = process.platform === 'win32' ? 'bun-windows-x64' : process.platform === 'darwin' ? process.arch === 'arm64' ? 'bun-darwin-arm64' : 'bun-darwin-x64' : process.arch === 'arm64' ? 'bun-linux-arm64' : 'bun-linux-x64'
 const root = resolve(import.meta.dir, '..'); const plugin = join(root, 'plugins', 'telegram-user'); const directory = join(root, 'dist', 'plugins', 'telegram-user'); const filename = process.platform === 'win32' ? 'telegram-user-host.exe' : 'telegram-user-host'; const outfile = join(directory, filename)
 await rm(directory, { recursive: true, force: true }); await mkdir(directory, { recursive: true })
-const result = await buildStandaloneWithRetry({ label: 'telegram-user-host', outfile, build: () => Bun.build({ entrypoints: [join(plugin, 'host', 'entry.ts')], target: 'bun', compile: { target: platformTarget, outfile, ...(process.platform === 'win32' ? { windows: { title: 'Telegram User Host', description: 'Local Telegram User Channel MCP Host', version: '1.0.0.0' } } : {}) }, define: { 'process.env.NODE_ENV': JSON.stringify('production') } }) })
+const result = await buildStandaloneWithRetry({ label: 'telegram-user-host', outfile, build: () => Bun.build({ entrypoints: [join(plugin, 'host', 'entry.ts')], target: 'bun', compile: { target: platformTarget, outfile, ...(process.platform === 'win32' ? { windows: { title: 'Telegram User Host', description: 'Local Telegram User History MCP Host', version: '1.0.0.0' } } : {}) }, define: { 'process.env.NODE_ENV': JSON.stringify('production') } }) })
 if (!result.success) { for (const item of result.logs) console.error(item); process.exit(1) }
 const output = await stat(outfile); await cp(join(plugin, 'README.md'), join(directory, 'README.md'))
 const manifest = JSON.parse(await readFile(join(plugin, '.claude-plugin', 'plugin.json'), 'utf8')) as Record<string, unknown>
 manifest.mcpServers = {
-  'telegram-user': { type: 'stdio', command: `\${CLAUDE_PLUGIN_ROOT}/${filename}`, args: ['mcp'] },
   'telegram-user-control': { type: 'stdio', command: `\${CLAUDE_PLUGIN_ROOT}/${filename}`, args: ['control-mcp'] },
 }
 await mkdir(join(directory, '.claude-plugin'), { recursive: true }); await writeFile(join(directory, '.claude-plugin', 'plugin.json'), `${JSON.stringify(manifest, null, 2)}\n`)

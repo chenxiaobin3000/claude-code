@@ -10,7 +10,6 @@ for (const path of [
   'plugins/wxwork/src/server.ts',
   'plugins/qq/src/server.ts',
   'plugins/telegram/src/server.ts',
-  'plugins/telegram-user/src/server.ts',
 ]) {
   const source = readFileSync(join(root, path), 'utf8')
   const reply = source.indexOf("name: 'reply'")

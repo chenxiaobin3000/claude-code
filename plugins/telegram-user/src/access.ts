@@ -1,12 +1,8 @@
 import { loadTelegramUserState, saveTelegramUserState } from './config.js'
-import type { TelegramUserPeerType, TelegramUserRoute } from './types.js'
+import type { TelegramUserPeerType } from './types.js'
 export interface TelegramUserAccessEntry { peerType: TelegramUserPeerType; peerId: string; topicId?: number; allowSenders?: string[] }
 export interface TelegramUserAccessConfig { version: 1; allowPeers: TelegramUserAccessEntry[] }
 export function loadTelegramUserAccess(alias: string): TelegramUserAccessConfig { return loadTelegramUserState(alias, 'access.json', { version: 1, allowPeers: [] }) }
-export function isTelegramUserRouteAllowed(alias: string, route: TelegramUserRoute, senderId: string): boolean {
-  if (route.accountAlias !== alias) return false
-  return loadTelegramUserAccess(alias).allowPeers.some(entry => entry.peerType === route.peerType && entry.peerId === route.peerId && (entry.topicId === undefined || entry.topicId === route.topicId) && (!entry.allowSenders?.length || entry.allowSenders.includes(senderId)))
-}
 export function isTelegramUserHistoryAllowed(
   alias: string,
   peerType: TelegramUserPeerType,

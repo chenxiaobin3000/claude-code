@@ -1,7 +1,5 @@
 import { Api, TelegramClient } from 'telegram'
 import type { EntityLike } from 'telegram/define'
-import { NewMessage, type NewMessageEvent } from 'telegram/events'
-import { EditedMessage } from 'telegram/events/EditedMessage.js'
 import { Logger, LogLevel } from 'telegram/extensions/Logger.js'
 import { StringSession } from 'telegram/sessions'
 import type { TelegramUserAccountConfig, TelegramUserCredentials } from './config.js'
@@ -19,7 +17,7 @@ import {
   type TelegramUserProxyMode,
   type TelegramUserTransport,
 } from './transport.js'
-import type { TelegramUserAttachment, TelegramUserInboundMessage, TelegramUserPeerType } from './types.js'
+import type { TelegramUserPeerType } from './types.js'
 
 export interface TelegramUserPrompts { code(viaApp?: boolean): Promise<string>; password(hint?: string): Promise<string> }
 export interface TelegramUserLoginTransport {
@@ -184,23 +182,6 @@ export async function listTelegramUserHistory(
   }
 }
 
-function mediaInfo(message: Api.Message): TelegramUserAttachment[] {
-  const file = message.file; if (!message.media || !file) return []
-  const kind: TelegramUserAttachment['kind'] = message.voice ? 'voice' : message.audio ? 'audio' : message.video ? 'video' : message.photo ? 'photo' : 'document'
-  return [{ kind, ...(file.name ? { fileName: file.name } : {}), ...(file.mimeType ? { mimeType: file.mimeType } : {}), ...(typeof file.size === 'number' ? { size: file.size } : {}) }]
-}
-async function convert(accountAlias: string, event: NewMessageEvent, edited: boolean): Promise<TelegramUserInboundMessage | null> {
-  const message = event.message
-  if (message.out || !message.senderId || !message.chatId) return null
-  const inputPeer = await message.getInputChat(); if (!inputPeer) return null
-  const peerType: TelegramUserPeerType = message.isPrivate ? 'user' : message.isGroup ? 'group' : 'channel'
-  const topicId = message.replyTo?.forumTopic ? (message.replyTo.replyToTopId ?? message.replyTo.replyToMsgId) : undefined
-  const sender = await message.getSender().catch(() => undefined)
-  const senderName = sender && 'firstName' in sender ? [sender.firstName, sender.lastName].filter(Boolean).join(' ') || sender.username : undefined
-  const attachments = mediaInfo(message)
-  return { accountAlias, updateKey: `${message.chatId}:${message.id}:${message.editDate ?? 0}`, messageId: message.id, peerId: message.chatId.toString(), peerType, ...(topicId ? { topicId } : {}), senderId: message.senderId.toString(), ...(senderName ? { senderName } : {}), text: message.message ?? '', ...(message.replyToMsgId ? { replyToMessageId: message.replyToMsgId } : {}), edited, attachments, inputPeer, ...(attachments.length ? { downloadMedia: async () => { const data = await message.downloadMedia({}); return Buffer.isBuffer(data) ? data : null } } : {}) }
-}
-
 export class TelegramUserRuntimeClient {
   readonly client: TelegramClient
   readonly proxyMode: TelegramUserProxyMode
@@ -222,14 +203,6 @@ export class TelegramUserRuntimeClient {
       throw new Error(`Telegram User doctor failed (stage=mtproto, transport=${this.proxyMode}, kind=${classifyTelegramUserTransportError(error)}): ${safe}`)
     }
   }
-  async start(handler: (message: TelegramUserInboundMessage) => Promise<void>, onError: (error: Error) => void): Promise<void> {
-    await this.doctor()
-    const receive = async (event: NewMessageEvent, edited: boolean): Promise<void> => { try { const message = await convert(this.account.alias, event, edited); if (message) await handler(message) } catch (error) { onError(new Error(classifyTelegramUserError(error))) } }
-    this.client.addEventHandler(event => receive(event as NewMessageEvent, false), new NewMessage({ incoming: true }))
-    this.client.addEventHandler(event => receive(event as NewMessageEvent, true), new EditedMessage({ incoming: true }))
-  }
-  async sendText(entity: EntityLike, text: string, replyTo?: number, topicId?: number): Promise<number> { const sent = await this.client.sendMessage(entity, { message: text, parseMode: undefined, ...(replyTo ? { replyTo } : {}), ...(topicId ? { topMsgId: topicId } : {}) }); return sent.id }
-  async sendFile(entity: EntityLike, path: string, replyTo?: number, topicId?: number): Promise<number> { const sent = await this.client.sendMessage(entity, { message: '', file: path, parseMode: undefined, ...(replyTo ? { replyTo } : {}), ...(topicId ? { topMsgId: topicId } : {}) }); return sent.id }
   async logout(): Promise<void> { await this.client.connect(); if (await this.client.checkAuthorization()) await this.client.invoke(new Api.auth.LogOut()) }
   async stop(): Promise<void> { await this.client.disconnect() }
 }

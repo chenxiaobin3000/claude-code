@@ -18,13 +18,12 @@ import {
   resolveTelegramUserCredentials,
   saveTelegramUserAccount,
 } from './config.js'
-import { runTelegramUserMcpServer } from './server.js'
 import { runTelegramUserControlMcpServer } from './control.js'
 import type { TelegramUserPeerType } from './types.js'
 
 function usage(): void {
   process.stdout.write(
-    'Usage:\n  telegram-user-host mcp\n  telegram-user-host control-mcp\n  telegram-user-host proxy capabilities\n  telegram-user-host account add <alias> <api-id-env> <api-hash-env> <phone-env>\n  telegram-user-host account login [alias]\n  telegram-user-host account logout [alias]\n  telegram-user-host account remove <alias>\n  telegram-user-host account list\n  telegram-user-host account groups [alias]\n  telegram-user-host account history <alias> <user|group|channel> <peer-id> [limit]\n  telegram-user-host account doctor [alias]\n  telegram-user-host access allow|deny <alias> <user|group|channel> <peer-id> [topic-id]\n  telegram-user-host access list <alias>\n',
+    'Usage:\n  telegram-user-host control-mcp\n  telegram-user-host proxy capabilities\n  telegram-user-host account add <alias> <api-id-env> <api-hash-env> <phone-env>\n  telegram-user-host account login [alias]\n  telegram-user-host account logout [alias]\n  telegram-user-host account remove <alias>\n  telegram-user-host account list\n  telegram-user-host account groups [alias]\n  telegram-user-host account history <alias> <user|group|channel> <peer-id> [limit]\n  telegram-user-host account doctor [alias]\n  telegram-user-host access allow|deny <alias> <user|group|channel> <peer-id>\n  telegram-user-host access list <alias>\n',
   )
 }
 async function promptLine(label: string): Promise<string> {
@@ -82,10 +81,6 @@ export async function handleTelegramUserCli(
   try {
     if (args[0] === 'proxy' && args[1] === 'capabilities') {
       process.stdout.write('Telegram User proxy: SOCKS5 supported; HTTP/HTTPS unsupported (fail-closed).\n')
-      return
-    }
-    if (args[0] === 'mcp') {
-      await runTelegramUserMcpServer(version)
       return
     }
     if (args[0] === 'control-mcp') {
@@ -220,18 +215,16 @@ export async function handleTelegramUserCli(
       return
     }
     if (args[0] === 'access' && (args[1] === 'allow' || args[1] === 'deny')) {
-      if (!args[2] || !args[3] || !args[4])
+      if (!args[2] || !args[3] || !args[4] || args[5] !== undefined)
         throw new Error(
-          'Expected: access allow|deny <alias> <user|group|channel> <peer-id> [topic-id]',
+          'Expected: access allow|deny <alias> <user|group|channel> <peer-id>',
         )
       const peerType = args[3] as TelegramUserPeerType
-      const topicId = args[5] === undefined ? undefined : Number(args[5])
       setTelegramUserRouteAllowed(
         args[2],
         {
           peerType,
           peerId: args[4],
-          ...(topicId !== undefined ? { topicId } : {}),
         },
         args[1] === 'allow',
       )
@@ -242,10 +235,12 @@ export async function handleTelegramUserCli(
     }
     if (args[0] === 'access' && args[1] === 'list') {
       if (!args[2]) throw new Error('Account alias is required.')
-      const entries = loadTelegramUserAccess(args[2]).allowPeers
+      const entries = loadTelegramUserAccess(args[2]).allowPeers.filter(
+        entry => entry.topicId === undefined && !entry.allowSenders?.length,
+      )
       process.stdout.write(
         entries.length
-          ? `${entries.map(entry => `${entry.peerType}\t${entry.peerId}${entry.topicId ? `\ttopic ${entry.topicId}` : ''}`).join('\n')}\n`
+          ? `${entries.map(entry => `${entry.peerType}\t${entry.peerId}`).join('\n')}\n`
           : 'No Telegram user Peers are allowlisted.\n',
       )
       return
