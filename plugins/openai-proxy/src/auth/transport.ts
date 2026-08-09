@@ -1,3 +1,5 @@
+import { createOpenAIUpstreamFetch } from '../upstreamProxy.js'
+
 export interface AuthRequest {
   url: string
   method: 'POST'
@@ -16,6 +18,18 @@ export const directAuthTransport: AuthTransport = request =>
     signal: request.signal,
     redirect: 'error',
   })
+
+export function createConfiguredAuthTransport(): AuthTransport {
+  const upstream = createOpenAIUpstreamFetch()
+  return request =>
+    upstream.fetch(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: request.body,
+      signal: request.signal,
+      redirect: 'error',
+    })
+}
 
 export async function readBoundedJson<T>(
   response: Response,

@@ -147,9 +147,9 @@
 - [x] 第二阶段已用 TypeScript 语义重写官方开源 Codex 的必要登录能力：浏览器 OAuth、device-code、S256 PKCE、严格 state/允许的官方回调后缀、Token 交换/刷新/撤销，以及账号、workspace 和 plan 信息解析；已提供 `setup`、`login`、`login --device-code`、`status`、`doctor`、`logout`、`serve` 和 MCP 生命周期入口。`stop` 随下一阶段单实例守护进程一起实现。本阶段只通过固定 Fixture 验证协议，不使用真实账号或把测试结果冒充真实验收。
 - [x] Session 固定保存到 `~/.claude/openai-proxy/auth.json`，已采用同目录原子替换、跨进程有界锁、刷新竞争串行化、符号链接拒绝和最小权限保护；POSIX 使用目录 `0700`/文件 `0600`，Windows 使用当前用户 ACL。实现不读取、导入或覆盖 Codex 自身凭据文件，OAuth Token 不暴露给主项目进程、配置、状态输出或日志。
 - [x] 第四阶段已复用现有本地 Plugin/MCP 生命周期锁实现单实例服务：MCP 自动启动或复用 Host，`runtime.json` 记录 PID、实例、端点、模式和版本，每个客户端维护独立续租，最后租约释放 30 秒后空闲退出；`stop` 使用本地 Bearer 鉴权控制端点，`serve` 沿用同一前台生命周期。`last-exit.json` 可诊断控制停止、空闲退出、信号、启动失败和崩溃遗留状态恢复；恢复只校验并接管确认为过期的锁，不向可变状态中的 PID 发信号，也不读取或改写 Session。确定性验证已覆盖双客户端共享、EOF/租约释放、自动启动、版本冲突、未授权停止、显式停止、空闲退出和崩溃恢复。
-- [ ] 支持显式 `OPENAI_PROXY_URL`，配置来源仅限进程环境或用户 `settings.json.env`；沿用现有代理策略实现 HTTP、HTTPS CONNECT 和代理认证，SOCKS5 未实现时明确拒绝。
-- [ ] 代理覆盖 OAuth Token 交换、device-code 轮询、刷新/撤销、模型目录、Responses/SSE 及必要的账号/额度请求；localhost 回调、本地网关和系统浏览器自身不经过该代理。
-- [ ] 配置代理后采用 fail-closed：代理拒绝、超时、认证失败或 DNS 失败时不得转为直连或本地 DNS；不重放结果不确定的模型请求，日志不得泄露 Authorization、Cookie、Token、验证码或敏感查询参数。
+- [x] 第五阶段已支持显式 `OPENAI_PROXY_URL`，配置来源严格限定为 Host 进程环境或用户 `settings.json.env`，且进程值优先；沿用现有 Bun HTTP/HTTPS CONNECT 传输语义并支持 URL Basic 代理认证，SOCKS5、非 HTTP(S) 协议、路径和查询参数均明确拒绝。通用 `HTTP_PROXY`、`HTTPS_PROXY` 不会隐式启用该能力，显式代理启用后会清除 Host 内的 `NO_PROXY` 绕过，防止要求代理的请求静默直连。
+- [x] 代理已覆盖 OAuth Token 交换、device-code 请求/轮询、刷新/撤销、模型目录和 Responses/SSE；这些路径统一注入同一显式上游传输。localhost 登录回调、本地网关、MCP stdio 和系统浏览器启动不使用该传输；当前插件未实现独立账号/额度接口，因此不存在未接入代理的同类请求分支。
+- [x] 显式代理采用 fail-closed：代理不可用、407 认证失败、超时、DNS/CONNECT 或 TLS 失败均不转为直连，不继承 `NO_PROXY`，模型网络结果不确定时不重放；仅在收到明确 401 后沿既有单次刷新语义重试。错误、`status`、`doctor` 和网关诊断只显示脱敏后的协议/主机/端口与失败分类，不输出代理凭据、Authorization、Cookie、Token、验证码或敏感查询参数。确定性验证已覆盖配置优先级、HTTP 代理认证、OAuth/device-code/刷新/撤销、模型与流、不可用代理、407、超时、HTTPS CONNECT 代理侧解析及无直连回退。
 - [ ] 建立严格上游同步边界：在 `plugins/openai-proxy/upstream/` 维护 `BASELINE.json`、`SOURCE_MAP.md` 和 `THIRD_PARTY_NOTICES.md`，固定官方 OpenAI Codex release tag、完整 commit、审计日期、来源文件及哈希，并保留 Apache-2.0 归属说明。
 - [ ] 上游同步白名单仅允许登录/OAuth/device-code/PKCE/Token/Session、必要请求头和基础地址、Responses 请求与 SSE、模型/账号/限额，以及 TLS/CA/代理相关语义；禁止同步 Agent 循环、Prompt、Tool、Shell/文件、Sandbox、审批、Thread、MCP、Plugin/Skill、Cloud/Remote、遥测、更新、UI、多 Agent、Memory、Web、Image、Voice 和后台任务实现。
 - [ ] 增加 `bun run audit:openai-proxy-upstream -- --tag <version>`：仅把白名单文件下载到临时目录，生成哈希与语义差异报告，不自动改写生产代码；验证脚本必须阻止 `.rs`、Cargo 文件、Rust 工具链声明和白名单外上游代码进入插件。

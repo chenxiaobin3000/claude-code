@@ -1,6 +1,7 @@
 export * from './config.js'
 export * from './gateway.js'
 export * from './lifecycle.js'
+export * from './upstreamProxy.js'
 export * from './auth/constants.js'
 export * from './auth/jwt.js'
 export * from './auth/oauth.js'

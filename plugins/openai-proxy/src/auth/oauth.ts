@@ -23,7 +23,7 @@ import {
 import {
   authRequest,
   type AuthTransport,
-  directAuthTransport,
+  createConfiguredAuthTransport,
   readBoundedJson,
 } from './transport.js'
 
@@ -63,7 +63,7 @@ export class OpenAIProxyAuth {
 
   constructor(options: OpenAIAuthOptions = {}) {
     this.store = options.store ?? new OpenAIProxySessionStore()
-    this.transport = options.transport ?? directAuthTransport
+    this.transport = options.transport ?? createConfiguredAuthTransport()
     this.issuer = (options.issuer ?? OPENAI_AUTH_ISSUER).replace(/\/$/, '')
     this.clientId = options.clientId ?? OPENAI_CODEX_CLIENT_ID
     this.now = options.now ?? Date.now

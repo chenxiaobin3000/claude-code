@@ -12,6 +12,8 @@ existing model stream. It never reads or imports Codex's own auth file.
 Phase 4 adds one loopback daemon shared by all active MCP clients, with
 per-client leases, authenticated lifecycle control, crash diagnostics and idle
 exit.
+Phase 5 adds an optional explicit upstream HTTP/HTTPS CONNECT proxy for every
+OpenAI authentication and model request, with no direct fallback.
 
 ## Development commands
 
@@ -43,6 +45,29 @@ The gateway implements `GET /v1/models` and streaming
 explicitly instead of being silently removed. Upstream authentication, errors,
 timeouts, cancellation and interrupted streams fail closed; there is no model
 or endpoint fallback.
+
+To require an upstream proxy, set `OPENAI_PROXY_URL` in the Host process or in
+the user-level `~/.claude/settings.json` `env` object. The process environment
+wins when both are present:
+
+```json
+{
+  "env": {
+    "OPENAI_PROXY_URL": "http://user:password@proxy.example:8080"
+  }
+}
+```
+
+Only `http://` and `https://` proxy URLs are accepted. Proxy Basic
+authentication is supported through URL credentials; SOCKS5, URL paths and
+query parameters are rejected explicitly. Generic `HTTP_PROXY`, `HTTPS_PROXY`
+and `NO_PROXY` do not select or bypass this route. OAuth token exchange,
+device-code polling, refresh/revoke, model catalog and Responses/SSE requests
+all use the configured proxy. A proxy refusal, authentication failure, timeout,
+DNS failure or TLS failure is terminal for that request and never retries by
+direct connection. The browser process and loopback callback/local gateway do
+not use this transport. `status` and `doctor` show only the proxy scheme, host
+and port; credentials are redacted.
 
 The MCP entry acquires a per-client lease and automatically reuses or starts one
 single-instance gateway. Closing a client releases only its own lease; other

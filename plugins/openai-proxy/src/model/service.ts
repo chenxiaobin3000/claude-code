@@ -8,6 +8,7 @@ import {
   type ModelRequest,
   type ModelTransport,
 } from './types.js'
+import { createOpenAIUpstreamFetch } from '../upstreamProxy.js'
 
 export const OPENAI_CODEX_BACKEND =
   'https://chatgpt.com/backend-api/codex' as const
@@ -22,6 +23,18 @@ export const directModelTransport: ModelTransport = request =>
     signal: request.signal,
     redirect: 'error',
   })
+
+export function createConfiguredModelTransport(): ModelTransport {
+  const upstream = createOpenAIUpstreamFetch()
+  return request =>
+    upstream.fetch(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: request.body,
+      signal: request.signal,
+      redirect: 'error',
+    })
+}
 
 export interface OpenAIProxyModelServiceOptions {
   auth?: ModelAuth
@@ -185,7 +198,7 @@ export class OpenAIProxyModelService {
 
   constructor(options: OpenAIProxyModelServiceOptions = {}) {
     this.auth = options.auth ?? new OpenAIProxyAuth()
-    this.transport = options.transport ?? directModelTransport
+    this.transport = options.transport ?? createConfiguredModelTransport()
     this.baseUrl = (options.baseUrl ?? OPENAI_CODEX_BACKEND).replace(/\/$/, '')
     this.version = options.version ?? '0.1.0'
     this.timeoutMs = options.timeoutMs ?? MODEL_TIMEOUT_MS

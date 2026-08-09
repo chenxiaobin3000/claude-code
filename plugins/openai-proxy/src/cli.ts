@@ -15,6 +15,10 @@ import {
   stopOpenAIProxyDaemon,
 } from './lifecycle.js'
 import { runOpenAIProxyMcp } from './mcp.js'
+import {
+  createOpenAIUpstreamFetch,
+  redactOpenAIProxySecret,
+} from './upstreamProxy.js'
 
 function usage(): void {
   process.stdout.write(
@@ -41,15 +45,16 @@ export async function handleOpenAIProxyCli(
   version: string,
 ): Promise<void> {
   try {
-    const auth = new OpenAIProxyAuth()
     if (args[0] === 'setup') {
       resolveLocalToken()
+      createOpenAIUpstreamFetch()
       process.stdout.write(
         `Local gateway token is configured. Use ${OPENAI_PROXY_BASE_URL}/v1 as the models.json baseUrl.\n`,
       )
       return
     }
     if (args[0] === 'login' && args.includes('--device-code')) {
+      const auth = new OpenAIProxyAuth()
       const device = await auth.requestDeviceCode()
       process.stdout.write(
         `Open ${device.verificationUrl}\nEnter code: ${device.userCode}\nContinue only if you started this login.\n`,
@@ -61,6 +66,7 @@ export async function handleOpenAIProxyCli(
       return
     }
     if (args[0] === 'login') {
+      const auth = new OpenAIProxyAuth()
       const login = startBrowserLogin(auth)
       const cancel = () => login.cancel()
       process.once('SIGINT', cancel)
@@ -93,8 +99,10 @@ export async function handleOpenAIProxyCli(
       return
     }
     if (args[0] === 'status') {
+      const auth = new OpenAIProxyAuth()
       const session = await auth.store.load()
       const runtime = await readOpenAIProxyRuntimeState()
+      const upstream = createOpenAIUpstreamFetch()
       if (!session) {
         process.stdout.write('Not logged in.\n')
       } else {
@@ -107,11 +115,16 @@ export async function handleOpenAIProxyCli(
           ? `Gateway recorded: pid=${runtime.pid}; mode=${runtime.mode}; version=${runtime.hostVersion}; endpoint=${runtime.endpoint}.\n`
           : 'Gateway stopped.\n',
       )
+      process.stdout.write(
+        `Upstream proxy: mode=${upstream.proxyMode}; endpoint=${upstream.proxyDisplay}.\n`,
+      )
       return
     }
     if (args[0] === 'doctor') {
+      const auth = new OpenAIProxyAuth()
       const session = await auth.store.load()
       const lastExit = await readOpenAIProxyLastExit()
+      const upstream = createOpenAIUpstreamFetch()
       let gateway = 'stopped'
       try {
         await inspectGateway('/doctor')
@@ -120,11 +133,12 @@ export async function handleOpenAIProxyCli(
         gateway = 'stopped'
       }
       process.stdout.write(
-        `auth=${session ? 'logged-in' : 'logged-out'}; gateway=${gateway}; forwarding=responses; last-exit=${lastExit?.reason ?? 'none'}.\n`,
+        `auth=${session ? 'logged-in' : 'logged-out'}; gateway=${gateway}; forwarding=responses; upstream-proxy=${upstream.proxyMode}; proxy-endpoint=${upstream.proxyDisplay}; last-exit=${lastExit?.reason ?? 'none'}.\n`,
       )
       return
     }
     if (args[0] === 'logout') {
+      const auth = new OpenAIProxyAuth()
       const result = await auth.logout()
       process.stdout.write(
         `${result.removed ? 'Logged out.' : 'No stored login.'}${result.revokeFailures ? ` ${result.revokeFailures} remote revocation request(s) failed; local credentials were removed.` : ''}\n`,
@@ -138,7 +152,9 @@ export async function handleOpenAIProxyCli(
     usage()
     if (args.length > 0) process.exitCode = 1
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = redactOpenAIProxySecret(
+      error instanceof Error ? error.message : String(error),
+    )
     const token = process.env[OPENAI_PROXY_LOCAL_TOKEN_ENV]
     process.stderr.write(`${token ? message.replaceAll(token, '[REDACTED]') : message}\n`)
     process.exitCode = 1

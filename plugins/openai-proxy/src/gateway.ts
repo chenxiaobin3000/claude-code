@@ -7,6 +7,7 @@ import {
 } from './config.js'
 import { OpenAIProxyModelService } from './model/service.js'
 import { OpenAIProxyModelError } from './model/types.js'
+import { createOpenAIUpstreamFetch } from './upstreamProxy.js'
 
 export interface OpenAIProxyGateway {
   readonly url: string
@@ -67,6 +68,7 @@ export function startOpenAIProxyGateway(
   const port = options.port ?? OPENAI_PROXY_PORT
   const modelService =
     options.modelService ?? new OpenAIProxyModelService({ version })
+  const upstream = createOpenAIUpstreamFetch()
   const server = Bun.serve({
     hostname: OPENAI_PROXY_HOST,
     port,
@@ -94,6 +96,8 @@ export function startOpenAIProxyGateway(
           version,
           bind: OPENAI_PROXY_HOST,
           forwarding: 'responses',
+          upstreamProxy: upstream.proxyMode,
+          proxyEndpoint: upstream.proxyDisplay,
           ...(options.instanceId ? { instanceId: options.instanceId } : {}),
         })
       }

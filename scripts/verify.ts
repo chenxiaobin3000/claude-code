@@ -105,6 +105,7 @@ const validationScripts = [
   'scripts/validation/openai-proxy-auth.ts',
   'scripts/validation/openai-proxy-model.ts',
   'scripts/validation/openai-proxy-lifecycle.ts',
+  'scripts/validation/openai-proxy-upstream-proxy.ts',
   'scripts/validation/chrome-protocol.ts',
   'scripts/validation/chrome-dom-sanitizer.ts',
   'scripts/validation/chrome-dom-fixtures.ts',
