@@ -168,6 +168,33 @@ assert(
     list.items[0]?.links[0] === 'https://example.test/orders',
   'list text or link extraction failed',
 )
+
+const nestedListSnapshot: ChromeDomSnapshotResult = {
+  ...snapshot,
+  documentId: 'document-nested-list',
+  contentHash: 'fixture:nested-list',
+  rootNodeIds: ['nested-list'],
+  nodes: [
+    node('nested-list', 'ul', undefined, ['nested-parent']),
+    node('nested-parent', 'li', 'nested-list', ['nested-child-list'], {
+      text: '父级',
+      list: { level: 1, itemIndex: 0 },
+    }),
+    node('nested-child-list', 'ul', 'nested-parent', ['nested-child']),
+    node('nested-child', 'li', 'nested-child-list', [], {
+      text: '子级',
+      list: { level: 2, itemIndex: 0 },
+    }),
+  ],
+}
+const nestedList = parseDomList(nestedListSnapshot)
+assert(
+  nestedList.items.length === 2 &&
+    nestedList.items[0]?.text === '父级 子级' &&
+    nestedList.items[1]?.text === '子级' &&
+    nestedList.items[1]?.depth === 2,
+  'nested list hierarchy was not preserved',
+)
 const secondListPage = parseDomList(snapshot, { maxItems: 1, offset: 1 })
 assert(
   secondListPage.offset === 1 &&

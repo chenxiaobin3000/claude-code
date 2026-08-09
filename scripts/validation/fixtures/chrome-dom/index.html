@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <title>Chrome DOM Acceptance Fixture</title>
+    <style>
+      body { font-family: sans-serif; }
+      #virtual-list { height: 120px; overflow-y: auto; border: 1px solid #888; }
+      #virtual-list li { height: 28px; }
+    </style>
+  </head>
+  <body>
+    <main id="acceptance-root">
+      <h1>Chrome DOM 验收页面</h1>
+
+      <table id="markets">
+        <thead>
+          <tr><th rowspan="2">资产</th><th colspan="2">行情</th></tr>
+          <tr><th>价格</th><th>涨跌</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>比特币 BTC</td><td>61234.123456789012345678</td><td>+1.25%</td></tr>
+          <tr><td>以太坊 ETH</td><td>3456.000000000000000001</td><td></td></tr>
+        </tbody>
+      </table>
+
+      <table id="headerless"><tbody><tr><td>甲</td><td>一</td></tr></tbody></table>
+
+      <ol id="accounts">
+        <li data-label="primary">账户甲<ul><li>现货</li><li>合约</li></ul></li>
+        <li data-label="secondary">账户乙</li>
+      </ol>
+
+      <ul id="virtual-list">
+        <li class="virtual-item"><span class="name">订单 01</span></li>
+        <li class="virtual-item"><span class="name">订单 02</span></li>
+        <li class="virtual-item"><span class="name">订单 03</span></li>
+        <li class="virtual-item"><span class="name">订单 04</span></li>
+        <li class="virtual-item"><span class="name">订单 05</span></li>
+        <li class="virtual-item"><span class="name">订单 06</span></li>
+        <li class="virtual-item"><span class="name">订单 07</span></li>
+        <li class="virtual-item"><span class="name">订单 08</span></li>
+      </ul>
+
+      <section id="dynamic" data-state="loading">等待动态内容</section>
+      <open-shadow-fixture id="open-shadow"></open-shadow-fixture>
+      <closed-shadow-fixture id="closed-shadow"></closed-shadow-fixture>
+
+      <iframe id="same-origin-frame" title="同源 Frame" src="/same-origin-frame.html"></iframe>
+      <iframe id="cross-origin-frame" title="跨源 Frame" src="http://127.0.0.1:18081/cross-origin-frame.html"></iframe>
+
+      <form id="sensitive-form">
+        <input name="username" value="visible-user-value-must-not-leak">
+        <input type="password" name="password" value="password-must-not-leak">
+        <input type="hidden" name="api_token" value="token-must-not-leak">
+        <textarea name="secret-note">secret-note-must-not-leak</textarea>
+      </form>
+      <a id="sensitive-link" href="https://example.test/orders?symbol=BTC&amp;access_token=secret-value#private">订单链接</a>
+
+      <canvas id="visual-chart" width="120" height="40"></canvas>
+      <img id="visual-image" alt="视觉价格卡片" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'/%3E">
+    </main>
+
+    <script>
+      customElements.define('open-shadow-fixture', class extends HTMLElement {
+        constructor() {
+          super()
+          const root = this.attachShadow({ mode: 'open' })
+          root.innerHTML = '<section class="shadow-content"><strong>Open Shadow 可见内容</strong></section>'
+        }
+      })
+      customElements.define('closed-shadow-fixture', class extends HTMLElement {
+        constructor() {
+          super()
+          const root = this.attachShadow({ mode: 'closed' })
+          root.innerHTML = '<span>Closed Shadow 不应读取</span>'
+        }
+      })
+      setTimeout(() => {
+        const dynamic = document.querySelector('#dynamic')
+        dynamic.dataset.state = 'ready'
+        dynamic.textContent = '动态内容已稳定'
+      }, 1200)
+    </script>
+  </body>
+</html>

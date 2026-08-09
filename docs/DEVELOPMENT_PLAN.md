@@ -102,6 +102,10 @@
 - `bun run build:chrome-host`、`bun run build:weixin-host`、`bun run build:wxwork-host`、`bun run build:qq-host` 与 `bun run build:telegram-host` 分别生成完整插件分发目录；`bun run build:production` 同时生成 `dist/claude.exe` 及五个 `dist/plugins/*` 插件目录，整个 `dist` 可作为固定路径的 Windows 生产分发单元。分发 Manifest 直接启动包含 Bun Runtime 的独立 Host，目标机器无需 Bun 或 Node.js。
 - 标准 Plugin Manifest、MCP 环境展开、名称作用域、Skill 发现、自动目录约束、三层优先级、`--bare`、重载裁剪、standalone 插件移除、独立 Host EOF、分发目录生命周期和真实 Chrome 端到端矩阵均已验收。扩展固定声明 `<all_urls>`，不提供页面授权或本地站点白名单；所有 HTTP/HTTPS 页面均可操作，Chrome 内部页、扩展页、文件页和无效 Tab 继续拒绝。真实矩阵覆盖固定扩展 ID、Native Host 注册/doctor/自动重连、拒绝路径、页面刷新和错误恢复。
 - 真实 Chrome 工具矩阵覆盖 11 个广告工具的连接与核心行为，包括标签页枚举/创建、导航及前进后退、页面读取、查找、表单输入、JavaScript、点击/滚动/键盘、截图、窗口缩放、Unicode URL、Chrome 内部页拒绝、非法/已失效 Tab ID 和 1 MiB 超限结果。超限结果必须返回结构化错误并保持桥接连接；点击必须保留浏览器聚焦语义。
+- `chrome` 插件同时提供独立的只读 `chrome-dom` MCP，由 `chrome-host dom-mcp` 启动并复用现有 Socket、鉴权、Profile 和 Tab 路由；它只公开 `dom_inspect`、`dom_extract_table`、`dom_extract_list` 和 `dom_wait`，所有调用必须显式指定 Profile 与 Tab，不嵌套调用原有浏览器 MCP，也不改变原有 11 个工具。
+- DOM Snapshot 只返回清洗后的结构、文本、限定属性、HTTP(S) 链接、Bounds、表格与列表关系，不返回原始 HTML、表单值、脚本、浏览器存储或敏感 URL 参数。节点、桥接消息和 MCP 输出分别受 5,000 节点、1 MiB 和 512 KiB 上限约束；超限、Closed Shadow、跨源 Iframe 和纯视觉内容均以结构化错误或 `partialReasons` 明确报告。
+- DOM 分页 Cursor 使用 HMAC 绑定 Profile、Tab、文档和清洗内容哈希，页面变化后 fail-closed；Open Shadow Root 与同源 Iframe 可进入快照，虚拟列表必须经外部浏览器控制显式滚动后重新读取。DOM 与截图/多模态结果保留独立来源，禁止静默合并，也不得由 DOM 工具执行点击、输入、导航或交易。
+- Chrome DOM 已由固定 Fixture 和真实本地 Chrome 端到端矩阵验收，覆盖跨行跨列表格、无表头、嵌套列表、Unicode、SPA 稳定等待、虚拟列表分页、Shadow DOM、Iframe、敏感字段、过期 Cursor、节点/字节超限、指定 Profile/Tab、内容变化、连接重建和插件缺失边界。扩展更新或重载后必须刷新已经打开的目标页面，使新版 Content Script 进入页面；仅重载扩展可能导致旧页面的 DOM Bridge 请求超时。
 
 ### 工程与验证
 
@@ -154,22 +158,7 @@
 
 完成条件：删除 `plugins/openai-proxy` 即可完整移除该能力且主项目模型链无需回滚；插件不引入新语言，登录凭据和订阅 Token 不进入主进程、配置、日志或模型上下文；本地网关、Responses 适配、代理 fail-closed、生命周期、Windows 独立发行和上游审计均有确定性验证，真实低权限账号验收单独留证，且 `bun run verify --ci` 全部通过。
 
-### P1：Chrome DOM 结构化抓取链路
-
-- [x] 第一阶段已在现有 `plugins/chrome` 内新增第二个本地 MCP Server `chrome-dom`，由 `chrome-host dom-mcp` 启动；它与现有 `claude-in-chrome` MCP 并列，直接复用 Socket 端点发现、连接池、Token、Chrome Profile、Tab 路由和 standalone 分发能力，不进行 MCP 嵌套调用，也未改变现有 11 个 Chrome 工具的名称和行为。独立 Server 的生命周期、作用域和 standalone 分发边界已由轻量验证固化。
-- [x] 第二阶段已在扩展桥接协议中增加版本化、只读的内部方法 `dom_snapshot`，使用独立的 `bridge_request`/`bridge_response` 信封，并将内部桥接方法注册表与现有 11 个公开工具注册表分开。请求强制校验 `profileId`、`tabId`、作用域 Selector、内容类型、`visibleOnly`、`maxNodes` 和 `maxBytes`；响应固定携带 `profileId`、`tabId`、URL、Title、`documentId`、抓取时间、内容哈希以及明确的 `partial`/`partialReasons`，并由第三阶段的清洗器填充规范化节点内容。
-- [x] 第三阶段已让 `dom_snapshot` 返回经过清洗的规范化 DOM Snapshot，不返回整页原始 HTML。结果使用单次 Snapshot 内有效的 `node_*` Ref、`parentId`/`childIds` 和根节点列表保留层级，并包含 Tag、Role、直接可见文本、限定 ARIA、白名单 `data-*`、脱敏 HTTP(S) 链接、可见性、Bounds、表格行列及列表关系。扩展在页面隔离世界中排除 Script、Style、事件处理器、页面全局变量、Cookie、Local/Session Storage、IndexedDB、密码/隐藏/疑似凭据字段、Token、Authorization、URL 凭据和敏感查询参数；不读取表单 Value，也不增加任意 JavaScript 入口。节点或字节超限返回结构化错误，无法读取的嵌套边界和视觉内容通过 `partialReasons` 明确报告。
-- [x] 第二至第四阶段已分别固定 5,000 节点、1 MiB 桥接消息和 512 KiB Snapshot/MCP 输出上限；超过上限时返回带错误码及实际/限制字节数的结构化错误，不静默截断。HMAC 分页 Cursor 已绑定 `profileId + tabId + documentId + contentHash + offset`，签名篡改、页面导航、文档重载或内容版本变化后立即失效。
-- [x] 第四阶段已在 `plugins/chrome/dom` 抽出可独立验证的 Snapshot Schema/索引、文本清洗、表格解析、列表解析、Selector 约束和 HMAC 分页 Cursor 纯函数。表格解析覆盖多级表头、无表头、`rowspan`/`colspan`、空值、重复列名、列别名、行数上限和 Unicode；金融数字始终保留原始字符串，不转换为浮点数。分页 Cursor 固定绑定 `profileId + tabId + documentId + contentHash + offset`，签名篡改或页面版本变化时安全拒绝。
-- [x] 第五阶段已让 `chrome-dom` 只公开四个带只读/非破坏性声明的工具：`dom_inspect` 返回页面结构摘要，`dom_extract_table` 按 Selector、列别名和最大行数返回结构化字符串行，`dom_extract_list` 通过受限的条目及命名字段 Selector 返回结构化列表，`dom_wait` 按 `exists`/`not_exists`/`stable`、静默窗口和最长 25 秒超时等待 SPA 状态。四个工具都强制显式传入 `profileId` 和 `tabId`，禁止自动回退到其他 Profile 或 Tab；Selector 只在扩展隔离世界中转为不含原始 Selector 的短期匹配标记，不读取原始 HTML 或执行页面脚本。
-- [x] 第六阶段已为动态页面固化“读取—外部滚动—`dom_wait stable`—重新读取”的显式流程：`dom_extract_list` 使用绑定 Profile、Tab、文档和清洗后内容哈希的 HMAC Cursor 分页，不调用浏览器控制工具，不在内容变化后复用旧 Cursor；Snapshot 返回滚动容器指标并提示虚拟列表需要外部翻页。Open Shadow Root 会保留 `shadow-root` 树作用域，同源 Iframe 会按 Frame 深度并入清洗结果；Closed Shadow 边界和跨源 Iframe 分别标记 `closed_shadow_root_unavailable`、`cross_origin_iframe_unavailable`。Canvas、SVG、图片、视频和纯视觉布局不伪装成 DOM 数据。
-- [x] 第七阶段已固化 DOM 与视觉识别的双链路边界：四个 DOM 工具统一返回只读 DOM 来源信息及视觉回退说明，绝不自动截图、滚动、点击、输入、导航、交易或跨 Profile 操作；Canvas、图片和视觉位置继续由现有截图加多模态链路处理。需要交叉核验时使用纯函数分别保留 `domValue`、`visualValue` 和 `consistent`，禁止生成静默合并值；固定 Fixture 同时验证 DOM MCP 不调用浏览器控制工具。
-- [ ] 在 `scripts/validation` 增加不依赖测试框架的固定 Fixture，覆盖表格跨行跨列、无表头、嵌套列表、Unicode、SPA 稳定等待、虚拟列表分页、Shadow DOM、Iframe、敏感字段脱敏、节点/字节上限、过期 Cursor、文档变化、多 Profile 路由、畸形消息和 standalone Host EOF；同时验证现有 11 个 Chrome 工具未增加、删除或改变语义。
-- [ ] 增加真实 Chrome 本地 Fixture 端到端验收，覆盖扩展连接、指定 Profile/Tab、结构化表格和列表提取、动态内容更新、超限恢复、跨源拒绝及连接重建；插件未加载时不得在主程序中宣传或暴露 `chrome-dom` 工具。
-
-完成条件：`chrome-dom` 作为 `chrome` 插件内独立的只读 MCP Server 随插件加载和移除；不形成 MCP 嵌套调用，不扩大现有浏览器写权限；相同页面和参数产生稳定、可验证的结构化结果，所有截断、跨源、动态版本和敏感内容场景均 fail-closed；现有 Chrome 端到端矩阵与 `bun run verify --ci` 全部通过。
-
-### P2：可选产品能力
+### P1：可选产品能力
 
 - [ ] 支持 macOS 专用、默认关闭的 `sandbox.allowAppleEvents`，并确保该例外不会放宽文件系统、网络或其他平台的边界。
 

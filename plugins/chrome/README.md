@@ -103,6 +103,27 @@ bun run chrome:verify:tools
 滚动、截图、窗口缩放与恢复、前进后退、刷新、Unicode URL、内部页面拒绝及
 1 MiB 超限结果恢复。验收不会读取浏览器 Profile、Cookie 或凭据。
 
+DOM 固定 Fixture 已并入 `bun run verify`，也可单独运行：
+
+```powershell
+bun scripts/validation/chrome-dom-fixtures.ts
+```
+
+真实 DOM 验收需先启动 `scripts/validation/chrome-dom-fixture-server.ts`，在 Chrome
+打开其本地页面，再把在线 Profile 和 Tab 传给验收脚本：
+
+```powershell
+$env:CHROME_HOST = "D:\path\to\plugins\chrome\chrome-host.exe"
+$env:CHROME_E2E_PROFILE_ID = "<tabs_context_mcp 返回的 profileId>"
+$env:CHROME_E2E_TAB_ID = "<tabs_context_mcp 返回的 tabId>"
+bun scripts/validation/chrome-dom-browser-e2e.ts
+```
+
+扩展更新或在 `chrome://extensions` 重载后，还必须刷新已经打开的目标页面。Chrome
+不会把新版 Content Script 自动注入旧页面；只重载扩展时，普通浏览器工具可能仍可用，
+但 DOM Bridge 会因页面仍运行旧脚本而超时。真实浏览器验收依赖本机状态，因此不进入
+无状态 CI。
+
 多账户部署时，需要在每个 Chrome 个人资料中分别加载扩展，并在各自弹窗设置容易
 辨认的账户别名。Native Host 注册按操作系统用户执行一次即可；每个已打开的个人
 资料会启动独立 Host。别名由用户提供，扩展不会读取 Chrome 的内部 Profile 名称。

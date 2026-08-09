@@ -206,6 +206,14 @@ Profile 冲突时都会拒绝执行，不会回退到第一个账户。
 启动本地页面后，`bun run chrome:verify:tools` 覆盖页面读取、交互、截图、
 前进后退、刷新、Unicode URL 与超限结果恢复。
 
+插件还提供独立、只读的 `chrome-dom` MCP，公开 `dom_inspect`、
+`dom_extract_table`、`dom_extract_list` 和 `dom_wait`。它返回清洗后的结构化 DOM，
+不返回原始 HTML、表单值、脚本或浏览器存储；所有调用必须明确指定 Profile 与 Tab，
+超限、跨源 Iframe、Closed Shadow Root 和纯视觉内容会明确拒绝或标记不完整。固定
+Fixture 已并入 `bun run verify`，真实 Chrome Fixture 覆盖动态页面、分页、内容变化、
+敏感字段和超限恢复。扩展更新或重载后必须同时刷新已有目标页面，确保新版 Content
+Script 注入，否则 DOM Bridge 可能超时。
+
 生产机器仍须显式完成浏览器侧安装，CLI 自动发现插件不会修改 Chrome 或注册表：
 
 1. 在 `chrome://extensions` 启用开发者模式，加载
