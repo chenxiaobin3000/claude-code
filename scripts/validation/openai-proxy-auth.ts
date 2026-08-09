@@ -55,7 +55,35 @@ assertEqual(
   'PKCE S256 challenge',
 )
 
-const securityDirectory = await mkdtemp(join(tmpdir(), 'openai-proxy-security-'))
+const occupiedCallback = Bun.serve({
+  hostname: '127.0.0.1',
+  port: 0,
+  fetch: () => new Response('occupied'),
+})
+try {
+  const conflictFixture = await fixtureStore('openai-proxy-callback-conflict-')
+  try {
+    const auth = new OpenAIProxyAuth({ store: conflictFixture.store })
+    const login = startBrowserLogin(auth, {
+      ports: [occupiedCallback.port!, 0],
+      timeoutMs: 10_000,
+    })
+    assert(
+      login.port !== occupiedCallback.port,
+      'occupied callback port advances to the next allowed port',
+    )
+    login.cancel()
+    await login.completion.catch(() => undefined)
+  } finally {
+    await rm(conflictFixture.directory, { recursive: true, force: true })
+  }
+} finally {
+  occupiedCallback.stop(true)
+}
+
+const securityDirectory = await mkdtemp(
+  join(tmpdir(), 'openai-proxy-security-'),
+)
 try {
   const store = new OpenAIProxySessionStore({ directory: securityDirectory })
   await store.save({
@@ -107,9 +135,20 @@ try {
   const login = startBrowserLogin(auth, { ports: [0], timeoutMs: 10_000 })
   const authorize = new URL(login.authUrl)
   assertEqual(authorize.hostname, 'auth.fixture.test', 'authorize issuer')
-  assertEqual(authorize.searchParams.get('response_type'), 'code', 'OAuth response type')
-  assertEqual(authorize.searchParams.get('code_challenge_method'), 'S256', 'OAuth PKCE method')
-  assert(authorize.searchParams.get('scope')?.includes('offline_access'), 'OAuth offline scope')
+  assertEqual(
+    authorize.searchParams.get('response_type'),
+    'code',
+    'OAuth response type',
+  )
+  assertEqual(
+    authorize.searchParams.get('code_challenge_method'),
+    'S256',
+    'OAuth PKCE method',
+  )
+  assert(
+    authorize.searchParams.get('scope')?.includes('offline_access'),
+    'OAuth offline scope',
+  )
   const redirect = authorize.searchParams.get('redirect_uri')!
   const callbackAddress = redirect.replace('localhost', '127.0.0.1')
   const wrong = await fetch(
@@ -125,9 +164,17 @@ try {
   assertEqual(exchangeCount, 1, 'single browser token exchange')
   assertEqual(session.account.planType, 'plus', 'plan claim')
   assertEqual(session.account.accountId, 'workspace-fixture', 'workspace claim')
-  assertEqual((await browserFixture.store.load())?.tokens.refreshToken, 'refresh-browser', 'stored browser refresh token')
+  assertEqual(
+    (await browserFixture.store.load())?.tokens.refreshToken,
+    'refresh-browser',
+    'stored browser refresh token',
+  )
   const files = await readdir(browserFixture.directory)
-  assertEqual(files.join(','), 'auth.json', 'atomic session leaves no temporary file')
+  assertEqual(
+    files.join(','),
+    'auth.json',
+    'atomic session leaves no temporary file',
+  )
 } finally {
   await rm(browserFixture.directory, { recursive: true, force: true })
 }
@@ -155,7 +202,11 @@ try {
     }
     if (url.pathname.endsWith('/oauth/token')) {
       const body = new URLSearchParams(request.body)
-      assertEqual(body.get('code'), 'device-code-fixture', 'device authorization code')
+      assertEqual(
+        body.get('code'),
+        'device-code-fixture',
+        'device authorization code',
+      )
       assertEqual(
         body.get('redirect_uri'),
         'https://auth.fixture.test/deviceauth/callback',
@@ -176,7 +227,11 @@ try {
   })
   const device = await auth.requestDeviceCode()
   assertEqual(device.userCode, 'ABCD-1234', 'device user code')
-  assertEqual(device.verificationUrl, 'https://auth.fixture.test/codex/device', 'device verification URL')
+  assertEqual(
+    device.verificationUrl,
+    'https://auth.fixture.test/codex/device',
+    'device verification URL',
+  )
   const session = await auth.completeDeviceCode(device)
   assertEqual(devicePolls, 1, 'device polling count')
   assertEqual(session.tokens.refreshToken, 'refresh-device', 'device session')
@@ -232,7 +287,11 @@ try {
   ])
   assertEqual(refreshCount, 1, 'concurrent refresh is serialized')
   assertEqual(first.tokens.refreshToken, 'refresh-new', 'first refresh result')
-  assertEqual(second.tokens.refreshToken, 'refresh-new', 'second refresh result')
+  assertEqual(
+    second.tokens.refreshToken,
+    'refresh-new',
+    'second refresh result',
+  )
   const logout = await auth.logout()
   assert(logout.removed, 'logout removes local session')
   assertEqual(logout.revokeFailures, 0, 'logout revocation result')
@@ -242,7 +301,9 @@ try {
   await rm(refreshFixture.directory, { recursive: true, force: true })
 }
 
-const invalidRefreshFixture = await fixtureStore('openai-proxy-invalid-refresh-')
+const invalidRefreshFixture = await fixtureStore(
+  'openai-proxy-invalid-refresh-',
+)
 try {
   const expired = jwt({ exp: Math.floor(Date.now() / 1_000) - 60 })
   await invalidRefreshFixture.store.save({
@@ -260,7 +321,8 @@ try {
   const auth = new OpenAIProxyAuth({
     store: invalidRefreshFixture.store,
     issuer: 'https://auth.fixture.test',
-    transport: async () => Response.json({ error: 'invalid_grant' }, { status: 400 }),
+    transport: async () =>
+      Response.json({ error: 'invalid_grant' }, { status: 400 }),
   })
   let rejected = false
   try {

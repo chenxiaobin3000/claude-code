@@ -14,6 +14,9 @@ per-client leases, authenticated lifecycle control, crash diagnostics and idle
 exit.
 Phase 5 adds an optional explicit upstream HTTP/HTTPS CONNECT proxy for every
 OpenAI authentication and model request, with no direct fallback.
+Phase 6 fixes an auditable OpenAI Codex release baseline and permits only a
+small, documented set of login, Responses/SSE, model and transport semantics.
+Phase 7 locks the boundary into the full deterministic regression suite.
 
 ## Development commands
 
@@ -26,7 +29,14 @@ bun run plugins/openai-proxy/host/entry.ts login --device-code
 bun run plugins/openai-proxy/host/entry.ts status
 bun run plugins/openai-proxy/host/entry.ts stop
 bun run plugins/openai-proxy/host/entry.ts logout
+bun run audit:openai-proxy-upstream -- --tag rust-v0.147.0
 ```
+
+The upstream audit resolves the official release tag, downloads only the paths
+listed in `upstream/BASELINE.json` into an OS temporary directory, compares
+SHA-256 values, prints a semantic-review report, and removes the temporary
+files. It never updates production code. Changes outside the scopes documented
+in `upstream/SOURCE_MAP.md` are not eligible for synchronization.
 
 The local base URL is fixed to `http://127.0.0.1:48181/v1`. Configure the
 subscription model as an ordinary OpenAI-compatible model; no Provider or

@@ -150,11 +150,13 @@
 - [x] 第五阶段已支持显式 `OPENAI_PROXY_URL`，配置来源严格限定为 Host 进程环境或用户 `settings.json.env`，且进程值优先；沿用现有 Bun HTTP/HTTPS CONNECT 传输语义并支持 URL Basic 代理认证，SOCKS5、非 HTTP(S) 协议、路径和查询参数均明确拒绝。通用 `HTTP_PROXY`、`HTTPS_PROXY` 不会隐式启用该能力，显式代理启用后会清除 Host 内的 `NO_PROXY` 绕过，防止要求代理的请求静默直连。
 - [x] 代理已覆盖 OAuth Token 交换、device-code 请求/轮询、刷新/撤销、模型目录和 Responses/SSE；这些路径统一注入同一显式上游传输。localhost 登录回调、本地网关、MCP stdio 和系统浏览器启动不使用该传输；当前插件未实现独立账号/额度接口，因此不存在未接入代理的同类请求分支。
 - [x] 显式代理采用 fail-closed：代理不可用、407 认证失败、超时、DNS/CONNECT 或 TLS 失败均不转为直连，不继承 `NO_PROXY`，模型网络结果不确定时不重放；仅在收到明确 401 后沿既有单次刷新语义重试。错误、`status`、`doctor` 和网关诊断只显示脱敏后的协议/主机/端口与失败分类，不输出代理凭据、Authorization、Cookie、Token、验证码或敏感查询参数。确定性验证已覆盖配置优先级、HTTP 代理认证、OAuth/device-code/刷新/撤销、模型与流、不可用代理、407、超时、HTTPS CONNECT 代理侧解析及无直连回退。
-- [ ] 建立严格上游同步边界：在 `plugins/openai-proxy/upstream/` 维护 `BASELINE.json`、`SOURCE_MAP.md` 和 `THIRD_PARTY_NOTICES.md`，固定官方 OpenAI Codex release tag、完整 commit、审计日期、来源文件及哈希，并保留 Apache-2.0 归属说明。
-- [ ] 上游同步白名单仅允许登录/OAuth/device-code/PKCE/Token/Session、必要请求头和基础地址、Responses 请求与 SSE、模型/账号/限额，以及 TLS/CA/代理相关语义；禁止同步 Agent 循环、Prompt、Tool、Shell/文件、Sandbox、审批、Thread、MCP、Plugin/Skill、Cloud/Remote、遥测、更新、UI、多 Agent、Memory、Web、Image、Voice 和后台任务实现。
-- [ ] 增加 `bun run audit:openai-proxy-upstream -- --tag <version>`：仅把白名单文件下载到临时目录，生成哈希与语义差异报告，不自动改写生产代码；验证脚本必须阻止 `.rs`、Cargo 文件、Rust 工具链声明和白名单外上游代码进入插件。
-- [ ] 增加确定性测试：浏览器/device-code 登录、PKCE/state、回调冲突、Session 原子写入、刷新竞争、无效 refresh、logout；请求/流事件转换；取消、超时、断流、401/403/429；代理成功、认证/拒绝/超时和无直连回退；本地端点认证、守护进程多客户端/租约/EOF，以及 Windows 独立发行包运行。
-- [ ] 回归验证现有 OpenAI、DeepSeek、llama.cpp、自定义 OpenAI 兼容端点、工具调用、权限与 Sandbox 行为不变；固定测试通过后，再使用低权限 ChatGPT 测试账号单独补录真实登录、模型调用、Token 刷新和退出证据，不以 Fixture 结果替代真实验收。
+- [x] 第六阶段已在 `plugins/openai-proxy/upstream/` 建立严格上游同步边界：`BASELINE.json` 固定官方 OpenAI Codex `rust-v0.147.0`、annotated tag object、完整提交 `be6e8eac029b183056b7e4402879f15d2c85f61b`、审计日期、17 个白名单来源文件及 SHA-256；`SOURCE_MAP.md` 记录语义映射和禁止范围，`THIRD_PARTY_NOTICES.md` 保留 Apache-2.0 归属说明。目录不保存或分发上游 Rust 源码。
+- [x] 上游同步白名单仅允许登录/OAuth/device-code/PKCE/Token/Session、必要请求头和基础地址、Responses 请求与 SSE、模型/账号/限额，以及 TLS/CA/代理相关语义；Agent 循环、Prompt、Tool、Shell/文件、Sandbox、审批、Thread、MCP、Plugin/Skill、Cloud/Remote、遥测、更新、UI、多 Agent、Memory、Web、Image、Voice 和后台任务均明确排除。即使白名单文件包含相邻职责，也只能审查 `scope` 中列出的语义。
+- [x] 已增加 `bun run audit:openai-proxy-upstream -- --tag <version>`：解析官方 release tag，只把固定白名单文件下载到 OS 临时目录，输出提交、SHA-256、变化文件、允许语义和禁止职责报告，并在结束时清理临时文件；命令不写生产代码。防回归验证会拒绝非官方 tag 形式、路径越界、白名单外上游产物、`.rs`、Cargo、Rust 工具链和 `.cargo` 配置进入插件。
+- [x] 第七阶段确定性测试已覆盖浏览器/device-code 登录、PKCE/state、回调端口冲突、Session 原子写入、刷新竞争、无效 refresh、logout；请求/流事件转换；取消、超时、断流、401/403/429；代理成功、认证/拒绝/超时和无直连回退；本地端点认证、守护进程多客户端/租约/EOF，以及 Windows 独立发行包运行。
+- [x] 固定回归矩阵继续验证现有 OpenAI、DeepSeek、llama.cpp、自定义 OpenAI 兼容端点、工具调用、权限与 Windows Sandbox 行为，且 openai-proxy 不静态接入主 Provider 路径。真实账号验收不由 Fixture 替代。
+- [ ] 使用低权限 ChatGPT 测试账号单独补录真实浏览器/device-code 登录、模型调用、Token 刷新和退出证据；该项需要测试账号与交互式授权，只作为发布前人工验收，不阻塞第六、七阶段代码收口。
+- 2026-08-09 验证记录：新增上游边界、回归边界、登录冲突测试和真实基线哈希审计均通过，`openai-proxy` Windows 独立 Host 构建及发行生命周期验证通过。完整 `bun run verify --ci` 的类型、Lint、工作区、全部源验证、主 EXE、Chrome/微信/企业微信/QQ 构建均通过，随后仍因 Bun 1.3.13 在 Telegram Host 写 Windows 元数据时返回既有 `FailedToCommit` 而停止；该失败不来自本阶段代码，不能记为完整验证通过。
 
 完成条件：删除 `plugins/openai-proxy` 即可完整移除该能力且主项目模型链无需回滚；插件不引入新语言，登录凭据和订阅 Token 不进入主进程、配置、日志或模型上下文；本地网关、Responses 适配、代理 fail-closed、生命周期、Windows 独立发行和上游审计均有确定性验证，真实低权限账号验收单独留证，且 `bun run verify --ci` 全部通过。
 

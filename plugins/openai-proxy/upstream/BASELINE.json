@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/openai/codex",
+  "releaseTag": "rust-v0.147.0",
+  "tagObject": "3ed6f04f6bf8b7c46299d1cb1ff99c74ce21a51d",
+  "commit": "be6e8eac029b183056b7e4402879f15d2c85f61b",
+  "auditedAt": "2026-08-09",
+  "license": "Apache-2.0",
+  "sources": [
+    {
+      "path": "codex-rs/login/src/pkce.rs",
+      "sha256": "1b000282c7741f4c7241a2eaa82fd2b332d5e1e83b3e69dd13f3260595418c92",
+      "scope": ["oauth", "pkce"],
+      "localTargets": ["src/auth/pkce.ts", "src/auth/oauth.ts"]
+    },
+    {
+      "path": "codex-rs/login/src/callback_params.rs",
+      "sha256": "bef01eefa365533631fdb0cf2a3eb6a57c724721faf50694fd15995ca52b0c02",
+      "scope": ["oauth", "callback", "state"],
+      "localTargets": ["src/auth/oauth.ts"]
+    },
+    {
+      "path": "codex-rs/login/src/device_code_auth.rs",
+      "sha256": "78bfe08f18fa89c84b261c5e11269239a06bb60cb0a964fbe8532ccede4ba328",
+      "scope": ["oauth", "device-code", "token"],
+      "localTargets": ["src/auth/oauth.ts"]
+    },
+    {
+      "path": "codex-rs/login/src/server.rs",
+      "sha256": "c93e0bda0d9ed7003e3935982c2432303dcadd5714ef5721394f4aea57d83202",
+      "scope": ["oauth", "callback", "pkce", "state"],
+      "localTargets": ["src/auth/oauth.ts"]
+    },
+    {
+      "path": "codex-rs/login/src/token_data.rs",
+      "sha256": "cbb2403b8db562c9e285c1fbd8589b6130d5e36b631d1d8ba66525a6d9dd67c8",
+      "scope": ["token", "session", "account"],
+      "localTargets": ["src/auth/jwt.ts", "src/auth/session.ts"]
+    },
+    {
+      "path": "codex-rs/login/src/auth/auth_headers.rs",
+      "sha256": "46ee347fd4f810e7b36187ab6cd59af76a3fc08531e11a1f232077b81ec5fbc4",
+      "scope": ["headers", "account"],
+      "localTargets": ["src/auth/transport.ts", "src/model/service.ts"]
+    },
+    {
+      "path": "codex-rs/login/src/auth/manager.rs",
+      "sha256": "f0cc75bbb0639790df4f311430b9c36044a0c15dbd1b1e33eef0e5acf3d5db77",
+      "scope": ["token", "session", "refresh", "account"],
+      "localTargets": ["src/auth/session.ts", "src/auth/oauth.ts"]
+    },
+    {
+      "path": "codex-rs/login/src/auth/revoke.rs",
+      "sha256": "db4490daaeb89bf781d05ceeeb53f2291e4729caea2b62a635d61c98e305223e",
+      "scope": ["oauth", "token", "logout"],
+      "localTargets": ["src/auth/oauth.ts", "src/auth/session.ts"]
+    },
+    {
+      "path": "codex-rs/login/src/auth/storage.rs",
+      "sha256": "c3d5c22fff3606ce6aa6a872f23eab7de07441922e62feb364232c0aa845373c",
+      "scope": ["token", "session", "atomic-storage"],
+      "localTargets": ["src/auth/session.ts"]
+    },
+    {
+      "path": "codex-rs/login/src/outbound_proxy.rs",
+      "sha256": "8ca7483e03080edee911790bcdb6b2e1a95ab17ca888804691c9b9a35cb36acf",
+      "scope": ["proxy", "tls"],
+      "localTargets": ["src/upstreamProxy.ts", "src/auth/transport.ts"]
+    },
+    {
+      "path": "codex-rs/codex-api/src/auth.rs",
+      "sha256": "34792e1c36f3b387ed10ff0c1fe6676c228ed5d66d20851241e001aa028ee793",
+      "scope": ["headers", "token", "account"],
+      "localTargets": ["src/model/service.ts"]
+    },
+    {
+      "path": "codex-rs/codex-api/src/endpoint/models.rs",
+      "sha256": "304447b51c88e2519fd1bab0cfa6045c8534c955c93a5f4be098569adcc6e16d",
+      "scope": ["models", "base-url"],
+      "localTargets": ["src/model/service.ts"]
+    },
+    {
+      "path": "codex-rs/codex-api/src/endpoint/responses.rs",
+      "sha256": "02f92d9a71f81f5567464aea1b3347e06ea455553d2480dd253371753e76fbb1",
+      "scope": ["responses", "headers", "base-url", "streaming"],
+      "localTargets": ["src/model/service.ts"]
+    },
+    {
+      "path": "codex-rs/codex-api/src/requests/responses.rs",
+      "sha256": "c3591fe04e65fccc5a1dc2a59cb072cc06ac070803ff579daa49ca1e8dac733f",
+      "scope": ["responses"],
+      "localTargets": ["src/model/convert.ts", "src/model/types.ts"]
+    },
+    {
+      "path": "codex-rs/codex-api/src/sse/mod.rs",
+      "sha256": "1fbf6e82d233479ccd696a8e6600d2c424ec2233f577d3a6a78cec90b6eac29f",
+      "scope": ["sse", "streaming"],
+      "localTargets": ["src/model/sse.ts"]
+    },
+    {
+      "path": "codex-rs/codex-api/src/sse/responses.rs",
+      "sha256": "4995c9c692dd9e3ebf8dcccc3e0f458d1d0f4c21fa60d75042594d00ba961fca",
+      "scope": ["responses", "sse", "streaming", "usage"],
+      "localTargets": ["src/model/sse.ts", "src/model/types.ts"]
+    },
+    {
+      "path": "codex-rs/http-client/src/client_builder.rs",
+      "sha256": "8faedff5c15bd1efd47b96578230e3afae02c57bb509095c837d6c50130490bf",
+      "scope": ["proxy", "tls", "ca", "transport"],
+      "localTargets": ["src/upstreamProxy.ts", "src/auth/transport.ts"]
+    }
+  ]
+}
