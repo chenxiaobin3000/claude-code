@@ -9,6 +9,9 @@ Phase 2 adds isolated ChatGPT browser/device-code login and private atomic
 session storage. Phase 3 forwards ordinary streaming Chat Completions requests
 to the official Codex Responses endpoint and adapts Responses SSE back to the
 existing model stream. It never reads or imports Codex's own auth file.
+Phase 4 adds one loopback daemon shared by all active MCP clients, with
+per-client leases, authenticated lifecycle control, crash diagnostics and idle
+exit.
 
 ## Development commands
 
@@ -19,6 +22,7 @@ bun run plugins/openai-proxy/host/entry.ts doctor
 bun run plugins/openai-proxy/host/entry.ts login
 bun run plugins/openai-proxy/host/entry.ts login --device-code
 bun run plugins/openai-proxy/host/entry.ts status
+bun run plugins/openai-proxy/host/entry.ts stop
 bun run plugins/openai-proxy/host/entry.ts logout
 ```
 
@@ -40,10 +44,18 @@ explicitly instead of being silently removed. Upstream authentication, errors,
 timeouts, cancellation and interrupted streams fail closed; there is no model
 or endpoint fallback.
 
-The MCP entry remains intentionally inert and does not bind the gateway
-port. Automatic single-instance startup is deferred until the daemon lease and
-multi-client lifecycle are implemented, so installing this Plugin cannot cause
-port conflicts between existing CLI sessions.
+The MCP entry acquires a per-client lease and automatically reuses or starts one
+single-instance gateway. Closing a client releases only its own lease; other
+CLI sessions continue using the same process. The daemon exits after 30 seconds
+with no live lease. `stop` is an explicit authenticated shutdown and `serve`
+runs the same lifecycle in the foreground.
+
+Runtime state is kept under `~/.claude/openai-proxy/runtime/`: `runtime.json`
+records the PID, instance ID, endpoint, mode and Host version; `connection.lock`
+guards singleton ownership; `clients/` contains renewable leases; and
+`last-exit.json` records idle, signal, control, startup-failure or stale-runtime
+recovery. Recovery validates lock ownership and never sends a signal to a PID
+read from mutable state. These files contain no ChatGPT Session tokens.
 
 ChatGPT credentials are stored only at `~/.claude/openai-proxy/auth.json`.
 Writes use an atomic replacement and a bounded cross-process lock. POSIX mode is

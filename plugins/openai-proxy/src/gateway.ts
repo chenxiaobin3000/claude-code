@@ -22,6 +22,8 @@ interface GatewayOptions {
   token?: string
   port?: number
   modelService?: GatewayModelService
+  instanceId?: string
+  onStop?: () => void
 }
 
 function json(body: unknown, status = 200): Response {
@@ -92,7 +94,19 @@ export function startOpenAIProxyGateway(
           version,
           bind: OPENAI_PROXY_HOST,
           forwarding: 'responses',
+          ...(options.instanceId ? { instanceId: options.instanceId } : {}),
         })
+      }
+      if (request.method === 'POST' && url.pathname === '/control/stop') {
+        if (!options.onStop) {
+          return openAIError(
+            'This openai-proxy process is not lifecycle-managed.',
+            'lifecycle_control_unavailable',
+            409,
+          )
+        }
+        setTimeout(options.onStop, 0)
+        return json({ stopping: true, instanceId: options.instanceId })
       }
       if (request.method === 'GET' && url.pathname === '/v1/models') {
         try {

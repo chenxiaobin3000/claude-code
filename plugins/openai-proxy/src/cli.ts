@@ -8,12 +8,17 @@ import {
   OpenAIProxyAuth,
   startBrowserLogin,
 } from './auth/oauth.js'
-import { startOpenAIProxyGateway } from './gateway.js'
+import {
+  readOpenAIProxyLastExit,
+  readOpenAIProxyRuntimeState,
+  runOpenAIProxyService,
+  stopOpenAIProxyDaemon,
+} from './lifecycle.js'
 import { runOpenAIProxyMcp } from './mcp.js'
 
 function usage(): void {
   process.stdout.write(
-    'Usage:\n  openai-proxy-host setup\n  openai-proxy-host login [--device-code]\n  openai-proxy-host status\n  openai-proxy-host doctor\n  openai-proxy-host logout\n  openai-proxy-host serve\n  openai-proxy-host mcp\n',
+    'Usage:\n  openai-proxy-host setup\n  openai-proxy-host login [--device-code]\n  openai-proxy-host status\n  openai-proxy-host doctor\n  openai-proxy-host logout\n  openai-proxy-host serve\n  openai-proxy-host stop\n  openai-proxy-host mcp\n',
   )
 }
 
@@ -74,17 +79,22 @@ export async function handleOpenAIProxyCli(
       return
     }
     if (args[0] === 'serve') {
-      const gateway = startOpenAIProxyGateway(version)
-      process.stderr.write(`openai-proxy listening on ${gateway.url}\n`)
-      await new Promise<void>(resolve => {
-        process.once('SIGINT', resolve)
-        process.once('SIGTERM', resolve)
-      })
-      gateway.stop()
+      process.stderr.write(`openai-proxy listening on ${OPENAI_PROXY_BASE_URL}\n`)
+      await runOpenAIProxyService(version, 'foreground')
+      return
+    }
+    if (args[0] === 'daemon') {
+      await runOpenAIProxyService(version, 'daemon')
+      return
+    }
+    if (args[0] === 'stop') {
+      const stopped = await stopOpenAIProxyDaemon()
+      process.stdout.write(stopped ? 'openai-proxy stopped.\n' : 'openai-proxy is not running.\n')
       return
     }
     if (args[0] === 'status') {
       const session = await auth.store.load()
+      const runtime = await readOpenAIProxyRuntimeState()
       if (!session) {
         process.stdout.write('Not logged in.\n')
       } else {
@@ -92,10 +102,16 @@ export async function handleOpenAIProxyCli(
           `Logged in${session.account.email ? ` as ${session.account.email}` : ''}; plan=${session.account.planType ?? 'unknown'}; workspace=${session.account.accountId ?? 'unknown'}.\n`,
         )
       }
+      process.stdout.write(
+        runtime
+          ? `Gateway recorded: pid=${runtime.pid}; mode=${runtime.mode}; version=${runtime.hostVersion}; endpoint=${runtime.endpoint}.\n`
+          : 'Gateway stopped.\n',
+      )
       return
     }
     if (args[0] === 'doctor') {
       const session = await auth.store.load()
+      const lastExit = await readOpenAIProxyLastExit()
       let gateway = 'stopped'
       try {
         await inspectGateway('/doctor')
@@ -104,7 +120,7 @@ export async function handleOpenAIProxyCli(
         gateway = 'stopped'
       }
       process.stdout.write(
-        `auth=${session ? 'logged-in' : 'logged-out'}; gateway=${gateway}; forwarding=responses.\n`,
+        `auth=${session ? 'logged-in' : 'logged-out'}; gateway=${gateway}; forwarding=responses; last-exit=${lastExit?.reason ?? 'none'}.\n`,
       )
       return
     }

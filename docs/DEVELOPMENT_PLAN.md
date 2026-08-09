@@ -146,7 +146,7 @@
 - [x] 第三阶段已将现有 Chat Completions 请求转换为官方 Codex Responses 请求，并把 Responses SSE 适配回现有流事件，覆盖系统/用户/助手消息、图片、reasoning、工具定义/选择/调用/结果、并行工具、输出 Token、Usage、finish reason、401 单次刷新、403/429、超时、取消和断流；不支持的字段明确拒绝，不静默删除。固定 Fixture 已通过现有 OpenAI SDK 与 `adaptOpenAIStreamToAnthropic` 主链验证，插件不接管 Agent 循环或工具执行；真实账号验收仍按完成条件单独执行。
 - [x] 第二阶段已用 TypeScript 语义重写官方开源 Codex 的必要登录能力：浏览器 OAuth、device-code、S256 PKCE、严格 state/允许的官方回调后缀、Token 交换/刷新/撤销，以及账号、workspace 和 plan 信息解析；已提供 `setup`、`login`、`login --device-code`、`status`、`doctor`、`logout`、`serve` 和 MCP 生命周期入口。`stop` 随下一阶段单实例守护进程一起实现。本阶段只通过固定 Fixture 验证协议，不使用真实账号或把测试结果冒充真实验收。
 - [x] Session 固定保存到 `~/.claude/openai-proxy/auth.json`，已采用同目录原子替换、跨进程有界锁、刷新竞争串行化、符号链接拒绝和最小权限保护；POSIX 使用目录 `0700`/文件 `0600`，Windows 使用当前用户 ACL。实现不读取、导入或覆盖 Codex 自身凭据文件，OAuth Token 不暴露给主项目进程、配置、状态输出或日志。
-- [ ] 复用现有本地 Plugin/MCP 生命周期能力管理单实例服务，记录 PID、锁、端点和版本，支持多 CLI 客户端安全共享、租约和空闲退出；服务异常终止后必须可诊断、可重启且不损坏 Session。
+- [x] 第四阶段已复用现有本地 Plugin/MCP 生命周期锁实现单实例服务：MCP 自动启动或复用 Host，`runtime.json` 记录 PID、实例、端点、模式和版本，每个客户端维护独立续租，最后租约释放 30 秒后空闲退出；`stop` 使用本地 Bearer 鉴权控制端点，`serve` 沿用同一前台生命周期。`last-exit.json` 可诊断控制停止、空闲退出、信号、启动失败和崩溃遗留状态恢复；恢复只校验并接管确认为过期的锁，不向可变状态中的 PID 发信号，也不读取或改写 Session。确定性验证已覆盖双客户端共享、EOF/租约释放、自动启动、版本冲突、未授权停止、显式停止、空闲退出和崩溃恢复。
 - [ ] 支持显式 `OPENAI_PROXY_URL`，配置来源仅限进程环境或用户 `settings.json.env`；沿用现有代理策略实现 HTTP、HTTPS CONNECT 和代理认证，SOCKS5 未实现时明确拒绝。
 - [ ] 代理覆盖 OAuth Token 交换、device-code 轮询、刷新/撤销、模型目录、Responses/SSE 及必要的账号/额度请求；localhost 回调、本地网关和系统浏览器自身不经过该代理。
 - [ ] 配置代理后采用 fail-closed：代理拒绝、超时、认证失败或 DNS 失败时不得转为直连或本地 DNS；不重放结果不确定的模型请求，日志不得泄露 Authorization、Cookie、Token、验证码或敏感查询参数。
