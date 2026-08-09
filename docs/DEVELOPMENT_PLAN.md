@@ -145,6 +145,37 @@
 - 企业微信 `wxwork` 只实现 API 模式智能机器人的 Bot WebSocket 长连接；不实现 Bot Webhook、Agent/自建应用 XML 回调、公网回调服务、Bot→Agent 回退或多连接模式切换，后续官方同步也不得扩大这一边界。
 - X 插件不实现 OAuth 1.0a、OAuth 2.0 Authorization Code with PKCE 或任何用户身份授权，只允许固定 `X_BEARER_TOKEN` 的 App-only 公开数据只读访问；因此不提供 Home Timeline、发布、回复、删除、点赞、转发、关注、取消关注、私信、账号修改及其他用户身份读写操作，后续官方 SDK 同步也不得隐式扩大该边界。
 
+## 后续开发计划
+
+### P0：移除 Node.js 运行时要求
+
+目标是让干净环境只安装 Bun 即可完成依赖安装、开发、类型检查、Lint、构建、统一验证、发布和所有已保留能力的运行；生产 standalone 继续不要求目标机器安装 Bun 或 Node.js。本任务不改写模型、会话、工具、权限、Plugin、Channel、ACP 或 Workflow 协议，也不把 Bun 已兼容的 `node:` 标准库导入、`NodeJS.*` 类型或包名中的 `node` 误判为外部 Node.js 可执行文件依赖。
+
+- [ ] 第一阶段：建立 Node 运行时依赖清单和防回归边界。逐项登记根脚本、workspace、CI、Shebang、`engines`、文档工具、发布入口及子进程中的 `node`/`node.exe`/`npx` 调用，区分“需要外部 Node 可执行文件”“仅使用 Bun 兼容 Node API”“仅使用类型声明”三类；增加轻量验证，禁止第一类依赖在迁移后重新进入。
+- [ ] 第二阶段：把安装与根命令切换为 Bun。将 `scripts/postinstall.cjs` 改为由 Bun 直接执行的实现，保持 ripgrep 下载、代理、压缩包校验、原子提交和多平台行为；移除根脚本中的显式 `node`/`npx`，把文档命令改为经验证可由 `bunx` 运行的入口，无法在 Bun 下运行的非核心文档工具应移除而不是重新引入 Node。
+- [ ] 第三阶段：收敛发行与构建链。删除 `dist/cli-node.js`、默认 Node Shebang、Vite/Rollup Node Bundle 及其专用补丁、完整性检查和 npm Node 启动入口；保留 Bun bundle 与 Bun standalone EXE/Host 两类产物。包管理和发布入口统一声明 Bun，清理仅服务于 Node Bundle 的 Vite、Rollup 及关联依赖，但允许继续通过兼容 npm registry 的 Bun 发布流程分发。
+- [ ] 第四阶段：保留并 Bun 化 `@claude-code/workflow-engine`。不得删除 Workflow Tool 或改变脚本格式、权限、Agent Adapter、Journal、恢复和进度事件语义；移除 `engines.node`，统一使用 Bun 构建/执行，确认现有 `node:fs`、`node:path`、`node:crypto` 等兼容 API 在源码、Bundle 和 standalone 中行为一致，并补充独立 Workflow Fixture。
+- [ ] 第五阶段：把独立 `acp-link` 从 Node Server 迁移到 Bun 原生服务。使用 Bun HTTP/HTTPS 与 WebSocket 能力替换 `@hono/node-server`、`@hono/node-ws` 和 Node 专用 Server 事件接口，保留 `/health`、`/ws`、Token 鉴权、消息上限、JSON-RPC、ACP 子进程、权限回传、Heartbeat、断线清理、TLS、RCS Relay 和 Manager 多实例语义；进程管理继续使用 `Bun.spawn`。主程序已有的 `claude --acp` stdio Agent 不依赖 `acp-link`，其协议和入口不得因迁移改变。
+- [ ] 第六阶段：清理 workspace 和依赖元数据。逐个移除 `engines.node`、Node Shebang、Node 专用启动脚本与已无消费者的 `@hono/node-*` 等依赖；`@types/node`、`node:` 导入以及名称中含 `node` 的 AWS/Smithy 包只有在 Bun 类型或运行兼容确实需要时才可保留，并由 Bundle/standalone 验证证明不调用外部 Node 可执行文件。
+- [ ] 第七阶段：改造 CI 和统一验证。删除 `actions/setup-node`，让 Linux、Windows CI 只安装固定版本 Bun；`bun run verify -- --ci` 必须继续覆盖冻结锁文件、全部 workspace、TypeScript、Biome、Bun bundle、主 EXE、所有独立 Host、CLI `--version`/`--help`、Plugin 生命周期、ACP 和 Workflow Fixture。增加隔离 PATH 验证，发现 `node`、`node.exe`、`npm` 或 `npx` 仍可被项目必需流程调用时直接失败。
+- [ ] 第八阶段：执行真实验收并更新基线。在未安装 Node 或从 PATH 明确移除 Node 的干净 Windows 与 Linux 环境完成 `bun install --frozen-lockfile`、`bun run dev`、`bun run typecheck`、`bun run lint`、`bun run build`、`bun run build:production`、`bun run verify -- --ci`，再验证单轮本地模型请求、工具调用、Workflow、`claude --acp`、`acp-link` WebSocket/RCS 和全部 Plugin Host。通过后将“两类 Bun 构建链、仅 Bun 开发依赖、standalone 零运行时依赖”并入工程基线并删除本 P0。
+
+完成条件：开发机只安装 Bun 即可完成项目声明的全部任务，CI 和发布流程不安装或调用 Node.js/npm/npx；`claude.exe` 与所有独立 Host 仍为零外部 JavaScript 运行时依赖；Workflow 和 ACP/RCS 行为、协议、安全边界与迁移前一致；仓库不存在需要外部 `node`/`node.exe` 的脚本、入口或 workspace，同时不会为追求字面上的“无 node”而重复实现 Bun 已兼容的标准库 API。
+
+### P1：移除休眠的 Computer Use 实现
+
+当前 Computer Use 只由内部 `CHICAGO_MCP` Feature 控制，默认开发、CI 和生产构建均不启用，也没有进入已验收产品能力。其源码约 63 个文件、1.75 万行，Windows 截图仍依赖未进入 standalone 分发的 `bridge.py` 以及外部 Python、mss、Pillow，并缺少固定 Fixture 和真实端到端验收。本任务采用完整删除，不保留残缺的 Windows 后端或隐藏启动方式；它不涉及 Chrome 插件、Chrome DOM、Windows Sandbox、普通 MCP、模型、会话、工具权限、Agent、Workflow 或 Channel。
+
+- [ ] 第一阶段：冻结删除边界并建立回归基准。记录默认构建中 `CHICAGO_MCP` 不可达、普通 MCP 工具发现与调用、Query/Stop Hook 生命周期、权限 UI、Chrome 插件、Windows Sandbox 和 workspace 契约的当前结果；增加防回归检查，确保清理只命中 Computer Use 专属名称、入口和状态。
+- [ ] 第二阶段：移除产品与协议入口。删除 `CHICAGO_MCP` Feature 定义、`--computer-use-mcp` 隐藏入口、动态 MCP 注入、`computer-use` 保留 Server 名称、自动允许工具集合、系统提示可用性提示及 Analytics 元数据；普通 stdio/HTTP/SSE MCP 的配置、鉴权、工具包装、错误和生命周期行为不得改变。
+- [ ] 第三阶段：清理核心文件中的条件接入。仅删除 `src/query.ts`、`src/query/stopHooks.ts`、`src/services/mcp/client.ts`、`src/services/mcp/config.ts`、`src/cli/modes/defaultMode.tsx` 和 `src/state/AppStateStore.ts` 中受 Computer Use Gate 保护的导入、轮次清理、状态与工具覆盖分支；不得重构相邻的通用 Query、Stop Hook、MCP 或 AppState 逻辑。
+- [ ] 第四阶段：删除 Computer Use 专属 UI 与实现。删除 `src/components/permissions/ComputerUseApproval`、`src/utils/computerUse` 全目录，包括 Windows `bridge.py`/Bridge Client、PowerShell/Win32、UI Automation、COM、截图、虚拟光标、窗口消息，以及 macOS/Linux 后端、锁、渲染、权限包装和清理代码；同时删除只为该能力存在的资源、常量和样式引用。
+- [ ] 第五阶段：删除三个专属 workspace 和依赖。移除 `packages/@ant/computer-use-input`、`packages/@ant/computer-use-mcp`、`packages/@ant/computer-use-swift` 及根 `package.json` 中对应 workspace 依赖，更新 `bun.lock`、workspace 数量、依赖审计、Feature Policy 和构建完整性规则；不能把通用图片处理、MCP SDK、Windows Sandbox或 Chrome 能力作为连带依赖误删。
+- [ ] 第六阶段：更新文档与安全边界。明确本项目不提供操作系统桌面 Computer Use，不宣传桌面截图、全局鼠标键盘、窗口/Office 自动化或隐藏 `computer-use` MCP；同时说明 Chrome 页面操作仍由独立 `chrome` 插件提供，Windows Sandbox 仍只负责隔离 Bash/PowerShell，二者不受影响。
+- [ ] 第七阶段：执行完整验收。运行冻结安装、全部 workspace TypeScript/Smoke、Biome、Bun bundle、standalone EXE、所有独立 Host、CLI 启动和 `bun run verify -- --ci`；额外验证源码与产物不存在 `CHICAGO_MCP`、`--computer-use-mcp`、`@ant/computer-use-*`、`bridge.py`、Python Bridge 或 `mcp__computer-use__*`，并实测普通 MCP、Chrome、Windows Sandbox、模型请求、文件工具、Shell 权限、Agent 和 Workflow 未回归。
+
+完成条件：Computer Use 的 Feature、CLI/MCP 入口、UI、状态、平台后端、Python/PowerShell/Win32 实现、三个 workspace、依赖、文档和构建标记全部删除；默认产品行为和已验收能力不变；Chrome 与 Windows Sandbox 的职责边界继续成立；统一验证和适用的真实冒烟全部通过，仓库不保留无法启动或未受验收约束的 Computer Use 残余实现。
+
 ## 维护规则
 
 - 官方发布新版本时，先核对 Changelog，再只记录本项目新增或仍存在的差异。
