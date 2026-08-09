@@ -1,14 +1,13 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Postinstall script — runs automatically after `bun install` or `npm install`.
  *
  * Downloads ripgrep binary (idempotent, skips if exists).
- * Works in dev mode (src/ exists), published mode (dist/ exists), with bun or node.
+ * Works in dev mode (src/ exists) and published mode (dist/ exists) under Bun.
  *
  * Usage:
- *   node scripts/postinstall.js
- *   node scripts/postinstall.js --force
- *   bun run scripts/postinstall.js
+ *   bun scripts/postinstall.cjs
+ *   bun scripts/postinstall.cjs --force
  */
 
 const {
@@ -150,7 +149,7 @@ function tryCurlDownload(url, dest) {
 
 async function fetchRelease(url) {
   if (proxyEnvSet()) {
-    // Dynamic require so it works in node without bundling issues
+    // Dynamic require keeps the optional proxy transport lazy under Bun.
     const undici = require('undici')
     return await undici.fetch(url, {
       redirect: 'follow',

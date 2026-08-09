@@ -481,7 +481,6 @@ bun install
 bun run typecheck
 bun run lint
 bun run build
-bun run build:vite
 bun run build:exe
 bun run build:chrome-host
 bun run build:weixin-host
@@ -494,10 +493,9 @@ bun run build:production
 bun run verify
 ```
 
-支持三条构建链：
+支持两类构建链：
 
-- Bun bundle：开发和 Bun 运行时产物。
-- Vite/Rollup Node bundle：Node 兼容分发产物。
+- Bun bundle：开发、兼容 npm registry 的包分发和 Bun 运行时产物；所有已发布命令入口均使用 Bun Shebang。
 - Bun standalone EXE：Windows standalone EXE 单文件 `claude.exe`；内置 ripgrep 首次启动时按 SHA-256 校验并提取到用户配置缓存，不依赖系统 `rg` 或 EXE 同级文件。
 - chrome Plugin：`dist/plugins/chrome` 是完整分发目录，其中
   Host 为独立 Native Messaging/MCP 单文件，目标机器无需 Bun 或 Node.js。

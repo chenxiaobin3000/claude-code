@@ -83,7 +83,6 @@ x:               X API App-only 只读 MCP 工具与独立 Host
 | 产物 | 命令 | 运行方式 |
 |------|------|----------|
 | `dist/cli-bun.js` | `bun run build:bun` | `bun dist/cli-bun.js` |
-| `dist/cli-node.js` | `bun run build:vite` | `node dist/cli-node.js` |
 | `dist/claude.exe` | `bun run build:exe` | Windows 独立可执行文件 |
 | `dist/plugins/chrome/` | `bun run build:chrome-host` | 可选 Chrome 插件完整分发目录；内含独立 Native Messaging/MCP Host |
 | `dist/plugins/weixin/` | `bun run build:weixin-host` | 可选微信 Channel 插件完整分发目录；内含独立 MCP Host |
@@ -98,9 +97,8 @@ x:               X API App-only 只读 MCP 工具与独立 Host
 
 1. 清理 `dist/` 目录
 2. 用 `Bun.build` 打包（splitting、sourcemap、define）
-3. 后处理——兼容 Node.js 的 `import.meta.require` 替换
-4. 复制 vendored ripgrep 二进制文件
-5. 生成 cli-bun.js / cli-node.js 入口
+3. 复制 vendored ripgrep 二进制文件
+4. 生成带 Bun Shebang 的 cli-bun.js 入口
 
 ## 关键子系统
 
@@ -190,7 +188,6 @@ x:               X API App-only 只读 MCP 工具与独立 Host
 bun run dev              # 启动开发服务器（注入 MACRO defines）
 bun run dev:inspect      # 带调试器的开发模式
 bun run build:bun        # 构建 Bun 产物
-bun run build:vite       # 构建 Vite/Node 产物
 bun run build:exe        # 构建 Windows 独立 EXE
 bun run build:chrome-host # 构建 chrome 分发插件与独立 Host
 bun run build:weixin-host # 构建 weixin 分发插件与独立 Host

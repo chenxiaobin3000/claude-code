@@ -23,10 +23,11 @@
   "engines": {
     "bun": ">=1.3.0"
   },
+  "packageManager": "bun@1.3.14",
   "bin": {
-    "ccb": "dist/cli-node.js",
+    "ccb": "dist/cli-bun.js",
     "ccb-bun": "dist/cli-bun.js",
-    "claude-code": "dist/cli-node.js"
+    "claude-code": "dist/cli-bun.js"
   },
   "workspaces": [
     "plugins/*",
@@ -56,12 +57,10 @@
     "chrome:verify:tools": "bun run scripts/validation/chrome-browser-e2e.ts --matrix",
     "audit:openai-proxy-upstream": "bun run scripts/audit-openai-proxy-upstream.ts",
     "build:exe": "bun run scripts/run-standalone-build.ts scripts/build-exe.ts",
-    "build:vite": "vite build && bun run scripts/post-build.ts",
-    "build:vite:only": "vite build",
     "build:bun": "bun run build.ts",
     "dev": "bun run scripts/dev.ts",
     "dev:inspect": "bun run scripts/dev-debug.ts",
-    "prepublishOnly": "bun run build:vite",
+    "prepublishOnly": "bun run build:bun && bun run check:bundle",
     "lint": "biome lint .",
     "lint:fix": "biome lint --fix .",
     "format": "biome format --write .",
@@ -73,8 +72,8 @@
     "workspaces:verify": "bun run scripts/verify-workspaces.ts",
     "verify": "bun run scripts/verify.ts",
     "check:unused": "knip-bun",
-    "postinstall": "node scripts/postinstall.cjs",
-    "docs:dev": "npx mintlify dev",
+    "postinstall": "bun scripts/postinstall.cjs",
+    "docs:dev": "bunx --bun mintlify dev",
     "typecheck": "tsc --noEmit",
     "typecheck:chrome-host": "tsc -p plugins/chrome/tsconfig.json --noEmit --pretty false",
     "typecheck:weixin-host": "tsc -p plugins/weixin/tsconfig.json --noEmit --pretty false",
@@ -168,7 +167,6 @@
     "react": "^19.2.5",
     "react-compiler-runtime": "^1.0.0",
     "react-reconciler": "^0.33.0",
-    "rollup": "^4.60.2",
     "semver": "^7.7.4",
     "sharp": "^0.34.5",
     "shell-quote": "^1.8.3",
@@ -182,7 +180,6 @@
     "typescript": "^6.0.3",
     "url-handler-napi": "workspace:*",
     "usehooks-ts": "^3.1.1",
-    "vite": "^8.0.8",
     "vscode-jsonrpc": "^8.2.1",
     "vscode-languageserver-protocol": "^3.17.5",
     "vscode-languageserver-types": "^3.17.5",

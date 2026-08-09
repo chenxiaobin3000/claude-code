@@ -66,7 +66,6 @@ assert(
 
 const bunBuild = await source('build.ts')
 const exeBuild = await source('scripts/build-exe.ts')
-const viteBuild = await source('vite.config.ts')
 const defaultMode = await source('src/cli/modes/defaultMode.tsx')
 const mcpConfig = await source('src/services/mcp/config.ts')
 assert(
@@ -77,15 +76,28 @@ assert(
   !/\bexternal\s*:/.test(exeBuild),
   'standalone EXE must not externalize packages',
 )
+for (const removedBuildDependency of ['rollup', 'vite']) {
+  assert(
+    !(removedBuildDependency in pkg.devDependencies),
+    `root ${removedBuildDependency} dependency must stay removed with the Node bundle`,
+  )
+}
+for (const removedBuildScript of ['build:vite', 'build:vite:only']) {
+  assert(
+    !(removedBuildScript in pkg.scripts),
+    `${removedBuildScript} must stay removed with the Node bundle`,
+  )
+}
 assert(
-  /noExternal:\s*true/.test(viteBuild),
-  'Vite Node bundle must include dependencies',
+  pkg.scripts.prepublishOnly ===
+    'bun run build:bun && bun run check:bundle',
+  'publication must build and validate the Bun bundle',
 )
 
 const postinstall = await source('scripts/postinstall.cjs')
 assert(
-  pkg.scripts.postinstall === 'node scripts/postinstall.cjs',
-  'dependency install must not mutate or validate the user Chrome registration',
+  pkg.scripts.postinstall === 'bun scripts/postinstall.cjs',
+  'dependency install must run directly under Bun without mutating or validating the user Chrome registration',
 )
 assert(
   !pkg.files.includes('scripts/setup-chrome-mcp.mjs'),

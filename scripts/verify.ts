@@ -126,6 +126,7 @@ const validationScripts = [
   'scripts/validation/standalone-build-retry.ts',
   'scripts/validation/self-update-boundary.ts',
   'scripts/validation/dependency-boundary.ts',
+  'scripts/validation/node-runtime-boundary.ts',
   'scripts/validation/feature-flags.ts',
   'scripts/validation/utility-modules-boundary.ts',
   'scripts/validation/ripgrep-runtime.ts',
@@ -465,22 +466,9 @@ async function main(): Promise<void> {
     label: 'Bun bundle CLI',
     command: [bunExecutable, 'dist/cli-bun.js'],
   }
-  const nodeArtifact: CliArtifact = {
-    label: 'Vite/Node bundle CLI',
-    command: ['node', 'dist/cli-node.js'],
-  }
-
   await runStep('Bun bundle build', [bunExecutable, 'run', 'build:bun'])
   await runStep('Bun bundle integrity', [bunExecutable, 'run', 'check:bundle'])
   await verifyCliArtifact(bunArtifact, config)
-
-  await runStep('Vite/Node build', [bunExecutable, 'run', 'build:vite'])
-  await runStep('Vite/Node bundle integrity', [
-    bunExecutable,
-    'run',
-    'check:bundle',
-  ])
-  await verifyCliArtifact(nodeArtifact, config)
 
   if (process.platform === 'win32' && process.arch === 'x64') {
     await runStep('Windows x64 standalone EXE build', [

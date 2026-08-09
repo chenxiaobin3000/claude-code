@@ -119,7 +119,7 @@
 ### 工程与验证
 
 - 根包与 workspace 均遵循最小脚本约定：`typecheck`、`build`、`test` 或明确的 `test:smoke`；不适用的子包须写明原因。
-- 支持 Bun bundle、Vite/Rollup Node bundle、Bun standalone EXE 三条构建链，并在 CI 只验证适用产物。
+- 支持 Bun bundle 与 Bun standalone EXE/Host 两类构建链；根包发布入口统一要求 Bun，standalone 目标机器不要求安装 JavaScript 运行时。
 - Windows standalone 构建统一处理 Bun Runtime 临时文件的瞬时 `EBUSY`/提交占用：只对明确的临时文件错误最多重试 3 次，按 250/500/1000 ms 退避并清理当前未完成产物；依赖、类型和 Bundle 等确定性错误立即失败。
 - `bun run verify` 是唯一验证入口：依赖锁定、TypeScript、Biome、构建、CLI 启动、源码轻量验证与本地模型可用时的单轮模型/工具调用均在其中执行。
 - 模型请求诊断日志必须脱敏，禁止记录 API Key、OAuth Token 和完整敏感 Prompt。
@@ -151,9 +151,9 @@
 
 目标是让干净环境只安装 Bun 即可完成依赖安装、开发、类型检查、Lint、构建、统一验证、发布和所有已保留能力的运行；生产 standalone 继续不要求目标机器安装 Bun 或 Node.js。本任务不改写模型、会话、工具、权限、Plugin、Channel、ACP 或 Workflow 协议，也不把 Bun 已兼容的 `node:` 标准库导入、`NodeJS.*` 类型或包名中的 `node` 误判为外部 Node.js 可执行文件依赖。
 
-- [ ] 第一阶段：建立 Node 运行时依赖清单和防回归边界。逐项登记根脚本、workspace、CI、Shebang、`engines`、文档工具、发布入口及子进程中的 `node`/`node.exe`/`npx` 调用，区分“需要外部 Node 可执行文件”“仅使用 Bun 兼容 Node API”“仅使用类型声明”三类；增加轻量验证，禁止第一类依赖在迁移后重新进入。
-- [ ] 第二阶段：把安装与根命令切换为 Bun。将 `scripts/postinstall.cjs` 改为由 Bun 直接执行的实现，保持 ripgrep 下载、代理、压缩包校验、原子提交和多平台行为；移除根脚本中的显式 `node`/`npx`，把文档命令改为经验证可由 `bunx` 运行的入口，无法在 Bun 下运行的非核心文档工具应移除而不是重新引入 Node。
-- [ ] 第三阶段：收敛发行与构建链。删除 `dist/cli-node.js`、默认 Node Shebang、Vite/Rollup Node Bundle 及其专用补丁、完整性检查和 npm Node 启动入口；保留 Bun bundle 与 Bun standalone EXE/Host 两类产物。包管理和发布入口统一声明 Bun，清理仅服务于 Node Bundle 的 Vite、Rollup 及关联依赖，但允许继续通过兼容 npm registry 的 Bun 发布流程分发。
+- [x] 第一阶段已建立 Node 运行时依赖清单和防回归边界。`docs/architecture/NODE_RUNTIME_BOUNDARY.md` 逐项登记根脚本、workspace、CI、Shebang、`engines`、文档工具、发布入口及子进程中的 `node`/`node.exe`/`npx` 调用，并区分外部运行时、Node 分发契约、Bun 兼容 API、类型/名称和用户工具内容；`scripts/validation/node-runtime-boundary.ts` 使用精确允许集合阻止新增依赖，并已并入唯一的 `bun run verify`。
+- [x] 第二阶段已把安装与根命令切换为 Bun。根 `postinstall` 和脚本 Shebang 统一使用 Bun，继续保留 ripgrep 下载、代理、压缩包处理、原子提交和多平台行为；根脚本不再直接调用 `node` 或 `npx`。文档预览改为 `bunx --bun mintlify dev`，真实 CLI 启动检查已通过，且 Mintlify 不进入项目依赖或生产产物；Node 运行时允许集合已同步收缩。
+- [x] 第三阶段已收敛发行与构建链。删除 `dist/cli-node.js`、Node Shebang、根 Vite/Rollup Node Bundle、专用后处理插件、重复完整性检查和直接 Node 启动冒烟；所有根 `bin` 与 `prepublishOnly` 统一使用并校验 Bun bundle，包管理器固定声明为 Bun。根 `vite`/`rollup` 直接依赖已删除；`remote-control-server` 自有的浏览器前端 Vite 仍由该 workspace 独立声明并通过 Bun 调用，不属于 Node CLI 分发链。项目继续支持兼容 npm registry 的 Bun 包分发及 Bun standalone EXE/Host。
 - [ ] 第四阶段：保留并 Bun 化 `@claude-code/workflow-engine`。不得删除 Workflow Tool 或改变脚本格式、权限、Agent Adapter、Journal、恢复和进度事件语义；移除 `engines.node`，统一使用 Bun 构建/执行，确认现有 `node:fs`、`node:path`、`node:crypto` 等兼容 API 在源码、Bundle 和 standalone 中行为一致，并补充独立 Workflow Fixture。
 - [ ] 第五阶段：把独立 `acp-link` 从 Node Server 迁移到 Bun 原生服务。使用 Bun HTTP/HTTPS 与 WebSocket 能力替换 `@hono/node-server`、`@hono/node-ws` 和 Node 专用 Server 事件接口，保留 `/health`、`/ws`、Token 鉴权、消息上限、JSON-RPC、ACP 子进程、权限回传、Heartbeat、断线清理、TLS、RCS Relay 和 Manager 多实例语义；进程管理继续使用 `Bun.spawn`。主程序已有的 `claude --acp` stdio Agent 不依赖 `acp-link`，其协议和入口不得因迁移改变。
 - [ ] 第六阶段：清理 workspace 和依赖元数据。逐个移除 `engines.node`、Node Shebang、Node 专用启动脚本与已无消费者的 `@hono/node-*` 等依赖；`@types/node`、`node:` 导入以及名称中含 `node` 的 AWS/Smithy 包只有在 Bun 类型或运行兼容确实需要时才可保留，并由 Bundle/standalone 验证证明不调用外部 Node 可执行文件。

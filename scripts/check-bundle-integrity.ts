@@ -73,7 +73,7 @@ const NODE_BUILTINS = new Set([
 // Node 18+ 内置但不在传统列表中的模块
 const NODE_18_PLUS_BUILTINS = new Set(['undici'])
 
-// Bun 专用模块（仅在 Bun 运行时可用，Node.js 环境会失败）
+// Bun 专用模块是已支持运行时的内置模块，不属于外部依赖。
 const BUN_MODULES = new Set(['bun', 'bun:ffi', 'bun:test', 'bun:sqlite'])
 
 // Optional or unsupported branches may intentionally retain a guarded runtime
@@ -105,7 +105,6 @@ interface Finding {
     | 'third-party-require'
     | 'third-party-import'
     | 'third-party-node-require'
-    | 'bun-runtime-only'
     | 'optional-runtime'
     | 'forbidden-provider-artifact'
   severity: 'error' | 'warning'
@@ -184,21 +183,11 @@ async function main() {
         if (
           NODE_BUILTINS.has(mod) ||
           NODE_18_PLUS_BUILTINS.has(mod) ||
+          BUN_MODULES.has(mod) ||
           PKG_DEPS.has(mod) ||
           mod.startsWith('node:')
         )
           continue
-        if (BUN_MODULES.has(mod)) {
-          findings.push({
-            type: 'bun-runtime-only',
-            severity: 'warning',
-            file,
-            line: lineNum,
-            module: mod,
-            snippet: line.trim().slice(0, 120),
-          })
-          continue
-        }
         if (OPTIONAL_RUNTIME_MODULES.has(mod)) {
           findings.push({
             type: 'optional-runtime',
@@ -248,22 +237,11 @@ async function main() {
         if (
           NODE_BUILTINS.has(mod) ||
           NODE_18_PLUS_BUILTINS.has(mod) ||
+          BUN_MODULES.has(mod) ||
           PKG_DEPS.has(mod) ||
           mod.startsWith('node:')
         )
           continue
-        if (BUN_MODULES.has(mod)) {
-          // bun:test 等只在 Bun 运行时可用，Node.js 运行时会失败
-          findings.push({
-            type: 'bun-runtime-only',
-            severity: 'warning',
-            file,
-            line: lineNum,
-            module: mod,
-            snippet: line.trim().slice(0, 120),
-          })
-          continue
-        }
         if (OPTIONAL_RUNTIME_MODULES.has(mod)) {
           findings.push({
             type: 'optional-runtime',
@@ -294,21 +272,11 @@ async function main() {
         if (
           NODE_BUILTINS.has(mod) ||
           NODE_18_PLUS_BUILTINS.has(mod) ||
+          BUN_MODULES.has(mod) ||
           PKG_DEPS.has(mod) ||
           mod.startsWith('node:')
         )
           continue
-        if (BUN_MODULES.has(mod)) {
-          findings.push({
-            type: 'bun-runtime-only',
-            severity: 'warning',
-            file,
-            line: lineNum,
-            module: mod,
-            snippet: line.trim().slice(0, 120),
-          })
-          continue
-        }
         if (OPTIONAL_RUNTIME_MODULES.has(mod)) {
           findings.push({
             type: 'optional-runtime',
@@ -345,7 +313,6 @@ async function main() {
   const thirdPartyNodeRequires = errors.filter(
     f => f.type === 'third-party-node-require',
   )
-  const bunRuntimeOnly = warnings.filter(f => f.type === 'bun-runtime-only')
   const optionalRuntime = warnings.filter(f => f.type === 'optional-runtime')
   const forbiddenProviderArtifacts = errors.filter(
     f => f.type === 'forbidden-provider-artifact',
@@ -404,15 +371,6 @@ async function main() {
         console.log(`     ${f.file}:${f.line}`)
       }
       if (items.length > 5) console.log(`     ... 还有 ${items.length - 5} 处`)
-    }
-    console.log()
-  }
-
-  if (bunRuntimeOnly.length > 0) {
-    console.log('⚠️  Bun 运行时专用模块（Node.js 环境会失败）:')
-    const grouped = groupByModule(bunRuntimeOnly)
-    for (const [mod, items] of grouped) {
-      console.log(`   "${mod}" — 出现 ${items.length} 次`)
     }
     console.log()
   }

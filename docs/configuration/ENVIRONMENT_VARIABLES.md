@@ -82,4 +82,4 @@ $env:CLAUDE_CODE_VERIFY_MODEL = 'Qwen3.5-9B-Q6_K'
 bun run verify
 ```
 
-CI mode performs dependency, type, lint, workspace, protocol, permission, and three-build artifact checks without contacting a model. Normal mode adds local model and tool-call smoke checks.
+CI mode performs dependency, type, lint, workspace, protocol, permission, Bun bundle, and standalone artifact checks without contacting a model. Normal mode adds local model and tool-call smoke checks.
