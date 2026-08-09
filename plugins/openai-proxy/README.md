@@ -16,6 +16,8 @@ Phase 5 adds an optional explicit upstream HTTP/HTTPS CONNECT proxy for every
 OpenAI authentication and model request, with no direct fallback.
 Phase 6 fixes an auditable OpenAI Codex release baseline and permits only a
 small, documented set of login, Responses/SSE, model and transport semantics.
+The upstream `client_version` is pinned to `0.147.0` with that baseline and is
+independent from the Plugin/Host package version.
 Phase 7 locks the boundary into the full deterministic regression suite.
 
 ## Development commands

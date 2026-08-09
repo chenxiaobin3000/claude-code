@@ -8,7 +8,7 @@
 
 - 项目发行版本：`2.1.220`
 - 官方功能对照基线：Claude Code `2.1.220`，以[官方 Changelog](https://code.claude.com/docs/en/changelog)为准。
-- 基线状态：截至 `2026-08-04`，当前产品范围内的功能、差异边界、安全约束、构建和验证矩阵均已验收；可选后续能力不阻塞本版本发布。
+- 基线状态：截至 `2026-08-09`，当前产品范围内的功能、差异边界、安全约束、构建和验证矩阵均已验收；可选后续能力不阻塞本版本发布。
 - 本项目不追踪或复述官方已有且行为一致的功能；升级官方版本时，只补充新增差异或重新评估现有差异。
 
 这里的“对齐”表示已经以官方 `2.1.220` 为功能审计基准，并在本项目适用的产品范围内完成验收；不表示源码、二进制或产品能力与官方发行版完全相同。Anthropic 账号与云服务、官方 Provider、远端产品和其他明确裁剪项仍按下文边界处理。
@@ -17,9 +17,9 @@
 
 以下是以官方 `2.1.220` 为基线的产品差异，不应把上游功能说明误认为本项目能力。
 
-- **模型与登录**：官方的 Anthropic 登录、官方模型、组织默认/限制模型、Claude API Provider 与相关云端模型能力不适用。本项目只从 `models.json` 加载 OpenAI-compatible 模型；模型 Profile 静态声明，不做服务端模型发现或自动模型替换。
+- **模型与登录**：官方的 Anthropic 登录、官方模型、组织默认/限制模型、Claude API Provider 与相关云端模型能力不适用。主程序只从 `models.json` 加载 OpenAI-compatible 模型；可选本地 `openai-proxy` 插件可把 ChatGPT/Codex 订阅转换为同一协议的 loopback 端点，但不改变 Provider、模型选择或工具主链。
 - **云端与远程产品**：官方的 Web/Desktop/Mobile、Remote Control、GitHub App、Cloud Code Review、Routines、云端 Channels、Artifacts、语音与账户/用量产品均不提供。本项目也不包含官方自动更新、安装器或远端遥测；可选的本地 `weixin`、`wxwork`、`qq` 与 `telegram` Channel 插件不依赖 Anthropic 云服务。
-- **插件与浏览器**：官方插件市场、远端安装/更新和插件自动重命名不提供。主程序不实现 Chrome、微信、企业微信、QQ 或 Telegram 业务；生产 standalone 自动发现同级 `plugins` 一级目录中的本地 `chrome`、`weixin`、`wxwork`、`qq` 与 `telegram`，源码开发通过 `--plugin-dir` 加载。插件均以独立 Host 分发，删除对应目录即可移除能力。
+- **插件与浏览器**：官方插件市场、远端安装/更新和插件自动重命名不提供。主程序不实现 Chrome、Channel 或订阅代理业务；生产 standalone 自动发现同级 `plugins` 一级目录中的本地 `chrome`、`weixin`、`wxwork`、`qq`、`telegram`、`telegram-user`、`x` 与 `openai-proxy`，源码开发通过 `--plugin-dir` 加载。插件均以独立 Host 分发，删除对应目录即可移除能力。
 - **Sandbox**：Windows 上启用 Sandbox 时，Shell 会在 Windows Sandbox VM 内执行，默认只映射启动工作区和只读 Shell 运行时，且固定断网、不传递用户主目录或凭据。`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands` 保持上层语义；Windows 不能精确落实域名白名单、代理和目录内文件 allow/deny 规则，配置这些规则时会 fail-closed，而不会回退宿主执行。
 - **会话路径**：官方 `/cd` 可迁移会话；本项目有意保持临时 cwd 语义，只改变主会话后续工具的当前目录，不迁移项目身份、会话存储、权限根、配置或扩展作用域。
 - **Agent、Hook、MCP 与 Skill**：本地 Agent、后台任务、Hook、Plugin、Skill 与 MCP 已固化为当前基线；嵌套 Skill 使用相对启动项目根的限定名，连续 inline Skill 可在同一条输入中组合。`/cd` 的临时 cwd、OpenAI-compatible Provider、本地安全增强和不提供云端 Agent 产品仍是明确差异。本地 `/mcp login`/`logout` 仅管理用户配置的 MCP OAuth 凭据。
@@ -32,7 +32,7 @@
 
 - 不提供 Anthropic 官方网络 Provider、账号登录、OAuth、自动更新或原生安装流程。
 - `@anthropic-ai/sdk` 仅保留为本地消息、工具调用、流事件和 Usage 的类型兼容层；它不是 Anthropic 网络连接的入口。
-- 不提供 ChatGPT/Codex OAuth、Anthropic MCP Registry 预取、远端插件市场、远端插件下载或插件自动更新。
+- 主程序不提供 ChatGPT/Codex OAuth；该能力仅存在于可独立删除的本地 `openai-proxy` 插件。Anthropic MCP Registry 预取、远端插件市场、远端插件下载和插件自动更新均不提供。
 - 对不兼容 Chat Completions 的端点，直接给出兼容性错误；不会静默删除字段、切换 Provider 或进入供应商专用适配分支。
 
 用户自行配置的模型端点、MCP、Hook 以及本地插件仍可访问其对应的外部服务。
@@ -73,6 +73,25 @@ Hook command 的 `args` 会保持 argv 参数边界。启用 Sandbox 时不会�
 
 密钥优先从模型的 `apiKeyEnv` 指定环境变量读取；未设置时可使用本地初始化保存的配置密钥。密钥不会写入诊断日志。
 
+### openai-proxy ChatGPT/Codex 订阅代理
+
+`plugins/openai-proxy` 使用独立 Host 完成 ChatGPT 浏览器/device-code 登录，把 Codex Responses/SSE 转换为项目现有的 OpenAI-compatible Chat Completions 流。它不读取 Codex 自身凭据，也不向主程序增加 Provider 类型；删除插件目录即可完整移除。
+
+本地地址固定为 `http://127.0.0.1:48181/v1`，访问必须使用至少 32 个随机字符的 `OPENAI_PROXY_LOCAL_TOKEN`。在 `models.json` 的 `models` 数组中增加普通 OpenAI 兼容模型条目：
+
+```json
+{
+  "model": "gpt-5.4-mini",
+  "displayName": "ChatGPT subscription",
+  "baseUrl": "http://127.0.0.1:48181/v1",
+  "apiKeyEnv": "OPENAI_PROXY_LOCAL_TOKEN"
+}
+```
+
+生产分发使用 `dist/plugins/openai-proxy/openai-proxy-host.exe`；源码开发使用 `bun run plugins/openai-proxy/host/entry.ts`。两者均支持 `setup`、`login`、`login --device-code`、`status`、`doctor`、`logout`、`serve`、`stop` 和 `mcp`。Session 只保存在 `~/.claude/openai-proxy/auth.json`，退出会撤销远端 Token 并删除本地凭据。
+
+可选 `OPENAI_PROXY_URL` 仅接受显式 HTTP/HTTPS 代理，统一覆盖 OAuth、Token 刷新/撤销、模型目录和 Responses；代理拒绝、认证、DNS、TLS 或超时失败不会回退直连。上游兼容基线固定为 OpenAI Codex `rust-v0.147.0`，协议 `client_version` 为 `0.147.0`；审计使用 `bun run audit:openai-proxy-upstream -- --tag rust-v0.147.0`，只下载固定白名单到系统临时目录，不改写生产代码。
+
 ### 静态模型 Profile
 
 模型能力由模型 ID 的静态 Profile 决定，包括上下文窗口、最大输出 Token、推理参数、Prompt Cache、价格以及工具调用字段。项目不会通过模型名称猜测能力，也不会在运行时进行能力探测。
@@ -97,6 +116,12 @@ Windows 下 Bash 与 PowerShell 会按优先级探测可用实现。Bash 工具�
 Windows Sandbox 不能精确执行域名白名单、代理或映射目录内的 `allowRead`/`denyRead`、`allowWrite`/`denyWrite` 规则。配置这些规则时 Sandbox 会拒绝启用，绝不会无提示回退到宿主命令。卷根、UNC、符号链接或 Junction 映射同样会被拒绝。
 
 命令权限决策顺序固定为：硬安全拒绝、显式 deny、不可绕过安全审批、显式 ask、精确 allow、受约束模式/只读自动允许、默认 ask。工具级通配规则不能覆盖硬安全结果。
+
+### macOS Sandbox
+
+macOS 使用系统内置 Seatbelt，并继续默认阻止 Apple Events。本项目不实现 `sandbox.allowAppleEvents`，因此沙盒内的 `open`、`osascript` 或依赖 Apple Events 的浏览器启动流程可能失败；这是有意保留的安全边界，因为放开 Apple Events 后，沙盒命令可以启动不受原文件系统和网络隔离约束的外部应用。
+
+确有需要时，在用户级配置中通过 `sandbox.excludedCommands` 精确列出对应命令，使其走沙盒外执行和既有权限审批；不要使用宽泛模式把无关命令一并排除。项目级配置不得借此获得额外自动授权。
 
 ## 会话与文件工具差异
 

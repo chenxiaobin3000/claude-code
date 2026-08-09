@@ -12,6 +12,7 @@ import { createOpenAIUpstreamFetch } from '../upstreamProxy.js'
 
 export const OPENAI_CODEX_BACKEND =
   'https://chatgpt.com/backend-api/codex' as const
+export const OPENAI_CODEX_CLIENT_VERSION = '0.147.0' as const
 const MAX_LOCAL_REQUEST_BYTES = 32 * 1024 * 1024
 const MODEL_TIMEOUT_MS = 5 * 60_000
 
@@ -41,6 +42,7 @@ export interface OpenAIProxyModelServiceOptions {
   transport?: ModelTransport
   baseUrl?: string
   version?: string
+  clientVersion?: string
   timeoutMs?: number
 }
 
@@ -194,6 +196,7 @@ export class OpenAIProxyModelService {
   private readonly transport: ModelTransport
   private readonly baseUrl: string
   private readonly version: string
+  private readonly clientVersion: string
   private readonly timeoutMs: number
 
   constructor(options: OpenAIProxyModelServiceOptions = {}) {
@@ -201,6 +204,7 @@ export class OpenAIProxyModelService {
     this.transport = options.transport ?? createConfiguredModelTransport()
     this.baseUrl = (options.baseUrl ?? OPENAI_CODEX_BACKEND).replace(/\/$/, '')
     this.version = options.version ?? '0.1.0'
+    this.clientVersion = options.clientVersion ?? OPENAI_CODEX_CLIENT_VERSION
     this.timeoutMs = options.timeoutMs ?? MODEL_TIMEOUT_MS
   }
 
@@ -232,7 +236,7 @@ export class OpenAIProxyModelService {
     const linked = linkedAbortSignal(signal, this.timeoutMs)
     try {
       const url = new URL(`${this.baseUrl}/models`)
-      url.searchParams.set('client_version', this.version)
+      url.searchParams.set('client_version', this.clientVersion)
       const response = await this.sendWithAuthRecovery(
         session,
         {

@@ -30,13 +30,34 @@ async function removeNewBunTemporaryBuildFiles(
 }
 
 export function isRetryableStandaloneBuildError(error: unknown): boolean {
-  const message = (error instanceof Error
-    ? `${error.name}: ${error.message}`
-    : String(error)
+  const message = (
+    error instanceof Error ? `${error.name}: ${error.message}` : String(error)
   ).toLowerCase()
   return WINDOWS_TRANSIENT_BUILD_MARKERS.some(marker =>
     message.includes(marker.toLowerCase()),
   )
+}
+
+function getStandaloneBuildResultError(result: unknown): Error | undefined {
+  if (
+    typeof result !== 'object' ||
+    result === null ||
+    !('success' in result) ||
+    result.success !== false
+  ) {
+    return undefined
+  }
+  const logs = 'logs' in result && Array.isArray(result.logs) ? result.logs : []
+  const message = logs
+    .map(log => {
+      if (typeof log === 'object' && log !== null && 'message' in log) {
+        return String(log.message)
+      }
+      return String(log)
+    })
+    .filter(Boolean)
+    .join('\n')
+  return new Error(message || 'Standalone build returned success=false')
 }
 
 interface StandaloneBuildRetryOptions<T> {
@@ -65,6 +86,8 @@ export async function buildStandaloneWithRetry<T>({
     const existingTemporaryFiles = await listBunTemporaryBuildFiles()
     try {
       const result = await build()
+      const resultError = getStandaloneBuildResultError(result)
+      if (resultError) throw resultError
       await removeNewBunTemporaryBuildFiles(existingTemporaryFiles)
       return result
     } catch (error) {

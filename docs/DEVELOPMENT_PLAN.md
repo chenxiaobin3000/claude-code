@@ -2,7 +2,7 @@
 
 ## 基线
 
-项目当前发行版本为 `2.1.220`，官方功能对照基线固定为 Claude Code `2.1.220`。截至 `2026-08-04`，当前产品范围内的功能、差异边界、安全约束、构建和验证矩阵均已完成验收；可选后续能力不影响当前基线成立。
+项目当前发行版本为 `2.1.220`，官方功能对照基线固定为 Claude Code `2.1.220`。截至 `2026-08-09`，当前产品范围内的功能、差异边界、安全约束、构建和验证矩阵均已完成验收；可选后续能力不影响当前基线成立。
 
 “功能对齐”仅表示以该官方版本为审计目标，并完成本项目适用范围的实现与验证，不表示源码、二进制或产品集合与官方发行版完全相同。明确裁剪、替代或不开发的能力继续以下文边界为准。上游功能与行为以 [Claude Code 官方文档](https://code.claude.com/docs/en/overview)和[官方 Changelog](https://code.claude.com/docs/en/changelog)为准。升级对照版本前必须先更新差异审计和对应验收矩阵，不能使用滚动的“最新版本”作为未冻结的验收目标。
 
@@ -14,7 +14,7 @@
 
 - 模型来源为 `~/.claude/models.json`，每个模型拥有唯一 ID，可共享 OpenAI-compatible `baseUrl`。
 - `/model` 仅从该配置切换模型；配置损坏或模型不可用时直接报错退出，不回退到 Anthropic 登录或交互式配网。
-- 不支持 Anthropic 官方网络 Provider、ChatGPT/Codex OAuth、旧国内云模型供应商引导、Anthropic MCP Registry 预取、内部 GitHub Webhook/KAIROS 分支。
+- 主模型链不支持 Anthropic 官方网络 Provider、内置 ChatGPT/Codex OAuth、旧国内云模型供应商引导、Anthropic MCP Registry 预取或内部 GitHub Webhook/KAIROS 分支；可独立删除的本地 `openai-proxy` 插件是唯一 ChatGPT/Codex 登录入口，并只以普通 OpenAI-compatible loopback 地址接入 `models.json`。
 - `@anthropic-ai/sdk` 只作为本地消息、工具、流事件和 Usage 类型兼容层，禁止将其类型引用误判为网络 Provider。
 - 不兼容 OpenAI Chat Completions 的端点必须清晰失败；禁止删字段重试、隐式 Provider 回退或新增供应商专用协议分支。
 
@@ -24,6 +24,15 @@
 - 未知模型加载 Qwen 派生默认 Profile，并提示补充专用 Profile。
 - `models.json` 的 `profile` 可覆盖默认 Profile；覆盖与模型加载同步生效。
 - 已对 OpenAI Chat Completions 的推理参数、工具选择、流事件和 Usage 字段进行边界核对；llama.cpp 的 `tool_choice` 兼容是受限的协议编码，不是 Provider 分支。
+
+### openai-proxy 本地订阅模型代理
+
+- `plugins/openai-proxy` 是可独立删除的 TypeScript/Bun 本地插件；主程序不新增 Provider 或代理模型类型，只把 `http://127.0.0.1:48181/v1` 作为普通 OpenAI-compatible `baseUrl`，删除插件不需要回滚主模型链。
+- 独立 Host 提供浏览器 OAuth、device-code、PKCE/state、Token 刷新/撤销、私有原子 Session、单实例守护进程、客户端租约和 loopback Bearer 鉴权。ChatGPT 凭据只保存在 `~/.claude/openai-proxy/auth.json`，不读取 Codex 自身凭据，也不进入主进程、配置、日志或模型上下文。
+- 网关把 Chat Completions 转为 Codex Responses，并把 SSE、reasoning、工具调用、Usage 和结束原因适配回现有 OpenAI 流；不支持字段、认证失败、超时、断流、代理失败和上游错误均 fail-closed，不切换模型、端点或直连路径。
+- 可选 `OPENAI_PROXY_URL` 仅支持显式 HTTP/HTTPS CONNECT 代理并统一覆盖登录、刷新、撤销、模型目录和 Responses；代理认证、拒绝、超时或 TLS/DNS 失败不回退直连，诊断只显示脱敏端点。
+- 上游兼容基线固定为 OpenAI Codex `rust-v0.147.0`（commit `be6e8eac029b183056b7e4402879f15d2c85f61b`），协议 `client_version` 固定为 `0.147.0`。`plugins/openai-proxy/upstream` 只保存来源、哈希、Apache-2.0 归属和语义映射；审计命令只下载固定白名单到临时目录，禁止引入 Rust、Agent 循环、Prompt、Tool、Sandbox、MCP、UI、遥测或其他白名单外职责。
+- Windows 独立 Host、真实低权限账号登录、模型目录、流式模型调用、Token 轮换和退出均已验收；最终 `bun run verify --ci` 覆盖全部源码、workspace、主 EXE 与八个独立 Host/Plugin 发行物。Bun Windows `FailedToCommit` 由外层构建监督进程有限重试，不掩盖确定性构建错误。
 
 ### 工具、安全与本地文件
 
@@ -131,40 +140,10 @@
 - 除独立本地 `openai-proxy` 插件明确限定的 ChatGPT/Codex 订阅登录与模型转发外，不增加其他云模型供应商专用适配、自动能力探测或隐式请求字段降级。
 - 官方 MCP Registry 预取、远端插件市场、远端插件下载和插件自动更新。
 - Anthropic 云端浏览器桥接、已移除的 `mcp-chrome`、Artifact 工具和 VS Code 插件路线。
+- 不实现 macOS `sandbox.allowAppleEvents`。Apple Events 继续按 Seatbelt 默认规则阻止，避免沙盒命令通过 `open` 或 `osascript` 启动不受文件系统和网络隔离约束的外部应用；确有需要时由用户使用精确的 `sandbox.excludedCommands`，并继续经过既有命令权限分类和审批。
 - 官方大型测试体系；项目只维护独立的 `scripts/validation` 轻量验证脚本。
 - 企业微信 `wxwork` 只实现 API 模式智能机器人的 Bot WebSocket 长连接；不实现 Bot Webhook、Agent/自建应用 XML 回调、公网回调服务、Bot→Agent 回退或多连接模式切换，后续官方同步也不得扩大这一边界。
 - X 插件不实现 OAuth 1.0a、OAuth 2.0 Authorization Code with PKCE 或任何用户身份授权，只允许固定 `X_BEARER_TOKEN` 的 App-only 公开数据只读访问；因此不提供 Home Timeline、发布、回复、删除、点赞、转发、关注、取消关注、私信、账号修改及其他用户身份读写操作，后续官方 SDK 同步也不得隐式扩大该边界。
-
-## 可选后续路线图（不影响当前验收）
-
-### P0：openai-proxy ChatGPT/Codex 订阅模型代理
-
-- [x] 第一阶段已新增独立本地插件 `plugins/openai-proxy`，服务进程命名为 `openai-proxy-host`；实现仅使用 TypeScript、Bun 和现有项目构建链，不引入 Rust、Cargo、`.rs` 文件或其他语言运行时。插件已具备本地 MCP 生命周期入口、loopback-only 鉴权网关、`serve/status/doctor`、安全的未就绪响应、独立 Host 构建及边界/网关/分发验证；本阶段不读取 Codex 凭据、不执行 OAuth、不请求 OpenAI。
-- [x] 保持现有模型调用主链不变，不新增 Provider 或代理模型类型，不修改 QueryEngine、OpenAI Provider、工具循环、权限、Sandbox、Session 或 UI 的权威职责；`plugins/openai-proxy/README.md` 已记录普通 `models.json` 配置，仅将 `baseUrl` 指向 `http://127.0.0.1:48181/v1`，并通过 `OPENAI_PROXY_LOCAL_TOKEN` 提供本地访问凭据。
-- [x] 已提供仅监听 `127.0.0.1` 的 OpenAI 兼容网关，实现 `POST /v1/chat/completions`、`GET /v1/models`、`GET /health` 和 `GET /doctor`；未安装、未运行、未登录或认证失败时明确报错，不回退到其他模型或外部地址。
-- [x] 已使用本地 Bearer capability token 限制同机其他进程滥用订阅；Token 不写入 `models.json`、日志、模型上下文或子进程参数，上游错误正文和未知内部错误不透传到本地客户端。
-- [x] 第三阶段已将现有 Chat Completions 请求转换为官方 Codex Responses 请求，并把 Responses SSE 适配回现有流事件，覆盖系统/用户/助手消息、图片、reasoning、工具定义/选择/调用/结果、并行工具、输出 Token、Usage、finish reason、401 单次刷新、403/429、超时、取消和断流；不支持的字段明确拒绝，不静默删除。固定 Fixture 已通过现有 OpenAI SDK 与 `adaptOpenAIStreamToAnthropic` 主链验证，插件不接管 Agent 循环或工具执行；真实账号验收仍按完成条件单独执行。
-- [x] 第二阶段已用 TypeScript 语义重写官方开源 Codex 的必要登录能力：浏览器 OAuth、device-code、S256 PKCE、严格 state/允许的官方回调后缀、Token 交换/刷新/撤销，以及账号、workspace 和 plan 信息解析；已提供 `setup`、`login`、`login --device-code`、`status`、`doctor`、`logout`、`serve` 和 MCP 生命周期入口。`stop` 随下一阶段单实例守护进程一起实现。本阶段只通过固定 Fixture 验证协议，不使用真实账号或把测试结果冒充真实验收。
-- [x] Session 固定保存到 `~/.claude/openai-proxy/auth.json`，已采用同目录原子替换、跨进程有界锁、刷新竞争串行化、符号链接拒绝和最小权限保护；POSIX 使用目录 `0700`/文件 `0600`，Windows 使用当前用户 ACL。实现不读取、导入或覆盖 Codex 自身凭据文件，OAuth Token 不暴露给主项目进程、配置、状态输出或日志。
-- [x] 第四阶段已复用现有本地 Plugin/MCP 生命周期锁实现单实例服务：MCP 自动启动或复用 Host，`runtime.json` 记录 PID、实例、端点、模式和版本，每个客户端维护独立续租，最后租约释放 30 秒后空闲退出；`stop` 使用本地 Bearer 鉴权控制端点，`serve` 沿用同一前台生命周期。`last-exit.json` 可诊断控制停止、空闲退出、信号、启动失败和崩溃遗留状态恢复；恢复只校验并接管确认为过期的锁，不向可变状态中的 PID 发信号，也不读取或改写 Session。确定性验证已覆盖双客户端共享、EOF/租约释放、自动启动、版本冲突、未授权停止、显式停止、空闲退出和崩溃恢复。
-- [x] 第五阶段已支持显式 `OPENAI_PROXY_URL`，配置来源严格限定为 Host 进程环境或用户 `settings.json.env`，且进程值优先；沿用现有 Bun HTTP/HTTPS CONNECT 传输语义并支持 URL Basic 代理认证，SOCKS5、非 HTTP(S) 协议、路径和查询参数均明确拒绝。通用 `HTTP_PROXY`、`HTTPS_PROXY` 不会隐式启用该能力，显式代理启用后会清除 Host 内的 `NO_PROXY` 绕过，防止要求代理的请求静默直连。
-- [x] 代理已覆盖 OAuth Token 交换、device-code 请求/轮询、刷新/撤销、模型目录和 Responses/SSE；这些路径统一注入同一显式上游传输。localhost 登录回调、本地网关、MCP stdio 和系统浏览器启动不使用该传输；当前插件未实现独立账号/额度接口，因此不存在未接入代理的同类请求分支。
-- [x] 显式代理采用 fail-closed：代理不可用、407 认证失败、超时、DNS/CONNECT 或 TLS 失败均不转为直连，不继承 `NO_PROXY`，模型网络结果不确定时不重放；仅在收到明确 401 后沿既有单次刷新语义重试。错误、`status`、`doctor` 和网关诊断只显示脱敏后的协议/主机/端口与失败分类，不输出代理凭据、Authorization、Cookie、Token、验证码或敏感查询参数。确定性验证已覆盖配置优先级、HTTP 代理认证、OAuth/device-code/刷新/撤销、模型与流、不可用代理、407、超时、HTTPS CONNECT 代理侧解析及无直连回退。
-- [x] 第六阶段已在 `plugins/openai-proxy/upstream/` 建立严格上游同步边界：`BASELINE.json` 固定官方 OpenAI Codex `rust-v0.147.0`、annotated tag object、完整提交 `be6e8eac029b183056b7e4402879f15d2c85f61b`、审计日期、17 个白名单来源文件及 SHA-256；`SOURCE_MAP.md` 记录语义映射和禁止范围，`THIRD_PARTY_NOTICES.md` 保留 Apache-2.0 归属说明。目录不保存或分发上游 Rust 源码。
-- [x] 上游同步白名单仅允许登录/OAuth/device-code/PKCE/Token/Session、必要请求头和基础地址、Responses 请求与 SSE、模型/账号/限额，以及 TLS/CA/代理相关语义；Agent 循环、Prompt、Tool、Shell/文件、Sandbox、审批、Thread、MCP、Plugin/Skill、Cloud/Remote、遥测、更新、UI、多 Agent、Memory、Web、Image、Voice 和后台任务均明确排除。即使白名单文件包含相邻职责，也只能审查 `scope` 中列出的语义。
-- [x] 已增加 `bun run audit:openai-proxy-upstream -- --tag <version>`：解析官方 release tag，只把固定白名单文件下载到 OS 临时目录，输出提交、SHA-256、变化文件、允许语义和禁止职责报告，并在结束时清理临时文件；命令不写生产代码。防回归验证会拒绝非官方 tag 形式、路径越界、白名单外上游产物、`.rs`、Cargo、Rust 工具链和 `.cargo` 配置进入插件。
-- [x] 第七阶段确定性测试已覆盖浏览器/device-code 登录、PKCE/state、回调端口冲突、Session 原子写入、刷新竞争、无效 refresh、logout；请求/流事件转换；取消、超时、断流、401/403/429；代理成功、认证/拒绝/超时和无直连回退；本地端点认证、守护进程多客户端/租约/EOF，以及 Windows 独立发行包运行。
-- [x] 固定回归矩阵继续验证现有 OpenAI、DeepSeek、llama.cpp、自定义 OpenAI 兼容端点、工具调用、权限与 Windows Sandbox 行为，且 openai-proxy 不静态接入主 Provider 路径。真实账号验收不由 Fixture 替代。
-- [ ] 使用低权限 ChatGPT 测试账号单独补录真实浏览器/device-code 登录、模型调用、Token 刷新和退出证据；该项需要测试账号与交互式授权，只作为发布前人工验收，不阻塞第六、七阶段代码收口。
-- 2026-08-09 验证记录：新增上游边界、回归边界、登录冲突测试和真实基线哈希审计均通过，`openai-proxy` Windows 独立 Host 构建及发行生命周期验证通过。完整 `bun run verify --ci` 的类型、Lint、工作区、全部源验证、主 EXE、Chrome/微信/企业微信/QQ 构建均通过，随后仍因 Bun 1.3.13 在 Telegram Host 写 Windows 元数据时返回既有 `FailedToCommit` 而停止；该失败不来自本阶段代码，不能记为完整验证通过。
-
-完成条件：删除 `plugins/openai-proxy` 即可完整移除该能力且主项目模型链无需回滚；插件不引入新语言，登录凭据和订阅 Token 不进入主进程、配置、日志或模型上下文；本地网关、Responses 适配、代理 fail-closed、生命周期、Windows 独立发行和上游审计均有确定性验证，真实低权限账号验收单独留证，且 `bun run verify --ci` 全部通过。
-
-### P1：可选产品能力
-
-- [ ] 支持 macOS 专用、默认关闭的 `sandbox.allowAppleEvents`，并确保该例外不会放宽文件系统、网络或其他平台的边界。
-
-完成条件：可选能力须默认关闭或要求显式授权，且不得扩大文件系统、网络或其他平台的既有安全边界。
 
 ## 维护规则
 

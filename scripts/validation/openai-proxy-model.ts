@@ -209,6 +209,11 @@ try {
     [{ id: 'gpt-fixture', object: 'model', owned_by: 'openai' }],
     'model list conversion',
   )
+  assertEqual(
+    new URL(requests[0]!.url).searchParams.get('client_version'),
+    '0.147.0',
+    'model catalog uses pinned upstream Codex client version',
+  )
   const completion = await fetch(`${gateway.url}/v1/chat/completions`, {
     method: 'POST',
     headers,

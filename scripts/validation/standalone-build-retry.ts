@@ -4,6 +4,7 @@ import {
   buildStandaloneWithRetry,
   isRetryableStandaloneBuildError,
 } from '../standalone-build.js'
+import { runStandaloneBuildProcess } from '../run-standalone-build.js'
 import { assert, assertDeepEqual, assertEqual } from './assertions.js'
 
 for (const message of [
@@ -66,6 +67,43 @@ assert(
   logs.every(message => message.includes('Windows temporary file contention')),
   'retry diagnostic is explicit',
 )
+
+let failedResultAttempts = 0
+const failedResult = await buildStandaloneWithRetry({
+  label: 'failed-result-fixture',
+  outfile: 'dist/failed-result-fixture.exe',
+  platform: 'win32',
+  delaysMs: [1],
+  build: async () => {
+    failedResultAttempts++
+    return failedResultAttempts === 1
+      ? { success: false, logs: [{ message: 'FailedToCommit' }] }
+      : { success: true, logs: [] }
+  },
+  sleep: async () => undefined,
+  removePartialOutput: async () => undefined,
+  log: () => undefined,
+})
+assert(failedResult.success, 'Bun success=false result is retried')
+assertEqual(failedResultAttempts, 2, 'Bun failed result uses bounded retry')
+
+let processAttempts = 0
+const processResult = await runStandaloneBuildProcess({
+  script: 'scripts/build-telegram-host.ts',
+  platform: 'win32',
+  delaysMs: [1],
+  runAttempt: async () => {
+    processAttempts++
+    return processAttempts === 1
+      ? { exitCode: 1, stdout: '', stderr: 'FailedToCommit' }
+      : { exitCode: 0, stdout: 'built', stderr: '' }
+  },
+  sleep: async () => undefined,
+  writeOutput: () => undefined,
+  log: () => undefined,
+})
+assertEqual(processResult, 0, 'fatal Bun child process is retried')
+assertEqual(processAttempts, 2, 'fatal child retry is bounded')
 
 for (const test of [
   { platform: 'win32' as const, message: 'Could not resolve dependency' },
