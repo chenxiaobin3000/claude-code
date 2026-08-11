@@ -10,7 +10,7 @@ type Props = {
   onDone(): void;
 };
 
-type Step = 'baseUrl' | 'apiKey' | 'model';
+type Step = 'baseUrl' | 'apiKey' | 'model' | 'profile';
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8080/v1';
 
@@ -27,9 +27,11 @@ export function OpenAISetup({ onDone }: Props): React.ReactNode {
   const [baseUrl, setBaseUrl] = useState(DEFAULT_BASE_URL);
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState('');
+  const [profile, setProfile] = useState('');
   const [baseUrlCursor, setBaseUrlCursor] = useState(DEFAULT_BASE_URL.length);
   const [apiKeyCursor, setApiKeyCursor] = useState(0);
   const [modelCursor, setModelCursor] = useState(0);
+  const [profileCursor, setProfileCursor] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const { columns } = useTerminalSize();
   const inputColumns = Math.max(24, Math.min(88, columns - 6));
@@ -68,11 +70,26 @@ export function OpenAISetup({ onDone }: Props): React.ReactNode {
       return;
     }
 
+    setModel(normalized);
+    setError(null);
+    setStep('profile');
+  }
+
+  function submitProfile(value: string): void {
+    let parsedProfile: unknown;
+    try {
+      parsedProfile = JSON.parse(value);
+    } catch {
+      setError('Enter a complete model Profile as valid JSON.');
+      return;
+    }
+
     try {
       saveSingleModelRegistry({
-        model: normalized,
+        model,
         baseUrl,
         apiKeyEnv: 'OPENAI_API_KEY',
+        profile: parsedProfile,
       });
       const envPatch = {
         OPENAI_BASE_URL: undefined,
@@ -160,8 +177,28 @@ export function OpenAISetup({ onDone }: Props): React.ReactNode {
         </>
       )}
 
+      {step === 'profile' && (
+        <>
+          <Text>Complete model Profile JSON</Text>
+          <TextInput
+            value={profile}
+            onChange={setProfile}
+            onPaste={setProfile}
+            onSubmit={submitProfile}
+            placeholder='{"contextWindowTokens":65536,...}'
+            columns={inputColumns}
+            cursorOffset={profileCursor}
+            onChangeCursorOffset={setProfileCursor}
+            focus
+            showCursor
+          />
+        </>
+      )}
+
       {error && <Text color="error">{error}</Text>}
-      <Text dimColor>Enter to continue · edit models.json manually to add more models</Text>
+      <Text dimColor>
+        Enter to continue · every model requires a complete Profile · edit models.json manually to add more models
+      </Text>
     </Box>
   );
 }

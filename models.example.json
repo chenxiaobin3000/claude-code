@@ -7,9 +7,23 @@
       "displayName": "Qwen 3.5 9B",
       "description": "Local llama.cpp model",
       "profile": {
+        "contextWindowTokens": 65536,
+        "defaultOutputTokens": 4096,
+        "maxOutputTokens": 4096,
+        "reasoning": {
+          "type": "none"
+        },
         "chatCompletions": {
-          "toolChoice": "strings_only"
-        }
+          "outputTokenField": "max_tokens",
+          "toolChoice": "strings_only",
+          "parallelToolCalls": false,
+          "strictToolSchemas": false,
+          "temperature": "supported"
+        },
+        "promptCache": {
+          "type": "none"
+        },
+        "pricing": null
       }
     },
     {
@@ -18,12 +32,25 @@
       "apiKeyEnv": "DEEPSEEK_API_KEY",
       "displayName": "DeepSeek V4 Flash",
       "profile": {
+        "contextWindowTokens": 1000000,
+        "defaultOutputTokens": 4096,
+        "maxOutputTokens": 4096,
         "reasoning": {
+          "type": "deepseek",
           "enabledByDefault": false
         },
         "chatCompletions": {
-          "toolChoice": "openai_standard"
-        }
+          "outputTokenField": "max_tokens",
+          "toolChoice": "openai_standard",
+          "parallelToolCalls": false,
+          "strictToolSchemas": false,
+          "temperature": "unsupported_with_reasoning"
+        },
+        "promptCache": {
+          "type": "providerManaged",
+          "reportsCachedTokens": true
+        },
+        "pricing": null
       }
     }
   ]

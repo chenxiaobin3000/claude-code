@@ -20,10 +20,7 @@ import {
   firstPartyNameToCanonical,
   type ModelShortName,
 } from './model/model.js'
-import {
-  getModelProfile,
-  usesDefaultModelProfile,
-} from './model/modelProfiles.js'
+import { getModelProfile } from './model/modelProfiles.js'
 
 // @see https://platform.claude.com/docs/en/about-claude/pricing
 export type ModelCosts = {
@@ -152,9 +149,6 @@ function tokensToUSDCost(modelCosts: ModelCosts, usage: Usage): number {
 export function getModelCosts(model: string, usage: Usage): ModelCosts {
   const profile = getModelProfile(model)
   const pricing = profile.pricing
-  if (usesDefaultModelProfile(model) || !pricing) {
-    trackUnknownModelCost(model, model)
-  }
   if (
     !pricing ||
     ((usage.cache_read_input_tokens ?? 0) > 0 && pricing.cacheRead === null) ||
@@ -183,7 +177,7 @@ function trackUnknownModelCost(model: string, shortName: ModelShortName): void {
 }
 
 // Calculate the cost of a query in US dollars.
-// Unknown model IDs use the explicit default profile and are marked inaccurate.
+// Models without pricing metadata are marked as having an unknown cost.
 export function calculateUSDCost(resolvedModel: string, usage: Usage): number {
   const modelCosts = getModelCosts(resolvedModel, usage)
   return tokensToUSDCost(modelCosts, usage)

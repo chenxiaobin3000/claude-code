@@ -9,7 +9,6 @@ import { dirname, join } from 'node:path'
 import { getClaudeConfigHomeDir } from '../envUtils.js'
 import {
   createEffectiveModelProfile,
-  getDefaultModelProfileWarning,
   setEffectiveModelProfiles,
   type ModelProfile,
 } from './modelProfiles.js'
@@ -20,7 +19,7 @@ export interface ModelRegistryEntry {
   apiKeyEnv?: string
   displayName?: string
   description?: string
-  profile?: unknown
+  profile: unknown
 }
 
 interface LoadedModelRegistryEntry extends ModelRegistryEntry {
@@ -84,7 +83,10 @@ function optionalString(value: unknown, path: string): string | undefined {
   return requiredString(value, path)
 }
 
-function parseModelEntry(value: unknown, index: number): LoadedModelRegistryEntry {
+function parseModelEntry(
+  value: unknown,
+  index: number,
+): LoadedModelRegistryEntry {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`models.${index} must be an object`)
   }
@@ -115,7 +117,7 @@ function parseModelEntry(value: unknown, index: number): LoadedModelRegistryEntr
       entry.description,
       `models.${index}.description`,
     ),
-    ...(profile === undefined ? {} : { profile }),
+    profile,
     effectiveProfile,
   }
 }
@@ -137,22 +139,13 @@ function parseModelRegistry(value: unknown): ModelRegistry {
       throw new Error(`duplicate model: ${entry.model}`)
     }
     seen.add(entry.model)
-    const profileWarning = getDefaultModelProfileWarning(
-      entry.model,
-      entry.profile,
-    )
-    if (profileWarning) {
-      console.warn(
-        entry.profile === undefined
-          ? profileWarning
-          : `Warning: model ${JSON.stringify(entry.model)} has no dedicated capability profile; explicit overrides are applied and all other capabilities inherit the default Qwen profile.`,
-      )
-    }
   }
   if (!seen.has(defaultModel)) {
     throw new Error(`defaultModel is not present in models: ${defaultModel}`)
   }
-  setEffectiveModelProfiles(new Map(models.map(entry => [entry.model, entry.effectiveProfile])))
+  setEffectiveModelProfiles(
+    new Map(models.map(entry => [entry.model, entry.effectiveProfile])),
+  )
   return { defaultModel, models }
 }
 

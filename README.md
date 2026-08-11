@@ -54,7 +54,22 @@ Hook command 的 `args` 会保持 argv 参数边界。启用 Sandbox 时不会�
     {
       "model": "Qwen3.5-9B-Q6_K",
       "displayName": "Local Qwen",
-      "baseUrl": "http://127.0.0.1:8080/v1"
+      "baseUrl": "http://127.0.0.1:8080/v1",
+      "profile": {
+        "contextWindowTokens": 65536,
+        "defaultOutputTokens": 4096,
+        "maxOutputTokens": 4096,
+        "reasoning": { "type": "none" },
+        "chatCompletions": {
+          "outputTokenField": "max_tokens",
+          "toolChoice": "strings_only",
+          "parallelToolCalls": false,
+          "strictToolSchemas": false,
+          "temperature": "supported"
+        },
+        "promptCache": { "type": "none" },
+        "pricing": null
+      }
     },
     {
       "model": "deepseek-v4-flash",
@@ -62,9 +77,22 @@ Hook command 的 `args` 会保持 argv 参数边界。启用 Sandbox 时不会�
       "baseUrl": "https://api.deepseek.com/v1",
       "apiKeyEnv": "DEEPSEEK_API_KEY",
       "profile": {
-        "reasoning": {
-          "enabledByDefault": false
-        }
+        "contextWindowTokens": 1000000,
+        "defaultOutputTokens": 4096,
+        "maxOutputTokens": 4096,
+        "reasoning": { "type": "deepseek", "enabledByDefault": false },
+        "chatCompletions": {
+          "outputTokenField": "max_tokens",
+          "toolChoice": "openai_standard",
+          "parallelToolCalls": false,
+          "strictToolSchemas": false,
+          "temperature": "unsupported_with_reasoning"
+        },
+        "promptCache": {
+          "type": "providerManaged",
+          "reportsCachedTokens": true
+        },
+        "pricing": null
       }
     }
   ]
@@ -77,7 +105,7 @@ Hook command 的 `args` 会保持 argv 参数边界。启用 Sandbox 时不会�
 
 `plugins/openai-proxy` 使用独立 Host 完成 ChatGPT 浏览器/device-code 登录，把 Codex Responses/SSE 转换为项目现有的 OpenAI-compatible Chat Completions 流。它不读取 Codex 自身凭据，也不向主程序增加 Provider 类型；删除插件目录即可完整移除。
 
-首次执行 `login` 时，插件会生成 32 字节随机本地 Token，原子写入用户级 `settings.json` 的 `env.OPENAI_PROXY_LOCAL_TOKEN`，并在 `openaiProxy.port` 写入默认端口 `48481`；已有合法值会保留，进程与设置中的 Token 冲突时安全失败。端口可在 `1024`～`65535` 范围内修改，`models.json.baseUrl` 必须使用相同端口：
+首次执行 `login` 时，插件会生成 32 字节随机本地 Token，原子写入用户级 `settings.json` 的 `env.OPENAI_PROXY_LOCAL_TOKEN`，并在 `openaiProxy.port` 写入默认端口 `48481`；已有合法值会保留，进程与设置中的 Token 冲突时安全失败。端口可在 `1024`～`65535` 范围内修改，`models.json.baseUrl` 必须使用相同端口。下面只展示代理连接字段，实际模型条目仍须补充完整 `profile`：
 
 ```json
 {
@@ -94,11 +122,10 @@ Hook command 的 `args` 会保持 argv 参数边界。启用 Sandbox 时不会�
 
 ### 静态模型 Profile
 
-模型能力由模型 ID 的静态 Profile 决定，包括上下文窗口、最大输出 Token、推理参数、Prompt Cache、价格以及工具调用字段。项目不会通过模型名称猜测能力，也不会在运行时进行能力探测。
+模型能力完全由各 `models.json` 条目的静态 Profile 决定，包括上下文窗口、最大输出 Token、推理参数、Prompt Cache、价格以及工具调用字段。项目不会通过模型名称猜测能力，也不会在运行时进行能力探测。
 
-- 已知模型使用代码中的显式 Profile。
-- 未知模型使用 Qwen 派生的默认 Profile，并提示建议补充专用配置。
-- `models.json` 中的 `profile` 可覆盖默认 Profile，例如关闭 DeepSeek 的默认推理模式；未知模型完整提供 Token、推理、Chat Completions 与 Prompt Cache 能力后不再警告，`pricing` 可省略。
+- 每个模型必须完整提供 Token、推理、Chat Completions 与 Prompt Cache 配置；配置不完整时启动直接报错。
+- 项目不保留内置或默认 Profile，也不根据模型 ID 继承能力。`pricing` 可省略或显式设为 `null`，表示不计算价格。
 - llama.cpp 等端点若不接受对象形式的 `tool_choice`，会按其显式兼容配置发送字符串形式；不增加供应商专用协议分支。
 
 模型请求失败时，诊断日志仅记录脱敏后的端点、模型、请求字段摘要、状态码和重试信息，不记录 API Key、OAuth Token 或完整 Prompt。

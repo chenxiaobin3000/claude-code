@@ -20,9 +20,8 @@
 
 ### 静态模型 Profile
 
-- 以模型 ID 显式配置上下文窗口、最大输出 Token、推理参数、Prompt Cache 和价格；不进行能力探测或名称猜测。
-- 未知模型加载 Qwen 派生默认 Profile，并提示补充专用 Profile。
-- `models.json` 的 `profile` 可覆盖默认 Profile；覆盖与模型加载同步生效。
+- 每个 `models.json` 模型必须显式提供完整 Profile，包括上下文窗口、默认及最大输出 Token、推理参数、Chat Completions 和 Prompt Cache；`pricing` 可省略或为 `null`。
+- 项目不保留内置模型 Profile、默认 Profile 或模型名称匹配，不进行能力探测、名称猜测或参数继承；配置不完整时启动直接报错。
 - 已对 OpenAI Chat Completions 的推理参数、工具选择、流事件和 Usage 字段进行边界核对；llama.cpp 的 `tool_choice` 兼容是受限的协议编码，不是 Provider 分支。
 
 ### openai-proxy 本地订阅模型代理

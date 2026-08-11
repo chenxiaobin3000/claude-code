@@ -16,15 +16,10 @@ import {
   getModelMaxOutputTokens,
 } from '../../src/utils/context.js'
 import {
-  DEFAULT_MODEL_PROFILE,
-  MODEL_PROFILES,
-  findModelProfile,
   createEffectiveModelProfile,
-  getDefaultModelProfileWarning,
   getModelProfile,
   isCompleteModelCapabilityProfile,
   setEffectiveModelProfiles,
-  usesDefaultModelProfile,
   type ModelProfile,
 } from '../../src/utils/model/modelProfiles.js'
 import { calculateUSDCost } from '../../src/utils/modelCost.js'
@@ -34,72 +29,8 @@ import { assert, assertDeepEqual, assertEqual } from './assertions.js'
 const root = resolve(import.meta.dir, '../..')
 const source = (path: string) => readFile(resolve(root, path), 'utf8')
 
-assertDeepEqual(
-  Object.keys(MODEL_PROFILES),
-  ['Qwen3.5-9B-Q6_K', 'deepseek-v4-flash'],
-  'registered model IDs',
-)
-
-for (const [model, profile] of Object.entries(MODEL_PROFILES)) {
-  assert(
-    Number.isInteger(profile.contextWindowTokens) &&
-      profile.contextWindowTokens > 0,
-    `${model} context window`,
-  )
-  assert(
-    Number.isInteger(profile.defaultOutputTokens) &&
-      profile.defaultOutputTokens > 0,
-    `${model} default output`,
-  )
-  assert(
-    profile.defaultOutputTokens <= profile.maxOutputTokens &&
-      profile.maxOutputTokens < profile.contextWindowTokens,
-    `${model} output limits`,
-  )
-  if (profile.pricing) {
-    for (const value of [
-      profile.pricing.input,
-      profile.pricing.output,
-      profile.pricing.cacheRead,
-      profile.pricing.cacheWrite,
-    ]) {
-      assert(
-        value === null || value >= 0,
-        `${model} pricing must be non-negative`,
-      )
-    }
-  }
-}
-
-assertEqual(
-  findModelProfile('qwen3.5-9b-q6_k'),
-  undefined,
-  'model profile matching must be case-sensitive',
-)
-assertEqual(
-  usesDefaultModelProfile('gemma-new-model'),
-  true,
-  'unknown model default marker',
-)
-assertDeepEqual(
-  getModelProfile('gemma-new-model'),
-  DEFAULT_MODEL_PROFILE,
-  'unknown model fallback profile',
-)
-assert(
-  getDefaultModelProfileWarning('gemma-new-model')?.includes(
-    'using the default Qwen profile',
-  ),
-  'unknown model warning',
-)
-assertEqual(
-  getDefaultModelProfileWarning('Qwen3.5-9B-Q6_K'),
-  undefined,
-  'dedicated profile warning',
-)
-
 const completeExternalCapabilityProfile = {
-  contextWindowTokens: 32_768,
+  contextWindowTokens: 65_536,
   defaultOutputTokens: 4_096,
   maxOutputTokens: 4_096,
   reasoning: { type: 'none' },
@@ -118,30 +49,56 @@ assertEqual(
   'complete external capability profile without pricing',
 )
 assertEqual(
-  getDefaultModelProfileWarning(
-    'Qwen3VL-8B-Instruct-Q4_K_M',
-    completeExternalCapabilityProfile,
-  ),
-  undefined,
-  'complete external capability profile warning',
-)
-assert(
-  getDefaultModelProfileWarning('partial-external-model', {
-    contextWindowTokens: 32_768,
-  })?.includes('using the default Qwen profile'),
-  'partial external capability profile warning',
+  isCompleteModelCapabilityProfile({ contextWindowTokens: 32_768 }),
+  false,
+  'partial external capability profile',
 )
 
-assertEqual(
-  getContextWindowForModel('gemma-new-model'),
-  65_536,
-  'unknown model default context',
+const qwenProfile = createEffectiveModelProfile(
+  'Qwen3.5-9B-Q6_K',
+  completeExternalCapabilityProfile,
 )
-assertDeepEqual(
-  getModelMaxOutputTokens('gemma-new-model'),
-  { default: 4_096, upperLimit: 4_096 },
-  'unknown model default output limits',
-)
+const deepseekProfile = createEffectiveModelProfile('deepseek-v4-flash', {
+  contextWindowTokens: 1_000_000,
+  defaultOutputTokens: 4_096,
+  maxOutputTokens: 4_096,
+  reasoning: { type: 'deepseek', enabledByDefault: true },
+  chatCompletions: {
+    outputTokenField: 'max_tokens',
+    toolChoice: 'openai_standard',
+    parallelToolCalls: false,
+    strictToolSchemas: false,
+    temperature: 'unsupported_with_reasoning',
+  },
+  promptCache: { type: 'providerManaged', reportsCachedTokens: true },
+  pricing: {
+    currency: 'USD',
+    perTokens: 1_000_000,
+    input: 1,
+    output: 2,
+    cacheRead: null,
+    cacheWrite: null,
+  },
+})
+const installFixtureProfiles = () =>
+  setEffectiveModelProfiles(
+    new Map([
+      ['Qwen3.5-9B-Q6_K', qwenProfile],
+      ['deepseek-v4-flash', deepseekProfile],
+    ]),
+  )
+installFixtureProfiles()
+
+try {
+  getModelProfile('gemma-new-model')
+  throw new Error('model without a loaded profile was accepted')
+} catch (error) {
+  assert(
+    error instanceof Error &&
+      error.message.includes('no loaded capability profile'),
+    'missing loaded profile must fail clearly',
+  )
+}
 
 assertEqual(
   getContextWindowForModel('Qwen3.5-9B-Q6_K'),
@@ -177,7 +134,10 @@ const baseRequest = {
 }
 const deepseekWithoutThinking = createEffectiveModelProfile(
   'deepseek-v4-flash',
-  { reasoning: { enabledByDefault: false } },
+  {
+    ...deepseekProfile,
+    reasoning: { type: 'deepseek', enabledByDefault: false },
+  },
 )
 assertDeepEqual(
   deepseekWithoutThinking.reasoning,
@@ -189,32 +149,30 @@ assertEqual(
   true,
   'DeepSeek built-in profile enables thinking by default',
 )
-setEffectiveModelProfiles(new Map([['deepseek-v4-flash', deepseekWithoutThinking]]))
+setEffectiveModelProfiles(
+  new Map([['deepseek-v4-flash', deepseekWithoutThinking]]),
+)
 assertEqual(
   isThinkingEnabledByModelDefault('deepseek-v4-flash'),
   false,
   'DeepSeek effective profile disables the interactive default thinking state',
 )
-setEffectiveModelProfiles(new Map())
+installFixtureProfiles()
 assertDeepEqual(
-  (buildOpenAIRequestBodyForProfile(
-    { ...baseRequest, model: 'deepseek-v4-flash' },
-    deepseekWithoutThinking,
-  ) as Record<string, unknown>).thinking,
+  (
+    buildOpenAIRequestBodyForProfile(
+      { ...baseRequest, model: 'deepseek-v4-flash' },
+      deepseekWithoutThinking,
+    ) as Record<string, unknown>
+  ).thinking,
   { type: 'disabled' },
   'DeepSeek profile override explicitly disables provider-default thinking',
 )
-const unknownPartialProfile = createEffectiveModelProfile('fixture-model', {
-  contextWindowTokens: 131_072,
-  maxOutputTokens: 8_192,
-})
 assertEqual(
-  unknownPartialProfile.defaultOutputTokens,
-  4_096,
-  'partial override inherits default output tokens',
-)
-assertEqual(
-  createEffectiveModelProfile('deepseek-v4-flash', { pricing: null }).pricing,
+  createEffectiveModelProfile('deepseek-v4-flash', {
+    ...deepseekProfile,
+    pricing: null,
+  }).pricing,
   null,
   'explicit null clears nullable pricing',
 )
@@ -243,7 +201,7 @@ try {
         {
           model: 'deepseek-v4-flash',
           baseUrl: 'https://api.deepseek.com/v1',
-          profile: { reasoning: { enabledByDefault: false } },
+          profile: deepseekWithoutThinking,
         },
       ],
     }),
@@ -264,6 +222,7 @@ try {
   clearRegistryCache?.()
   await rm(registryDir, { recursive: true, force: true })
 }
+installFixtureProfiles()
 const qwenRequest = buildOpenAIRequestBody({
   ...baseRequest,
   model: 'Qwen3.5-9B-Q6_K',
@@ -307,7 +266,7 @@ assertDeepEqual(
 )
 
 const openAIReasoningProfile: ModelProfile = {
-  ...DEFAULT_MODEL_PROFILE,
+  ...qwenProfile,
   reasoning: {
     type: 'openai',
     defaultEffort: 'medium',
@@ -371,11 +330,18 @@ for (const [label, profile, shouldThrow] of [
       profile,
     ) as Record<string, unknown>
     if (shouldThrow) throw new Error(`${label} unexpectedly succeeded`)
-    assertDeepEqual(request.tool_choice, namedToolChoice, `${label} is preserved`)
+    assertDeepEqual(
+      request.tool_choice,
+      namedToolChoice,
+      `${label} is preserved`,
+    )
   } catch (error) {
     if (!shouldThrow) throw error
     const message = error instanceof Error ? error.message : String(error)
-    if (!message.includes('only supports string tool_choice') || !message.includes('127.0.0.1:8080')) {
+    if (
+      !message.includes('only supports string tool_choice') ||
+      !message.includes('127.0.0.1:8080')
+    ) {
       throw new Error(`${label} returned an unclear error: ${message}`)
     }
   }
@@ -464,8 +430,8 @@ const example = JSON.parse(await source('models.example.json')) as {
 }
 for (const entry of example.models) {
   assert(
-    findModelProfile(entry.model),
-    `example model ${entry.model} needs a profile`,
+    isCompleteModelCapabilityProfile((entry as { profile?: unknown }).profile),
+    `example model ${entry.model} needs a complete profile`,
   )
 }
 assert(
@@ -499,8 +465,8 @@ for (const forbidden of ['getModelCapability', 'getCanonicalName']) {
 }
 const registry = await source('src/utils/model/modelRegistry.ts')
 assert(
-  registry.includes('getDefaultModelProfileWarning'),
-  'registry must warn when the default profile is used',
+  !registry.includes('getDefaultModelProfileWarning'),
+  'registry must not contain default-profile fallback warnings',
 )
 
 console.log('[model-profiles] PASS')
