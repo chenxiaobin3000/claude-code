@@ -1,6 +1,6 @@
 /**
- * Polyfill for Promise.withResolvers() (ES2024, Node 22+).
- * package.json declares "engines": { "node": ">=18.0.0" } so we can't use the native one.
+ * Small Promise.withResolvers-compatible helper retained by the dormant
+ * Computer Use cleanup path until that feature is removed in P1.
  */
 export function withResolvers<T>(): PromiseWithResolvers<T> {
   let resolve!: (value: T | PromiseLike<T>) => void

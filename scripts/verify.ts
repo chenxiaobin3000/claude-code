@@ -4,9 +4,16 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { resolveModelTarget } from '../src/utils/model/modelRegistry.js'
+import {
+  assertBunOnlyPath,
+  createBunOnlyPath,
+  withBunOnlyPath,
+} from './lib/bunOnlyPath.js'
 
 const projectRoot = resolve(import.meta.dir, '..')
 const bunExecutable = process.execPath
+const bunOnlyPath = createBunOnlyPath(process.env.PATH, bunExecutable)
+assertBunOnlyPath(bunOnlyPath.path)
 const packageJson = JSON.parse(
   await readFile(join(projectRoot, 'package.json'), 'utf8'),
 ) as { version: string }
@@ -128,6 +135,8 @@ const validationScripts = [
   'scripts/validation/self-update-boundary.ts',
   'scripts/validation/dependency-boundary.ts',
   'scripts/validation/node-runtime-boundary.ts',
+  'scripts/validation/bun-only-path.ts',
+  'scripts/validation/bun-websocket-runtime.ts',
   'scripts/validation/acp-link-runtime.ts',
   'scripts/validation/workflow-engine-runtime.ts',
   'scripts/validation/feature-flags.ts',
@@ -202,7 +211,7 @@ async function runStep(
   const capture = options.capture ?? false
   const proc = Bun.spawn(command, {
     cwd: projectRoot,
-    env: { ...process.env, ...options.env },
+    env: withBunOnlyPath({ ...process.env, ...options.env }, bunOnlyPath.path),
     stdin: 'ignore',
     stdout: capture ? 'pipe' : 'inherit',
     stderr: capture ? 'pipe' : 'inherit',
@@ -402,6 +411,10 @@ async function verifyCliArtifact(
 async function main(): Promise<void> {
   const startedAt = Date.now()
 
+  console.log(
+    `[verify] Bun-only PATH active; node/npm/npx unavailable (${bunOnlyPath.removed.length} PATH entries removed)`,
+  )
+
   if (ciMode) {
     console.log(
       '[verify] CI mode: local model request and tool call checks are disabled',
@@ -413,6 +426,16 @@ async function main(): Promise<void> {
     'install',
     '--frozen-lockfile',
   ])
+  const developmentVersion = await runStep(
+    'development entrypoint startup',
+    [bunExecutable, 'run', 'dev', '--', '--version'],
+    { capture: true },
+  )
+  if (developmentVersion.stdout.trim() !== expectedVersion) {
+    throw new Error(
+      `development entrypoint version mismatch: ${developmentVersion.stdout.trim()}`,
+    )
+  }
   await runStep('TypeScript typecheck', [bunExecutable, 'run', 'typecheck'])
   await runStep('chrome Host typecheck', [
     bunExecutable,
@@ -469,16 +492,16 @@ async function main(): Promise<void> {
     label: 'Bun bundle CLI',
     command: [bunExecutable, 'dist/cli-bun.js'],
   }
-  await runStep('Bun bundle build', [bunExecutable, 'run', 'build:bun'])
+  await runStep('Bun bundle build', [bunExecutable, 'run', 'build'])
   await runStep('Bun bundle integrity', [bunExecutable, 'run', 'check:bundle'])
   await verifyCliArtifact(bunArtifact, config)
 
   if (process.platform === 'win32' && process.arch === 'x64') {
-    await runStep('Windows x64 standalone EXE build', [
-      bunExecutable,
-      'run',
-      'build:exe',
-    ])
+    await runStep(
+      'Windows production distribution build',
+      [bunExecutable, 'run', 'build:production'],
+      { timeoutMs: 300_000 },
+    )
     await runStep('Windows x64 standalone EXE integrity', [
       bunExecutable,
       'run',
@@ -495,80 +518,40 @@ async function main(): Promise<void> {
       'scripts/validation/standalone-markdown-config.ts',
       resolve(projectRoot, 'dist', 'claude.exe'),
     ])
-    await runStep('chrome standalone Host build', [
-      bunExecutable,
-      'run',
-      'build:chrome-host',
-    ])
     await runStep('chrome distributable Plugin validation', [
       bunExecutable,
       'run',
       'scripts/validation/chrome-distribution.ts',
-    ])
-    await runStep('weixin standalone Host build', [
-      bunExecutable,
-      'run',
-      'build:weixin-host',
     ])
     await runStep('weixin distributable Plugin validation', [
       bunExecutable,
       'run',
       'scripts/validation/weixin-distribution.ts',
     ])
-    await runStep('wxwork standalone Host build', [
-      bunExecutable,
-      'run',
-      'build:wxwork-host',
-    ])
     await runStep('wxwork distributable Plugin validation', [
       bunExecutable,
       'run',
       'scripts/validation/wxwork-distribution.ts',
-    ])
-    await runStep('QQ standalone Host build', [
-      bunExecutable,
-      'run',
-      'build:qq-host',
     ])
     await runStep('QQ distributable Plugin validation', [
       bunExecutable,
       'run',
       'scripts/validation/qq-distribution.ts',
     ])
-    await runStep('Telegram standalone Host build', [
-      bunExecutable,
-      'run',
-      'build:telegram-host',
-    ])
     await runStep('Telegram distributable Plugin validation', [
       bunExecutable,
       'run',
       'scripts/validation/telegram-distribution.ts',
-    ])
-    await runStep('Telegram User standalone Host build', [
-      bunExecutable,
-      'run',
-      'build:telegram-user-host',
     ])
     await runStep('Telegram User distributable Plugin validation', [
       bunExecutable,
       'run',
       'scripts/validation/telegram-user-distribution.ts',
     ])
-    await runStep('X standalone Host build', [
-      bunExecutable,
-      'run',
-      'build:x-host',
-    ])
     await runStep('X distributable Plugin validation', [
       bunExecutable,
       'run',
       'scripts/validation/x-distribution.ts',
-    ])
-    await runStep('openai-proxy standalone Host build', [
-      bunExecutable,
-      'run',
-      'build:openai-proxy-host',
     ])
     await runStep('openai-proxy distributable Plugin validation', [
       bunExecutable,

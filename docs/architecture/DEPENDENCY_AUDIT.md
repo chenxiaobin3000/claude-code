@@ -37,7 +37,7 @@ Only packages directly resolved by scripts shipped outside the bundle remain in 
 
 The independent `acp-link` workspace now uses Bun-native HTTP/HTTPS, WebSocket, and subprocess streams. Its `@hono/node-server`, `@hono/node-ws`, and `@types/ws` declarations were removed; the runtime-neutral `hono` router remains for Manager routes.
 
-The audit removed unused direct entries `@smithy/core`, `@types/sharp`, and `@types/shell-quote`. `@smithy/core` may still occur transitively through the retained AWS proxy credential path, but it is no longer a separately declared root dependency. Husky and lint-staged were also removed because the repository has no configured Git hook; retaining their packages and prepare lifecycle added installation surface without enforcing a check.
+The audit removed unused direct entries `@smithy/core`, `@types/sharp`, and `@types/shell-quote`. The Bun-only metadata cleanup also removed the root `ws`/`@types/ws` pair, the unused AWS proxy helper, and its direct `@aws-sdk/credential-provider-node`/`@smithy/node-http-handler` declarations. QQ and WeCom continue to own `ws` and `@types/ws` because their Gateway protocols use that client at runtime; AWS/Smithy names may remain transitively through the `openai` optional peer tree but are not project-owned provider paths. `@types/node` remains an explicit compile-time dependency for the existing `NodeJS.*` compatibility types. Husky and lint-staged were also removed because the repository has no configured Git hook; retaining their packages and prepare lifecycle added installation surface without enforcing a check.
 
 ## Enforced boundary
 

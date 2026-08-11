@@ -2,7 +2,7 @@
 
 ## 基线
 
-项目当前发行版本为 `2.1.220`，官方功能对照基线固定为 Claude Code `2.1.220`。截至 `2026-08-09`，当前产品范围内的功能、差异边界、安全约束、构建和验证矩阵均已完成验收；可选后续能力不影响当前基线成立。
+项目当前发行版本为 `2.1.220`，官方功能对照基线固定为 Claude Code `2.1.220`。当前产品范围内的功能、差异边界、安全约束、构建和验证矩阵均已完成验收；可选后续能力不影响当前基线成立。
 
 “功能对齐”仅表示以该官方版本为审计目标，并完成本项目适用范围的实现与验证，不表示源码、二进制或产品集合与官方发行版完全相同。明确裁剪、替代或不开发的能力继续以下文边界为准。上游功能与行为以 [Claude Code 官方文档](https://code.claude.com/docs/en/overview)和[官方 Changelog](https://code.claude.com/docs/en/changelog)为准。升级对照版本前必须先更新差异审计和对应验收矩阵，不能使用滚动的“最新版本”作为未冻结的验收目标。
 
@@ -109,7 +109,7 @@
 - `plugins/chrome/host` 已提供与主程序解耦的 MCP/Native Messaging Host 入口、路径、注册、卸载和 doctor，实现不依赖主程序 Settings、模型调用、Anthropic 账号或内部 `USER_TYPE` 分支。Windows 可构建独立 `chrome-host.exe`；默认无参数运行 Native Host，`mcp` 运行 stdio MCP，`register`/`unregister`/`doctor` 由用户显式执行。
 - MCP 引擎、TCP Socket 生命周期、多实例端点池和工具声明已经迁入 `plugins/chrome/mcp`；旧 `packages/@ant/claude-for-chrome-mcp` workspace 包和 `src/utils/claudeInChrome` 主程序兼容层已经删除，并由防回归验证阻止恢复。
 - 插件 Manifest 已通过标准本地 stdio MCP 声明启动 Host，`skills/claude-in-chrome/SKILL.md` 只随插件加载；插件未加载时，主程序的系统提示、Skill 和工具列表均不宣传 Chrome 能力。
-- `bun run build:chrome-host`、`bun run build:weixin-host`、`bun run build:wxwork-host`、`bun run build:qq-host` 与 `bun run build:telegram-host` 分别生成完整插件分发目录；`bun run build:production` 同时生成 `dist/claude.exe` 及五个 `dist/plugins/*` 插件目录，整个 `dist` 可作为固定路径的 Windows 生产分发单元。分发 Manifest 直接启动包含 Bun Runtime 的独立 Host，目标机器无需 Bun 或 Node.js。
+- 各 `build:*-host` 命令分别生成对应插件分发目录；`bun run build:production` 同时生成 `dist/claude.exe` 以及 Chrome、微信、企业微信、QQ、Telegram Bot、Telegram User、X 和 openai-proxy 八个 `dist/plugins/*` 目录，整个 `dist` 可作为固定路径的 Windows 生产分发单元。分发 Manifest 直接启动包含 Bun Runtime 的独立 Host，目标机器无需 Bun 或 Node.js。
 - 标准 Plugin Manifest、MCP 环境展开、名称作用域、Skill 发现、自动目录约束、三层优先级、`--bare`、重载裁剪、standalone 插件移除、独立 Host EOF、分发目录生命周期和真实 Chrome 端到端矩阵均已验收。扩展固定声明 `<all_urls>`，不提供页面授权或本地站点白名单；所有 HTTP/HTTPS 页面均可操作，Chrome 内部页、扩展页、文件页和无效 Tab 继续拒绝。真实矩阵覆盖固定扩展 ID、Native Host 注册/doctor/自动重连、拒绝路径、页面刷新和错误恢复。
 - 真实 Chrome 工具矩阵覆盖 11 个广告工具的连接与核心行为，包括标签页枚举/创建、导航及前进后退、页面读取、查找、表单输入、JavaScript、点击/滚动/键盘、截图、窗口缩放、Unicode URL、Chrome 内部页拒绝、非法/已失效 Tab ID 和 1 MiB 超限结果。超限结果必须返回结构化错误并保持桥接连接；点击必须保留浏览器聚焦语义。
 - `chrome` 插件同时提供独立的只读 `chrome-dom` MCP，由 `chrome-host dom-mcp` 启动并复用现有 Socket、鉴权、Profile 和 Tab 路由；它只公开 `dom_inspect`、`dom_extract_table`、`dom_extract_list` 和 `dom_wait`，所有调用必须显式指定 Profile 与 Tab，不嵌套调用原有浏览器 MCP，也不改变原有 11 个工具。
@@ -121,8 +121,9 @@
 
 - 根包与 workspace 均遵循最小脚本约定：`typecheck`、`build`、`test` 或明确的 `test:smoke`；不适用的子包须写明原因。
 - 支持 Bun bundle 与 Bun standalone EXE/Host 两类构建链；根包发布入口统一要求 Bun，standalone 目标机器不要求安装 JavaScript 运行时。
+- 开发、安装、类型检查、Lint、构建、发布和 CI 只要求固定版本 Bun，不安装或调用外部 Node.js、npm 或 npx；Bun 已兼容的 `node:` API、`NodeJS.*` 类型和 `@types/node` 可按实际消费者保留。主 CLI 与 MCP WebSocket 使用 Bun 原生实现，根包不携带 `ws` 或 Node Server Adapter；确实使用 `ws` 的 Channel Plugin 必须在自身 workspace 声明依赖。
 - Windows standalone 构建统一处理 Bun Runtime 临时文件的瞬时 `EBUSY`/提交占用：只对明确的临时文件错误最多重试 3 次，按 250/500/1000 ms 退避并清理当前未完成产物；依赖、类型和 Bundle 等确定性错误立即失败。
-- `bun run verify` 是唯一验证入口：依赖锁定、TypeScript、Biome、构建、CLI 启动、源码轻量验证与本地模型可用时的单轮模型/工具调用均在其中执行。
+- `bun run verify` 是唯一验证入口：它先构造无法解析 `node`、`node.exe`、`npm` 或 `npx` 的 Bun-only PATH，再覆盖冻结安装、开发入口、TypeScript、Biome、全部 workspace、Bun bundle、Windows `build:production`、CLI/Host 启动、Plugin 生命周期、ACP、`acp-link`、Workflow，以及本地模型可用时 Bun Bundle 与 `claude.exe` 的单轮模型/Read 工具调用。Windows 与本地 `Qwen3.5-35B-A3B-IQ2_M` 已完成真实验收；Linux Job 保留同一 CI 矩阵，按发布或平台需求执行，不作为当前 Windows 发行基线的前置条件。
 - 模型请求诊断日志必须脱敏，禁止记录 API Key、OAuth Token 和完整敏感 Prompt。
 
 ### 性能与稳定性
@@ -148,22 +149,7 @@
 
 ## 后续开发计划
 
-### P0：移除 Node.js 运行时要求
-
-目标是让干净环境只安装 Bun 即可完成依赖安装、开发、类型检查、Lint、构建、统一验证、发布和所有已保留能力的运行；生产 standalone 继续不要求目标机器安装 Bun 或 Node.js。本任务不改写模型、会话、工具、权限、Plugin、Channel、ACP 或 Workflow 协议，也不把 Bun 已兼容的 `node:` 标准库导入、`NodeJS.*` 类型或包名中的 `node` 误判为外部 Node.js 可执行文件依赖。
-
-- [x] 第一阶段已建立 Node 运行时依赖清单和防回归边界。`docs/architecture/NODE_RUNTIME_BOUNDARY.md` 逐项登记根脚本、workspace、CI、Shebang、`engines`、文档工具、发布入口及子进程中的 `node`/`node.exe`/`npx` 调用，并区分外部运行时、Node 分发契约、Bun 兼容 API、类型/名称和用户工具内容；`scripts/validation/node-runtime-boundary.ts` 使用精确允许集合阻止新增依赖，并已并入唯一的 `bun run verify`。
-- [x] 第二阶段已把安装与根命令切换为 Bun。根 `postinstall` 和脚本 Shebang 统一使用 Bun，继续保留 ripgrep 下载、代理、压缩包处理、原子提交和多平台行为；根脚本不再直接调用 `node` 或 `npx`。文档预览改为 `bunx --bun mintlify dev`，真实 CLI 启动检查已通过，且 Mintlify 不进入项目依赖或生产产物；Node 运行时允许集合已同步收缩。
-- [x] 第三阶段已收敛发行与构建链。删除 `dist/cli-node.js`、Node Shebang、根 Vite/Rollup Node Bundle、专用后处理插件、重复完整性检查和直接 Node 启动冒烟；所有根 `bin` 与 `prepublishOnly` 统一使用并校验 Bun bundle，包管理器固定声明为 Bun。根 `vite`/`rollup` 直接依赖已删除；`remote-control-server` 自有的浏览器前端 Vite 仍由该 workspace 独立声明并通过 Bun 调用，不属于 Node CLI 分发链。项目继续支持兼容 npm registry 的 Bun 包分发及 Bun standalone EXE/Host。
-- [x] 第四阶段已保留并 Bun 化 `@claude-code/workflow-engine`。包契约由 `engines.node` 改为 `engines.bun` 并固定 Bun 包管理器，构建、发布和执行继续由 Bun 驱动；Workflow Tool、脚本格式、权限、Agent Adapter、Journal、恢复与进度事件语义未改。独立 Fixture 以固定脚本和端口适配器分别执行源码、TypeScript 编译产物与 Bun standalone，核对 Agent 路由、进度序列、基于 `node:crypto` 的 Journal Key、`node:fs`/`node:path` 持久化以及恢复不重放 Agent，三种结果必须完全一致。
-- [x] 第五阶段已把独立 `acp-link` 迁移到 Bun 原生服务。Proxy 和 Manager 使用 `Bun.serve`，WebSocket 使用 Bun 原生升级、帧回调、Payload 上限与 Ping/Pong，ACP Agent 改由 `Bun.spawn` 和 Bun stdin/stdout Stream 桥接；删除 `@hono/node-server`、`@hono/node-ws`、`ws` 类型、Node Server 事件接口、Node Shebang 和 `engines.node`，保留 Hono 的运行时无关路由层。独立 Fixture 已实际覆盖 `/health`、404、Token 拒绝、认证子协议、Legacy Ping、JSON-RPC 错误、Payload 超限、ACP 初始化/会话/Prompt/权限回传、断线清理、Manager 页面与实例列表及临时证书 HTTPS；RCS Relay 和 Manager 多实例进程管理继续沿用原协议与 `Bun.spawn`。主程序 `claude --acp` stdio Agent 未改。
-- [ ] 第六阶段：清理 workspace 和依赖元数据。逐个移除 `engines.node`、Node Shebang、Node 专用启动脚本与已无消费者的 `@hono/node-*` 等依赖；`@types/node`、`node:` 导入以及名称中含 `node` 的 AWS/Smithy 包只有在 Bun 类型或运行兼容确实需要时才可保留，并由 Bundle/standalone 验证证明不调用外部 Node 可执行文件。
-- [ ] 第七阶段：改造 CI 和统一验证。删除 `actions/setup-node`，让 Linux、Windows CI 只安装固定版本 Bun；`bun run verify -- --ci` 必须继续覆盖冻结锁文件、全部 workspace、TypeScript、Biome、Bun bundle、主 EXE、所有独立 Host、CLI `--version`/`--help`、Plugin 生命周期、ACP 和 Workflow Fixture。增加隔离 PATH 验证，发现 `node`、`node.exe`、`npm` 或 `npx` 仍可被项目必需流程调用时直接失败。
-- [ ] 第八阶段：执行真实验收并更新基线。在未安装 Node 或从 PATH 明确移除 Node 的干净 Windows 与 Linux 环境完成 `bun install --frozen-lockfile`、`bun run dev`、`bun run typecheck`、`bun run lint`、`bun run build`、`bun run build:production`、`bun run verify -- --ci`，再验证单轮本地模型请求、工具调用、Workflow、`claude --acp`、`acp-link` WebSocket/RCS 和全部 Plugin Host。通过后将“两类 Bun 构建链、仅 Bun 开发依赖、standalone 零运行时依赖”并入工程基线并删除本 P0。
-
-完成条件：开发机只安装 Bun 即可完成项目声明的全部任务，CI 和发布流程不安装或调用 Node.js/npm/npx；`claude.exe` 与所有独立 Host 仍为零外部 JavaScript 运行时依赖；Workflow 和 ACP/RCS 行为、协议、安全边界与迁移前一致；仓库不存在需要外部 `node`/`node.exe` 的脚本、入口或 workspace，同时不会为追求字面上的“无 node”而重复实现 Bun 已兼容的标准库 API。
-
-### P1：移除休眠的 Computer Use 实现
+### P0：移除休眠的 Computer Use 实现
 
 当前 Computer Use 只由内部 `CHICAGO_MCP` Feature 控制，默认开发、CI 和生产构建均不启用，也没有进入已验收产品能力。其源码约 63 个文件、1.75 万行，Windows 截图仍依赖未进入 standalone 分发的 `bridge.py` 以及外部 Python、mss、Pillow，并缺少固定 Fixture 和真实端到端验收。本任务采用完整删除，不保留残缺的 Windows 后端或隐藏启动方式；它不涉及 Chrome 插件、Chrome DOM、Windows Sandbox、普通 MCP、模型、会话、工具权限、Agent、Workflow 或 Channel。
 

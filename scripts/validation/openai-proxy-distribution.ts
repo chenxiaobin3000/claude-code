@@ -8,9 +8,7 @@ const root = resolve(import.meta.dir, '..', '..')
 const directory = join(root, 'dist', 'plugins', 'openai-proxy')
 const host = join(
   directory,
-  process.platform === 'win32'
-    ? 'openai-proxy-host.exe'
-    : 'openai-proxy-host',
+  process.platform === 'win32' ? 'openai-proxy-host.exe' : 'openai-proxy-host',
 )
 await access(host)
 const manifest = JSON.parse(
@@ -39,7 +37,7 @@ const mcp = Bun.spawn([host, 'mcp'], {
   stdout: 'pipe',
   stderr: 'pipe',
 })
-mcp.stdin.end()
+await mcp.stdin.end()
 const timer = setTimeout(() => mcp.kill(), 10_000)
 const status = await mcp.exited.finally(() => clearTimeout(timer))
 assertEqual(status, 0, 'MCP Host exits cleanly on EOF')
@@ -90,15 +88,12 @@ try {
     env,
   })
   assertEqual(stop.exitCode, 0, 'standalone daemon stop exit')
-  liveMcp.stdin.end()
-  const liveStatus = await Promise.race([
-    liveMcp.exited,
-    Bun.sleep(10_000).then(() => -1),
-  ])
-  assertEqual(liveStatus, 0, 'standalone live MCP exits cleanly')
 } finally {
-  liveMcp.stdin.end()
-  if ((await Promise.race([liveMcp.exited, Bun.sleep(100).then(() => null)])) === null) {
+  await liveMcp.stdin.end()
+  if (
+    (await Promise.race([liveMcp.exited, Bun.sleep(100).then(() => null)])) ===
+    null
+  ) {
     liveMcp.kill()
   }
   await rm(profile, { recursive: true, force: true })

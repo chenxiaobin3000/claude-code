@@ -21,7 +21,7 @@ assert(
 const productionDependencies = Object.keys(pkg.dependencies).sort()
 assertDeepEqual(
   productionDependencies,
-  ['fflate', 'undici', 'ws'],
+  ['fflate', 'undici'],
   'production dependency allowlist',
 )
 
@@ -32,8 +32,8 @@ for (const bundled of ['@agentclientprotocol/sdk', 'highlight.js']) {
   )
 }
 assert(
-  pkg.dependencies.ws !== undefined && pkg.devDependencies.ws === undefined,
-  'ws must remain available to residual dynamic imports in production bundles',
+  pkg.dependencies.ws === undefined && pkg.devDependencies.ws === undefined,
+  'root ws dependency must stay removed with the Bun-native WebSocket paths',
 )
 
 assert(
@@ -89,8 +89,7 @@ for (const removedBuildScript of ['build:vite', 'build:vite:only']) {
   )
 }
 assert(
-  pkg.scripts.prepublishOnly ===
-    'bun run build:bun && bun run check:bundle',
+  pkg.scripts.prepublishOnly === 'bun run build:bun && bun run check:bundle',
   'publication must build and validate the Bun bundle',
 )
 

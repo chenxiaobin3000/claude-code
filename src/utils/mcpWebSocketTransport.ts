@@ -3,33 +3,24 @@ import {
   type JSONRPCMessage,
   JSONRPCMessageSchema,
 } from '@modelcontextprotocol/sdk/types.js'
-import type WsWebSocket from 'ws'
 import { logForDiagnosticsNoPII } from './diagLogs.js'
 import { toError } from './errors.js'
 import { jsonParse, jsonStringify } from './slowOperations.js'
 
-// WebSocket readyState constants (same for both native and ws)
+// WebSocket readyState constants.
 const WS_CONNECTING = 0
 const WS_OPEN = 1
-
-// Minimal interface shared by globalThis.WebSocket and ws.WebSocket
-type WebSocketLike = {
-  readonly readyState: number
-  close(): void
-  send(data: string): void
-}
 
 export class WebSocketTransport implements Transport {
   private started = false
   private opened: Promise<void>
-  private isBun = typeof Bun !== 'undefined'
 
-  constructor(private ws: WebSocketLike) {
+  constructor(private ws: globalThis.WebSocket) {
     this.opened = new Promise((resolve, reject) => {
       if (this.ws.readyState === WS_OPEN) {
         resolve()
-      } else if (this.isBun) {
-        const nws = this.ws as unknown as globalThis.WebSocket
+      } else {
+        const nws = this.ws
         const onOpen = () => {
           nws.removeEventListener('open', onOpen)
           nws.removeEventListener('error', onError)
@@ -43,30 +34,13 @@ export class WebSocketTransport implements Transport {
         }
         nws.addEventListener('open', onOpen)
         nws.addEventListener('error', onError)
-      } else {
-        const nws = this.ws as unknown as WsWebSocket
-        nws.on('open', () => {
-          resolve()
-        })
-        nws.on('error', error => {
-          logForDiagnosticsNoPII('error', 'mcp_websocket_connect_fail')
-          reject(error)
-        })
       }
     })
 
     // Attach persistent event handlers
-    if (this.isBun) {
-      const nws = this.ws as unknown as globalThis.WebSocket
-      nws.addEventListener('message', this.onBunMessage)
-      nws.addEventListener('error', this.onBunError)
-      nws.addEventListener('close', this.onBunClose)
-    } else {
-      const nws = this.ws as unknown as WsWebSocket
-      nws.on('message', this.onNodeMessage)
-      nws.on('error', this.onNodeError)
-      nws.on('close', this.onNodeClose)
-    }
+    this.ws.addEventListener('message', this.onBunMessage)
+    this.ws.addEventListener('error', this.onBunError)
+    this.ws.addEventListener('close', this.onBunClose)
   }
 
   onclose?: () => void
@@ -94,25 +68,6 @@ export class WebSocketTransport implements Transport {
     this.handleCloseCleanup()
   }
 
-  // Node (ws package) event handlers
-  private onNodeMessage = (data: Buffer) => {
-    try {
-      const messageObj = jsonParse(data.toString('utf-8'))
-      const message = JSONRPCMessageSchema.parse(messageObj)
-      this.onmessage?.(message)
-    } catch (error) {
-      this.handleError(error)
-    }
-  }
-
-  private onNodeError = (error: unknown) => {
-    this.handleError(error)
-  }
-
-  private onNodeClose = () => {
-    this.handleCloseCleanup()
-  }
-
   // Shared error handler
   private handleError(error: unknown): void {
     logForDiagnosticsNoPII('error', 'mcp_websocket_message_fail')
@@ -122,18 +77,9 @@ export class WebSocketTransport implements Transport {
   // Shared close handler with listener cleanup
   private handleCloseCleanup(): void {
     this.onclose?.()
-    // Clean up listeners after close
-    if (this.isBun) {
-      const nws = this.ws as unknown as globalThis.WebSocket
-      nws.removeEventListener('message', this.onBunMessage)
-      nws.removeEventListener('error', this.onBunError)
-      nws.removeEventListener('close', this.onBunClose)
-    } else {
-      const nws = this.ws as unknown as WsWebSocket
-      nws.off('message', this.onNodeMessage)
-      nws.off('error', this.onNodeError)
-      nws.off('close', this.onNodeClose)
-    }
+    this.ws.removeEventListener('message', this.onBunMessage)
+    this.ws.removeEventListener('error', this.onBunError)
+    this.ws.removeEventListener('close', this.onBunClose)
   }
 
   /**
@@ -178,20 +124,7 @@ export class WebSocketTransport implements Transport {
     const json = jsonStringify(message)
 
     try {
-      if (this.isBun) {
-        // Native WebSocket.send() is synchronous (no callback)
-        this.ws.send(json)
-      } else {
-        await new Promise<void>((resolve, reject) => {
-          ;(this.ws as unknown as WsWebSocket).send(json, error => {
-            if (error) {
-              reject(error)
-            } else {
-              resolve()
-            }
-          })
-        })
-      }
+      this.ws.send(json)
     } catch (error) {
       this.handleError(error)
       throw error

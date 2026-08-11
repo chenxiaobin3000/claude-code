@@ -71,7 +71,7 @@
     "schema:settings": "bun run scripts/print-settings-schema.ts",
     "workspaces:verify": "bun run scripts/verify-workspaces.ts",
     "verify": "bun run scripts/verify.ts",
-    "check:unused": "knip-bun",
+    "check:unused": "bunx --bun knip",
     "postinstall": "bun scripts/postinstall.cjs",
     "docs:dev": "bunx --bun mintlify dev",
     "typecheck": "tsc --noEmit",
@@ -88,8 +88,7 @@
   },
   "dependencies": {
     "fflate": "^0.8.2",
-    "undici": "^7.25.0",
-    "ws": "^8.20.0"
+    "undici": "^7.25.0"
   },
   "devDependencies": {
     "@agentclientprotocol/sdk": "^0.19.0",
@@ -103,7 +102,6 @@
     "@anthropic-ai/sandbox-runtime": "^0.0.44",
     "@anthropic-ai/sdk": "0.81.0",
     "@anthropic/ink": "workspace:*",
-    "@aws-sdk/credential-provider-node": "^3.972.36",
     "@biomejs/biome": "2.5.4",
     "@claude-code/agent-tools": "workspace:*",
     "@claude-code/builtin-tools": "workspace:*",
@@ -111,7 +109,6 @@
     "@claude-code/workflow-engine": "workspace:*",
     "@commander-js/extra-typings": "^14.0.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@smithy/node-http-handler": "^4.5.3",
     "@types/bun": "^1.3.12",
     "@types/cacache": "^20.0.1",
     "@types/he": "^1.2.3",
@@ -126,7 +123,6 @@
     "@types/semver": "^7.7.1",
     "@types/stack-utils": "^2.0.3",
     "@types/turndown": "^5.0.6",
-    "@types/ws": "^8.18.1",
     "ajv": "^8.18.0",
     "asciichart": "^1.5.25",
     "auto-bind": "^5.0.1",

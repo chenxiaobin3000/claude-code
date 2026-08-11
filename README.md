@@ -520,7 +520,7 @@ bun run verify
 
 项目保持 TypeScript + Bun 实现，不以 Rust 或其他平台原生语言重写 CLI。`claude.exe` 是包含 Bun Runtime 的 standalone 产物；它的目标是免安装运行时分发，而不是追随官方的原生二进制实现或安装/自更新机制。
 
-`bun run verify` 是唯一的项目验证入口，覆盖依赖锁定、类型、Biome、适用构建、CLI `--version`/启动冒烟、源码级轻量验证，以及可用本地模型的单轮模型和工具调用。standalone 矩阵还验证本地 Markdown 配置发现、内置 ripgrep 的提取/校验/真实搜索、自动插件发现、`--bare` 隔离、显式覆盖和插件目录移除后的不可达性。它不依赖付费云模型，也不引入第二套测试框架。
+`bun run verify` 是唯一的项目验证入口。它会先构造无法解析 `node`、`node.exe`、`npm` 或 `npx` 的 Bun-only PATH，再在该环境覆盖冻结依赖安装、`bun run dev -- --version`、类型、Biome、全部 workspace、`bun run build`、Windows `bun run build:production`、CLI `--version`/启动冒烟、源码级轻量验证，以及可用本地模型的单轮模型和工具调用。standalone 矩阵还验证本地 Markdown 配置发现、内置 ripgrep 的提取/校验/真实搜索、自动插件发现、`--bare` 隔离、显式覆盖和插件目录移除后的不可达性。它不依赖付费云模型，也不引入第二套测试框架。
 
 ### 性能与稳定性
 

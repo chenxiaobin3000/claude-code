@@ -103,7 +103,6 @@ import { memoizeWithLRU } from '../../utils/memoize.js'
 import { getWebSocketTLSOptions } from '../../utils/mtls.js'
 import {
   getProxyFetchOptions,
-  getWebSocketProxyAgent,
   getWebSocketProxyUrl,
 } from '../../utils/proxy.js'
 import { getSessionIngressAuthToken } from '../../utils/sessionIngressAuth.js'
@@ -131,11 +130,7 @@ import {
   isTransientMcpStartupError,
   MCP_STARTUP_MAX_ATTEMPTS,
 } from './retryPolicy.js'
-import {
-  redactMcpError,
-  redactMcpHeaders,
-  redactMcpUrl,
-} from './security.js'
+import { redactMcpError, redactMcpHeaders, redactMcpUrl } from './security.js'
 
 // Package imports — delegate to mcp-client package utilities where applicable
 import {
@@ -369,31 +364,6 @@ function handleRemoteAuthFailure(
   )
   setMcpAuthCacheEntry(name)
   return { name, type: 'needs-auth', config: serverRef }
-}
-
-// Minimal interface for WebSocket instances passed to mcpWebSocketTransport
-type WsClientLike = {
-  readonly readyState: number
-  close(): void
-  send(data: string): void
-}
-
-/**
- * Create a ws.WebSocket client with the MCP protocol.
- * Bun's ws shim types lack the 3-arg constructor (url, protocols, options)
- * that the real ws package supports, so we cast the constructor here.
- */
-async function createNodeWsClient(
-  url: string,
-  options: Record<string, unknown>,
-): Promise<WsClientLike> {
-  const wsModule = await import('ws')
-  const WS = wsModule.default as unknown as new (
-    url: string,
-    protocols: string[],
-    options: Record<string, unknown>,
-  ) => WsClientLike
-  return new WS(url, ['mcp'], options)
 }
 
 const IMAGE_MIME_TYPES = new Set([
@@ -689,23 +659,14 @@ export const connectToServer = memoize(
           }),
         }
 
-        let wsClient: WsClientLike
-        if (typeof Bun !== 'undefined') {
-          // Bun's WebSocket supports headers/proxy/tls options but the DOM typings don't
-          // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-          wsClient = new globalThis.WebSocket(serverRef.url, {
-            protocols: ['mcp'],
-            headers: wsHeaders,
-            proxy: getWebSocketProxyUrl(serverRef.url),
-            tls: tlsOptions || undefined,
-          } as unknown as string[])
-        } else {
-          wsClient = await createNodeWsClient(serverRef.url, {
-            headers: wsHeaders,
-            agent: getWebSocketProxyAgent(serverRef.url),
-            ...(tlsOptions || {}),
-          })
-        }
+        // The CLI is Bun-only; native WebSocket supports headers, proxy, and
+        // TLS options beyond the DOM constructor typings.
+        const wsClient = new globalThis.WebSocket(serverRef.url, {
+          protocols: ['mcp'],
+          headers: wsHeaders,
+          proxy: getWebSocketProxyUrl(serverRef.url),
+          tls: tlsOptions || undefined,
+        } as unknown as string[])
         transport = new WebSocketTransport(wsClient)
       } else if (serverRef.type === 'ws') {
         logMCPDebug(
@@ -736,23 +697,12 @@ export const connectToServer = memoize(
           })}`,
         )
 
-        let wsClient: WsClientLike
-        if (typeof Bun !== 'undefined') {
-          // Bun's WebSocket supports headers/proxy/tls options but the DOM typings don't
-          // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-          wsClient = new globalThis.WebSocket(serverRef.url, {
-            protocols: ['mcp'],
-            headers: wsHeaders,
-            proxy: getWebSocketProxyUrl(serverRef.url),
-            tls: tlsOptions || undefined,
-          } as unknown as string[])
-        } else {
-          wsClient = await createNodeWsClient(serverRef.url, {
-            headers: wsHeaders,
-            agent: getWebSocketProxyAgent(serverRef.url),
-            ...(tlsOptions || {}),
-          })
-        }
+        const wsClient = new globalThis.WebSocket(serverRef.url, {
+          protocols: ['mcp'],
+          headers: wsHeaders,
+          proxy: getWebSocketProxyUrl(serverRef.url),
+          tls: tlsOptions || undefined,
+        } as unknown as string[])
         transport = new WebSocketTransport(wsClient)
       } else if (serverRef.type === 'http') {
         logMCPDebug(
@@ -972,10 +922,7 @@ export const connectToServer = memoize(
             logMCPDebug(name, `Using loopback address: ${testUrl.hostname}`)
           }
         } catch (urlError) {
-          logMCPDebug(
-            name,
-            `Failed to parse URL: ${redactMcpError(urlError)}`,
-          )
+          logMCPDebug(name, `Failed to parse URL: ${redactMcpError(urlError)}`)
         }
       }
 
