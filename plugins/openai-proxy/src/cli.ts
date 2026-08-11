@@ -1,5 +1,6 @@
 import {
-  OPENAI_PROXY_BASE_URL,
+  ensureOpenAIProxyUserConfig,
+  getOpenAIProxyBaseUrl,
   OPENAI_PROXY_LOCAL_TOKEN_ENV,
   resolveLocalToken,
 } from './config.js'
@@ -22,7 +23,7 @@ import {
 
 function usage(): void {
   process.stdout.write(
-    'Usage:\n  openai-proxy-host setup\n  openai-proxy-host login [--device-code]\n  openai-proxy-host status\n  openai-proxy-host doctor\n  openai-proxy-host logout\n  openai-proxy-host serve\n  openai-proxy-host stop\n  openai-proxy-host mcp\n',
+    'Usage:\n  openai-proxy-host login [--device-code]\n  openai-proxy-host status\n  openai-proxy-host doctor\n  openai-proxy-host logout\n  openai-proxy-host serve\n  openai-proxy-host stop\n  openai-proxy-host mcp\n',
   )
 }
 
@@ -31,12 +32,13 @@ async function inspectGateway(path: '/health' | '/doctor'): Promise<void> {
   if (path === '/doctor') {
     headers.authorization = `Bearer ${resolveLocalToken()}`
   }
-  const response = await fetch(`${OPENAI_PROXY_BASE_URL}${path}`, {
+  const response = await fetch(`${getOpenAIProxyBaseUrl()}${path}`, {
     headers,
     signal: AbortSignal.timeout(5_000),
   })
   const body = await response.text()
-  if (!response.ok) throw new Error(`openai-proxy ${path} failed (${response.status}).`)
+  if (!response.ok)
+    throw new Error(`openai-proxy ${path} failed (${response.status}).`)
   process.stdout.write(`${body}\n`)
 }
 
@@ -45,28 +47,24 @@ export async function handleOpenAIProxyCli(
   version: string,
 ): Promise<void> {
   try {
-    if (args[0] === 'setup') {
-      resolveLocalToken()
+    if (args[0] === 'login') {
+      const local = await ensureOpenAIProxyUserConfig()
       createOpenAIUpstreamFetch()
       process.stdout.write(
-        `Local gateway token is configured. Use ${OPENAI_PROXY_BASE_URL}/v1 as the models.json baseUrl.\n`,
+        `${local.generatedToken ? 'Generated' : 'Loaded'} the local gateway token in ${local.settingsPath}. Use ${getOpenAIProxyBaseUrl(local.port)}/v1 as the models.json baseUrl.\n`,
       )
-      return
-    }
-    if (args[0] === 'login' && args.includes('--device-code')) {
       const auth = new OpenAIProxyAuth()
-      const device = await auth.requestDeviceCode()
-      process.stdout.write(
-        `Open ${device.verificationUrl}\nEnter code: ${device.userCode}\nContinue only if you started this login.\n`,
-      )
-      const session = await auth.completeDeviceCode(device)
-      process.stdout.write(
-        `Signed in${session.account.email ? ` as ${session.account.email}` : ''}.\n`,
-      )
-      return
-    }
-    if (args[0] === 'login') {
-      const auth = new OpenAIProxyAuth()
+      if (args.includes('--device-code')) {
+        const device = await auth.requestDeviceCode()
+        process.stdout.write(
+          `Open ${device.verificationUrl}\nEnter code: ${device.userCode}\nContinue only if you started this login.\n`,
+        )
+        const session = await auth.completeDeviceCode(device)
+        process.stdout.write(
+          `Signed in${session.account.email ? ` as ${session.account.email}` : ''}.\n`,
+        )
+        return
+      }
       const login = startBrowserLogin(auth)
       const cancel = () => login.cancel()
       process.once('SIGINT', cancel)
@@ -85,7 +83,9 @@ export async function handleOpenAIProxyCli(
       return
     }
     if (args[0] === 'serve') {
-      process.stderr.write(`openai-proxy listening on ${OPENAI_PROXY_BASE_URL}\n`)
+      process.stderr.write(
+        `openai-proxy listening on ${getOpenAIProxyBaseUrl()}\n`,
+      )
       await runOpenAIProxyService(version, 'foreground')
       return
     }
@@ -95,7 +95,9 @@ export async function handleOpenAIProxyCli(
     }
     if (args[0] === 'stop') {
       const stopped = await stopOpenAIProxyDaemon()
-      process.stdout.write(stopped ? 'openai-proxy stopped.\n' : 'openai-proxy is not running.\n')
+      process.stdout.write(
+        stopped ? 'openai-proxy stopped.\n' : 'openai-proxy is not running.\n',
+      )
       return
     }
     if (args[0] === 'status') {
@@ -115,6 +117,7 @@ export async function handleOpenAIProxyCli(
           ? `Gateway recorded: pid=${runtime.pid}; mode=${runtime.mode}; version=${runtime.hostVersion}; endpoint=${runtime.endpoint}.\n`
           : 'Gateway stopped.\n',
       )
+      process.stdout.write(`Configured gateway: ${getOpenAIProxyBaseUrl()}.\n`)
       process.stdout.write(
         `Upstream proxy: mode=${upstream.proxyMode}; endpoint=${upstream.proxyDisplay}.\n`,
       )
@@ -133,7 +136,7 @@ export async function handleOpenAIProxyCli(
         gateway = 'stopped'
       }
       process.stdout.write(
-        `auth=${session ? 'logged-in' : 'logged-out'}; gateway=${gateway}; forwarding=responses; upstream-proxy=${upstream.proxyMode}; proxy-endpoint=${upstream.proxyDisplay}; last-exit=${lastExit?.reason ?? 'none'}.\n`,
+        `auth=${session ? 'logged-in' : 'logged-out'}; gateway=${gateway}; gateway-endpoint=${getOpenAIProxyBaseUrl()}; forwarding=responses; upstream-proxy=${upstream.proxyMode}; proxy-endpoint=${upstream.proxyDisplay}; last-exit=${lastExit?.reason ?? 'none'}.\n`,
       )
       return
     }
@@ -155,8 +158,15 @@ export async function handleOpenAIProxyCli(
     const message = redactOpenAIProxySecret(
       error instanceof Error ? error.message : String(error),
     )
-    const token = process.env[OPENAI_PROXY_LOCAL_TOKEN_ENV]
-    process.stderr.write(`${token ? message.replaceAll(token, '[REDACTED]') : message}\n`)
+    let token = process.env[OPENAI_PROXY_LOCAL_TOKEN_ENV]
+    try {
+      token ??= resolveLocalToken()
+    } catch {
+      // Keep the original configuration error when no token can be resolved.
+    }
+    process.stderr.write(
+      `${token ? message.replaceAll(token, '[REDACTED]') : message}\n`,
+    )
     process.exitCode = 1
   }
 }

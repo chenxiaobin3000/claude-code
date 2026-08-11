@@ -2,8 +2,9 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-interface UserSettings {
+export interface UserSettings {
   env?: Record<string, unknown>
+  openaiProxy?: Record<string, unknown>
 }
 
 export function getUserSettingsPath(): string {
@@ -11,7 +12,7 @@ export function getUserSettingsPath(): string {
   return join(configDir || join(homedir(), '.claude'), 'settings.json')
 }
 
-function readUserSettings(): { path: string; settings: UserSettings } {
+export function readUserSettings(): { path: string; settings: UserSettings } {
   const path = getUserSettingsPath()
   if (!existsSync(path)) {
     throw new Error(`User settings file ${path} does not exist.`)

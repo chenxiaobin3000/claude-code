@@ -27,7 +27,8 @@
 
 ### openai-proxy 本地订阅模型代理
 
-- `plugins/openai-proxy` 是可独立删除的 TypeScript/Bun 本地插件；主程序不新增 Provider 或代理模型类型，只把 `http://127.0.0.1:48181/v1` 作为普通 OpenAI-compatible `baseUrl`，删除插件不需要回滚主模型链。
+- `plugins/openai-proxy` 是可独立删除的 TypeScript/Bun 本地插件；主程序不新增 Provider 或代理模型类型，只把默认 `http://127.0.0.1:48481/v1` 或用户级 `openaiProxy.port` 指定的 loopback 地址作为普通 OpenAI-compatible `baseUrl`，删除插件不需要回滚主模型链。
+- `setup` 已并入 `login`：首次登录在用户级 `settings.json` 自动生成并原子保存 32 字节本地网关 Token，同时固化默认端口 `48481`；端口只允许 `1024`～`65535`，已有合法配置保留，进程与持久化 Token 冲突时 fail-closed。ChatGPT Session 与本地网关 Token 继续分离保存。
 - 独立 Host 提供浏览器 OAuth、device-code、PKCE/state、Token 刷新/撤销、私有原子 Session、单实例守护进程、客户端租约和 loopback Bearer 鉴权。ChatGPT 凭据只保存在 `~/.claude/openai-proxy/auth.json`，不读取 Codex 自身凭据，也不进入主进程、配置、日志或模型上下文。
 - 网关把 Chat Completions 转为 Codex Responses，并把 SSE、reasoning、工具调用、Usage 和结束原因适配回现有 OpenAI 流；不支持字段、认证失败、超时、断流、代理失败和上游错误均 fail-closed，不切换模型、端点或直连路径。
 - 可选 `OPENAI_PROXY_URL` 仅支持显式 HTTP/HTTPS CONNECT 代理并统一覆盖登录、刷新、撤销、模型目录和 Responses；代理认证、拒绝、超时或 TLS/DNS 失败不回退直连，诊断只显示脱敏端点。

@@ -8,6 +8,7 @@ const root = resolve(import.meta.dir, '..', '..')
 const verifySource = await readFile(join(root, 'scripts', 'verify.ts'), 'utf8')
 const requiredValidations = [
   'openai-proxy-plugin-boundary.ts',
+  'openai-proxy-config.ts',
   'openai-proxy-gateway.ts',
   'openai-proxy-auth.ts',
   'openai-proxy-model.ts',

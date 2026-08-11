@@ -13,7 +13,11 @@ import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { acquireChannelConnectionLease } from '../../shared/connectionLease.js'
 import { secureSessionPath, type SecurePath } from './auth/session.js'
-import { OPENAI_PROXY_PORT, resolveLocalToken } from './config.js'
+import {
+  getOpenAIProxyBaseUrl,
+  resolveLocalToken,
+  resolveOpenAIProxyPort,
+} from './config.js'
 import { startOpenAIProxyGateway } from './gateway.js'
 
 export const OPENAI_PROXY_CLIENT_HEARTBEAT_MS = 5_000
@@ -92,7 +96,9 @@ function pathsFor(stateDirectory?: string): RuntimePaths {
 async function rejectSymlink(path: string): Promise<void> {
   try {
     if ((await lstat(path)).isSymbolicLink()) {
-      throw new Error(`Refusing symbolic link in openai-proxy runtime path: ${path}`)
+      throw new Error(
+        `Refusing symbolic link in openai-proxy runtime path: ${path}`,
+      )
     }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
@@ -202,7 +208,8 @@ export async function readOpenAIProxyLastExit(
   const paths = pathsFor(options.stateDirectory)
   try {
     const value = await readBoundedJson(paths.lastExit)
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      return undefined
     const record = value as Record<string, unknown>
     const reasons: OpenAIProxyLastExit['reason'][] = [
       'control_stop',
@@ -280,7 +287,9 @@ async function activeClientLeaseCount(
   paths: RuntimePaths,
   leaseTtlMs: number,
 ): Promise<number> {
-  const names = (await readdir(paths.clients)).filter(name => name.endsWith('.json'))
+  const names = (await readdir(paths.clients)).filter(name =>
+    name.endsWith('.json'),
+  )
   if (names.length > 512) {
     throw new Error('openai-proxy client lease directory exceeded 512 entries.')
   }
@@ -290,10 +299,7 @@ async function activeClientLeaseCount(
     const path = join(paths.clients, name)
     try {
       const value = await readBoundedJson(path)
-      if (
-        validClientLease(value) &&
-        Date.parse(value.updatedAt) >= cutoff
-      ) {
+      if (validClientLease(value) && Date.parse(value.updatedAt) >= cutoff) {
         active++
       } else {
         await rm(path, { force: true })
@@ -337,7 +343,7 @@ export async function runOpenAIProxyService(
     displayName: 'openai-proxy gateway',
   })
   const instanceId = randomUUID()
-  const port = options.port ?? OPENAI_PROXY_PORT
+  const port = options.port ?? resolveOpenAIProxyPort()
   const token = options.token ?? resolveLocalToken()
   let exitReason: OpenAIProxyLastExit['reason'] = 'signal'
   let gateway: ReturnType<typeof startOpenAIProxyGateway> | undefined
@@ -393,7 +399,10 @@ export async function runOpenAIProxyService(
             return
           }
           emptySince ??= Date.now()
-          if (Date.now() - emptySince >= (options.idleExitMs ?? OPENAI_PROXY_IDLE_EXIT_MS)) {
+          if (
+            Date.now() - emptySince >=
+            (options.idleExitMs ?? OPENAI_PROXY_IDLE_EXIT_MS)
+          ) {
             stop('idle_exit')
           }
         })
@@ -401,7 +410,9 @@ export async function runOpenAIProxyService(
     }, options.monitorMs ?? OPENAI_PROXY_MONITOR_MS)
     try {
       await new Promise<void>(resolve =>
-        controller.signal.addEventListener('abort', () => resolve(), { once: true }),
+        controller.signal.addEventListener('abort', () => resolve(), {
+          once: true,
+        }),
       )
     } finally {
       clearInterval(monitor)
@@ -455,7 +466,8 @@ function daemonCommand(): string[] {
   const executableName = basename(process.execPath).toLowerCase()
   if (executableName === 'bun' || executableName === 'bun.exe') {
     const entrypoint = process.argv[1]
-    if (!entrypoint) throw new Error('Unable to determine openai-proxy Host entrypoint.')
+    if (!entrypoint)
+      throw new Error('Unable to determine openai-proxy Host entrypoint.')
     return [process.execPath, entrypoint, 'daemon']
   }
   return [process.execPath, 'daemon']
@@ -478,6 +490,10 @@ export async function ensureOpenAIProxyDaemon(
   options: LifecycleOptions = {},
 ): Promise<OpenAIProxyRuntimeState> {
   const token = options.token ?? resolveLocalToken()
+  const expectedEndpoint =
+    options.port === 0
+      ? undefined
+      : getOpenAIProxyBaseUrl(options.port ?? resolveOpenAIProxyPort())
   const existing = await readOpenAIProxyRuntimeState(options)
   if (existing && (await inspectRunningGateway(existing, token))) {
     if (existing.hostVersion !== hostVersion) {
@@ -485,10 +501,16 @@ export async function ensureOpenAIProxyDaemon(
         `openai-proxy Host version ${existing.hostVersion} is already running; stop it before starting ${hostVersion}.`,
       )
     }
+    if (expectedEndpoint && existing.endpoint !== expectedEndpoint) {
+      throw new Error(
+        `openai-proxy is running at ${existing.endpoint}, but user settings require ${expectedEndpoint}. Stop the existing gateway before changing ports.`,
+      )
+    }
     return existing
   }
   await (options.spawnDaemon ?? spawnDetachedDaemon)()
-  const deadline = Date.now() + (options.startTimeoutMs ?? OPENAI_PROXY_START_TIMEOUT_MS)
+  const deadline =
+    Date.now() + (options.startTimeoutMs ?? OPENAI_PROXY_START_TIMEOUT_MS)
   while (Date.now() < deadline) {
     const state = await readOpenAIProxyRuntimeState(options)
     if (state && (await inspectRunningGateway(state, token))) {

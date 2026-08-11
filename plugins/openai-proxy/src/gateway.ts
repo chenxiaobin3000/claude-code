@@ -1,8 +1,8 @@
 import { timingSafeEqual } from 'node:crypto'
 import {
-  OPENAI_PROXY_BASE_URL,
+  getOpenAIProxyBaseUrl,
   OPENAI_PROXY_HOST,
-  OPENAI_PROXY_PORT,
+  resolveOpenAIProxyPort,
   resolveLocalToken,
 } from './config.js'
 import { OpenAIProxyModelService } from './model/service.js'
@@ -65,7 +65,7 @@ export function startOpenAIProxyGateway(
   options: GatewayOptions = {},
 ): OpenAIProxyGateway {
   const token = options.token ?? resolveLocalToken()
-  const port = options.port ?? OPENAI_PROXY_PORT
+  const port = options.port ?? resolveOpenAIProxyPort()
   const modelService =
     options.modelService ?? new OpenAIProxyModelService({ version })
   const upstream = createOpenAIUpstreamFetch()
@@ -133,7 +133,7 @@ export function startOpenAIProxyGateway(
     },
   })
   return {
-    url: port === OPENAI_PROXY_PORT ? OPENAI_PROXY_BASE_URL : server.url.origin,
+    url: port === 0 ? server.url.origin : getOpenAIProxyBaseUrl(port),
     stop: () => server.stop(true),
   }
 }

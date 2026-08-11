@@ -57,6 +57,12 @@ These variables do not enable a hosted CLI account, remote Plugin Marketplace, t
 
 The credential and proxy may come only from the X Host process environment or user-level `settings.json.env`; project and managed settings do not inject them into the external plugin Host.
 
+## openai-proxy plugin
+
+The first `openai-proxy-host login` creates a 32-byte random local gateway Token and stores it under `env.OPENAI_PROXY_LOCAL_TOKEN` in the user-level `settings.json`. The same initialization writes `openaiProxy.port` with the default `48481`; the port may be changed to an integer from `1024` through `65535`. The corresponding `models.json.baseUrl` must use the same loopback port. An existing valid Token and port are preserved, and a conflicting process-level Token is rejected instead of silently replacing the persisted value.
+
+`OPENAI_PROXY_URL` optionally routes all OAuth, Token, model-catalogue, and Responses traffic from the plugin through one explicit HTTP or HTTPS CONNECT proxy. Once selected, proxy failure is fatal and does not fall back to a direct connection. ChatGPT credentials remain separately stored under `~/.claude/openai-proxy/auth.json`.
+
 ## Proxy, TLS, shell, and configuration
 
 The runtime honors standard proxy variables such as `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY`, together with the documented local settings for proxy and mTLS. `NODE_EXTRA_CA_CERTS`, `CLAUDE_CODE_CLIENT_CERT`, and `CLAUDE_CODE_CLIENT_KEY` configure additional trust or client certificates.

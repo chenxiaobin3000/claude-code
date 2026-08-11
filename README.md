@@ -77,18 +77,18 @@ Hook command 的 `args` 会保持 argv 参数边界。启用 Sandbox 时不会�
 
 `plugins/openai-proxy` 使用独立 Host 完成 ChatGPT 浏览器/device-code 登录，把 Codex Responses/SSE 转换为项目现有的 OpenAI-compatible Chat Completions 流。它不读取 Codex 自身凭据，也不向主程序增加 Provider 类型；删除插件目录即可完整移除。
 
-本地地址固定为 `http://127.0.0.1:48181/v1`，访问必须使用至少 32 个随机字符的 `OPENAI_PROXY_LOCAL_TOKEN`。在 `models.json` 的 `models` 数组中增加普通 OpenAI 兼容模型条目：
+首次执行 `login` 时，插件会生成 32 字节随机本地 Token，原子写入用户级 `settings.json` 的 `env.OPENAI_PROXY_LOCAL_TOKEN`，并在 `openaiProxy.port` 写入默认端口 `48481`；已有合法值会保留，进程与设置中的 Token 冲突时安全失败。端口可在 `1024`～`65535` 范围内修改，`models.json.baseUrl` 必须使用相同端口：
 
 ```json
 {
   "model": "gpt-5.4-mini",
   "displayName": "ChatGPT subscription",
-  "baseUrl": "http://127.0.0.1:48181/v1",
+  "baseUrl": "http://127.0.0.1:48481/v1",
   "apiKeyEnv": "OPENAI_PROXY_LOCAL_TOKEN"
 }
 ```
 
-生产分发使用 `dist/plugins/openai-proxy/openai-proxy-host.exe`；源码开发使用 `bun run plugins/openai-proxy/host/entry.ts`。两者均支持 `setup`、`login`、`login --device-code`、`status`、`doctor`、`logout`、`serve`、`stop` 和 `mcp`。Session 只保存在 `~/.claude/openai-proxy/auth.json`，退出会撤销远端 Token 并删除本地凭据。
+生产分发使用 `dist/plugins/openai-proxy/openai-proxy-host.exe`；源码开发使用 `bun run plugins/openai-proxy/host/entry.ts`。两者均支持 `login`、`login --device-code`、`status`、`doctor`、`logout`、`serve`、`stop` 和 `mcp`。ChatGPT Session 只保存在 `~/.claude/openai-proxy/auth.json`，本地网关 Token 只保存在用户级 `settings.json.env`；退出会撤销远端 Token 并删除 Session，不删除本地网关配置。
 
 可选 `OPENAI_PROXY_URL` 仅接受显式 HTTP/HTTPS 代理，统一覆盖 OAuth、Token 刷新/撤销、模型目录和 Responses；代理拒绝、认证、DNS、TLS 或超时失败不会回退直连。上游兼容基线固定为 OpenAI Codex `rust-v0.147.0`，协议 `client_version` 为 `0.147.0`；审计使用 `bun run audit:openai-proxy-upstream -- --tag rust-v0.147.0`，只下载固定白名单到系统临时目录，不改写生产代码。
 

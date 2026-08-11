@@ -23,11 +23,10 @@ Phase 7 locks the boundary into the full deterministic regression suite.
 ## Development commands
 
 ```powershell
-$env:OPENAI_PROXY_LOCAL_TOKEN = '<at-least-32-random-characters>'
-bun run plugins/openai-proxy/host/entry.ts serve
-bun run plugins/openai-proxy/host/entry.ts doctor
 bun run plugins/openai-proxy/host/entry.ts login
 bun run plugins/openai-proxy/host/entry.ts login --device-code
+bun run plugins/openai-proxy/host/entry.ts serve
+bun run plugins/openai-proxy/host/entry.ts doctor
 bun run plugins/openai-proxy/host/entry.ts status
 bun run plugins/openai-proxy/host/entry.ts stop
 bun run plugins/openai-proxy/host/entry.ts logout
@@ -40,14 +39,33 @@ SHA-256 values, prints a semantic-review report, and removes the temporary
 files. It never updates production code. Changes outside the scopes documented
 in `upstream/SOURCE_MAP.md` are not eligible for synchronization.
 
-The local base URL is fixed to `http://127.0.0.1:48181/v1`. Configure the
-subscription model as an ordinary OpenAI-compatible model; no Provider or
+The first `login` generates a 32-byte random local gateway token when none is
+configured and atomically writes it to the user-level `settings.json` as
+`env.OPENAI_PROXY_LOCAL_TOKEN`. It also writes the default port under
+`openaiProxy.port`. Existing valid values are preserved; conflicting process
+and settings tokens fail closed.
+
+```json
+{
+  "env": {
+    "OPENAI_PROXY_LOCAL_TOKEN": "<generated-by-login>"
+  },
+  "openaiProxy": {
+    "port": 48481
+  }
+}
+```
+
+The default local base URL is `http://127.0.0.1:48481/v1`. The user-level
+`openaiProxy.port` field may select another integer port from 1024 through
+65535. Configure the subscription model as an ordinary OpenAI-compatible
+model and keep its `baseUrl` port equal to that setting; no Provider or
 proxy-specific model type is required:
 
 ```json
 {
   "model": "<slug returned by /v1/models>",
-  "baseUrl": "http://127.0.0.1:48181/v1",
+  "baseUrl": "http://127.0.0.1:48481/v1",
   "apiKeyEnv": "OPENAI_PROXY_LOCAL_TOKEN"
 }
 ```
@@ -94,7 +112,10 @@ guards singleton ownership; `clients/` contains renewable leases; and
 recovery. Recovery validates lock ownership and never sends a signal to a PID
 read from mutable state. These files contain no ChatGPT Session tokens.
 
-ChatGPT credentials are stored only at `~/.claude/openai-proxy/auth.json`.
+ChatGPT subscription credentials are stored only at
+`~/.claude/openai-proxy/auth.json`. The separate local gateway capability
+token is stored in the user-level `settings.json` env object so the main CLI
+and standalone Host resolve the same value.
 Writes use an atomic replacement and a bounded cross-process lock. POSIX mode is
 restricted to `0600`; Windows uses a current-user-only ACL. Tokens are never
 printed by `status` or `doctor` and are not exposed to the parent CLI.
