@@ -364,9 +364,9 @@ export function chatCompletionsToResponses(value: unknown): ResponsesRequest {
         }),
       },
     }),
-    ...(maxOutputTokens !== undefined && {
-      max_output_tokens: maxOutputTokens,
-    }),
+    // The ChatGPT/Codex subscription backend rejects the public Responses API
+    // max_output_tokens field. Keep validating the caller's limit above, but
+    // leave enforcement and context planning to the local client profile.
     ...(request.temperature !== undefined && {
       temperature: request.temperature,
     }),

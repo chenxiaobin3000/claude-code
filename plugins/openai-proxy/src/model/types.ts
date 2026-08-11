@@ -22,7 +22,6 @@ export interface ResponsesRequest extends JsonObject {
   tool_choice: string | JsonObject
   parallel_tool_calls: boolean
   reasoning?: { effort: string; summary?: 'auto' }
-  max_output_tokens?: number
   temperature?: number
   store: false
   stream: true

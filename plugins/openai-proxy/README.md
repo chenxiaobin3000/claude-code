@@ -76,6 +76,12 @@ explicitly instead of being silently removed. Upstream authentication, errors,
 timeouts, cancellation and interrupted streams fail closed; there is no model
 or endpoint fallback.
 
+`max_tokens` and `max_completion_tokens` are validated for local profile and
+request consistency, but are intentionally not forwarded as
+`max_output_tokens`: the ChatGPT/Codex subscription backend rejects that public
+Responses API field. Safe structured upstream error details are returned to the
+local caller after credential and proxy-secret redaction.
+
 To require an upstream proxy, set `OPENAI_PROXY_URL` in the Host process or in
 the user-level `~/.claude/settings.json` `env` object. The process environment
 wins when both are present:

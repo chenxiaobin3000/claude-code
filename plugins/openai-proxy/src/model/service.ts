@@ -8,7 +8,10 @@ import {
   type ModelRequest,
   type ModelTransport,
 } from './types.js'
-import { createOpenAIUpstreamFetch } from '../upstreamProxy.js'
+import {
+  createOpenAIUpstreamFetch,
+  redactOpenAIProxySecret,
+} from '../upstreamProxy.js'
 
 export const OPENAI_CODEX_BACKEND =
   'https://chatgpt.com/backend-api/codex' as const
@@ -153,11 +156,48 @@ async function readBoundedText(
   }
 }
 
-async function boundedError(response: Response): Promise<string> {
-  await readBoundedText(response.body, 64 * 1024, () => new Error()).catch(
-    () => undefined,
+function safeUpstreamErrorDetail(text: string): string | undefined {
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch {
+    return undefined
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined
+  }
+  const body = value as JsonObject
+  const nested =
+    body.error !== null &&
+    typeof body.error === 'object' &&
+    !Array.isArray(body.error)
+      ? (body.error as JsonObject)
+      : undefined
+  const message = [body.detail, body.message, nested?.message].find(
+    candidate => typeof candidate === 'string' && candidate.trim() !== '',
   )
-  return `OpenAI upstream rejected the request (${response.status}).`
+  if (typeof message !== 'string') return undefined
+  const code = typeof nested?.code === 'string' ? nested.code : undefined
+  const detail = redactOpenAIProxySecret(message)
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]')
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, '[REDACTED]')
+    .replace(
+      /\b[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/g,
+      '[REDACTED]',
+    )
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 512)
+  if (detail === '') return undefined
+  return code ? `${detail} (code: ${code.slice(0, 64)})` : detail
+}
+
+async function boundedError(response: Response): Promise<string> {
+  const prefix = `OpenAI upstream rejected the request (${response.status})`
+  const text = await readBoundedText(response.body, 64 * 1024, () => new Error())
+    .catch(() => undefined)
+  const detail = text === undefined ? undefined : safeUpstreamErrorDetail(text)
+  return detail ? `${prefix}: ${detail}` : `${prefix}.`
 }
 
 async function boundedResponseJson(response: Response): Promise<JsonObject> {

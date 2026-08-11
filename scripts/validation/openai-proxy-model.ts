@@ -80,7 +80,11 @@ assertEqual(
   'system instructions',
 )
 assertEqual(converted.model, 'gpt-fixture', 'model preserved')
-assertEqual(converted.max_output_tokens, 2048, 'output token field converted')
+assertEqual(
+  converted.max_output_tokens,
+  undefined,
+  'client output limit is not forwarded to subscription backend',
+)
 assertDeepEqual(
   converted.reasoning,
   { effort: 'high', summary: 'auto' },
@@ -111,6 +115,34 @@ try {
     (error as { code?: string }).code === 'unsupported_field'
 }
 assert(unsupportedRejected, 'unsupported Chat Completions fields fail closed')
+
+let invalidOutputLimitRejected = false
+try {
+  chatCompletionsToResponses({
+    ...chatRequest,
+    max_completion_tokens: 0,
+  })
+} catch (error) {
+  invalidOutputLimitRejected =
+    (error as { code?: string }).code === 'invalid_request'
+}
+assert(invalidOutputLimitRejected, 'invalid local output limit is rejected')
+
+let conflictingOutputLimitsRejected = false
+try {
+  chatCompletionsToResponses({
+    ...chatRequest,
+    max_completion_tokens: 2048,
+    max_tokens: 1024,
+  })
+} catch (error) {
+  conflictingOutputLimitsRejected =
+    (error as { code?: string }).code === 'invalid_request'
+}
+assert(
+  conflictingOutputLimitsRejected,
+  'conflicting local output limits are rejected',
+)
 
 const upstreamEvents = [
   {
@@ -261,6 +293,11 @@ try {
   >
   assertEqual(upstreamBody.stream, true, 'Responses stream requested')
   assert(Array.isArray(upstreamBody.input), 'Responses input emitted')
+  assertEqual(
+    upstreamBody.max_output_tokens,
+    undefined,
+    'unsupported Responses output limit omitted upstream',
+  )
   assert(
     !streamText.includes('fixture-access-token'),
     'token absent from local stream',
@@ -313,13 +350,45 @@ await retried.text()
 assertEqual(attempts, 2, '401 retried exactly once after refresh')
 assertEqual(refreshes, 1, '401 forced one token refresh')
 
+const rejectedService = new OpenAIProxyModelService({
+  auth,
+  baseUrl: 'https://fixture.invalid/backend-api/codex',
+  transport: async () =>
+    Response.json(
+      { detail: 'Unsupported parameter: max_output_tokens' },
+      { status: 400 },
+    ),
+})
+let rejectedStatus = 0
+let rejectedMessage = ''
+try {
+  await rejectedService.chatCompletions(
+    new Request('http://127.0.0.1/v1/chat/completions', {
+      method: 'POST',
+      body: JSON.stringify(chatRequest),
+    }),
+  )
+} catch (error) {
+  rejectedStatus = (error as { status?: number }).status ?? 0
+  rejectedMessage = error instanceof Error ? error.message : String(error)
+}
+assertEqual(rejectedStatus, 400, '400 status preserved')
+assert(
+  rejectedMessage.includes('Unsupported parameter: max_output_tokens'),
+  'safe upstream detail is preserved',
+)
+
 for (const expectedStatus of [403, 429]) {
   const rejectedService = new OpenAIProxyModelService({
     auth,
     baseUrl: 'https://fixture.invalid/backend-api/codex',
     transport: async () =>
       Response.json(
-        { error: { message: 'sensitive upstream detail' } },
+        {
+          error: {
+            message: 'authorization failed for Bearer fixture-access-token',
+          },
+        },
         {
           status: expectedStatus,
         },
@@ -344,8 +413,12 @@ for (const expectedStatus of [403, 429]) {
     `${expectedStatus} status preserved`,
   )
   assert(
-    !actualMessage.includes('sensitive upstream detail'),
-    `${expectedStatus} upstream body redacted`,
+    !actualMessage.includes('fixture-access-token'),
+    `${expectedStatus} upstream token redacted`,
+  )
+  assert(
+    actualMessage.includes('Bearer [REDACTED]'),
+    `${expectedStatus} safe upstream context preserved`,
   )
 }
 
