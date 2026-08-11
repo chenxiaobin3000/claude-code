@@ -1,7 +1,6 @@
-import type { WSContext } from 'hono/ws'
 import { createLogger } from '../logger.js'
 import type { RcsUpstreamClient } from '../rcs-upstream.js'
-import type { ClientState } from './types.js'
+import type { ClientState, WebSocketPeer } from './types.js'
 
 // Module-level state (set when server starts)
 let AGENT_COMMAND: string
@@ -12,7 +11,7 @@ let SERVER_HOST: string
 let AUTH_TOKEN: string | undefined
 let DEFAULT_PERMISSION_MODE: string | undefined
 
-export const clients = new Map<WSContext, ClientState>()
+export const clients = new Map<WebSocketPeer, ClientState>()
 
 // Module-scoped child loggers
 export const logWs = createLogger('ws')
@@ -101,22 +100,18 @@ export function setRcsUpstream(client: RcsUpstreamClient | null): void {
 }
 
 /**
- * Create a virtual WSContext for RCS relay messages.
+ * Create a virtual WebSocket peer for RCS relay messages.
  * Responses via send() go to RCS upstream (not a local WS).
  */
-export function createRelayWs(): WSContext {
+export function createRelayWs(): WebSocketPeer {
   return {
     get readyState() {
       return 1
     }, // always OPEN
     send: () => {}, // no-op — responses go through rcsUpstream.send()
     close: () => {},
-    raw: null,
-    isInner: false,
-    url: '',
-    origin: '',
-    protocol: '',
-  } as unknown as WSContext
+    isVirtual: true,
+  }
 }
 
 // Generate unique request ID

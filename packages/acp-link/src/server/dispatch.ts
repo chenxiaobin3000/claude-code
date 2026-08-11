@@ -1,4 +1,4 @@
-import type { WSContext } from 'hono/ws'
+import type { WebSocketPeer } from './types.js'
 import type { JsonRpc2ClientMessage } from '../ws-message.js'
 import { handlePermissionResponse } from './acp-client.js'
 import { send, sendJsonRpcError, sendJsonRpcRaw } from './client-send.js'
@@ -30,7 +30,7 @@ import {
 } from './types.js'
 
 export async function dispatchClientMessage(
-  ws: WSContext,
+  ws: WebSocketPeer,
   data: ProxyMessage,
 ): Promise<void> {
   switch (data.type) {
@@ -73,7 +73,7 @@ export async function dispatchClientMessage(
 // JSON-RPC method wrappers that accept `params: unknown` and forward to the
 // existing handlers with the decoded payload.
 async function handleJsonRpcNewSession(
-  ws: WSContext,
+  ws: WebSocketPeer,
   params: unknown,
 ): Promise<void> {
   const payload = optionalPayloadRecord(params, 'session/new')
@@ -88,7 +88,7 @@ async function handleJsonRpcNewSession(
 }
 
 async function handleJsonRpcPrompt(
-  ws: WSContext,
+  ws: WebSocketPeer,
   params: unknown,
 ): Promise<void> {
   const payload = payloadRecord(params, 'session/prompt')
@@ -99,7 +99,7 @@ async function handleJsonRpcPrompt(
 }
 
 async function handleJsonRpcListSessions(
-  ws: WSContext,
+  ws: WebSocketPeer,
   params: unknown,
 ): Promise<void> {
   const payload = optionalRecord(params)
@@ -110,7 +110,7 @@ async function handleJsonRpcListSessions(
 }
 
 async function handleJsonRpcLoadSession(
-  ws: WSContext,
+  ws: WebSocketPeer,
   params: unknown,
 ): Promise<void> {
   const payload = payloadRecord(params, 'session/load')
@@ -124,7 +124,7 @@ async function handleJsonRpcLoadSession(
 }
 
 async function handleJsonRpcResumeSession(
-  ws: WSContext,
+  ws: WebSocketPeer,
   params: unknown,
 ): Promise<void> {
   const payload = payloadRecord(params, 'session/resume')
@@ -138,7 +138,7 @@ async function handleJsonRpcResumeSession(
 }
 
 async function handleJsonRpcSetSessionModel(
-  ws: WSContext,
+  ws: WebSocketPeer,
   params: unknown,
 ): Promise<void> {
   const payload = payloadRecord(params, 'session/set_model')
@@ -154,7 +154,7 @@ async function handleJsonRpcSetSessionModel(
  * underlying SDK ClientSideConnection and surface the result.
  */
 export async function handleJsonRpcSetSessionMode(
-  ws: WSContext,
+  ws: WebSocketPeer,
   params: unknown,
 ): Promise<void> {
   const state = clients.get(ws)
@@ -168,7 +168,7 @@ export async function handleJsonRpcSetSessionMode(
 }
 
 export async function handleJsonRpcCloseSession(
-  ws: WSContext,
+  ws: WebSocketPeer,
   params: unknown,
 ): Promise<void> {
   const state = clients.get(ws)
@@ -188,7 +188,7 @@ export async function handleJsonRpcCloseSession(
  * also clear any pending permission request.
  */
 export async function handleJsonRpcCancelRequest(
-  ws: WSContext,
+  ws: WebSocketPeer,
   params: unknown,
 ): Promise<void> {
   const payload = optionalRecord(params)
@@ -205,7 +205,7 @@ export const JSONRPC_METHOD_HANDLERS: Record<
   string,
   {
     responseType: string
-    handle: (ws: WSContext, params: unknown) => Promise<void> | void
+    handle: (ws: WebSocketPeer, params: unknown) => Promise<void> | void
   }
 > = {
   initialize: { responseType: 'status', handle: handleConnect },
@@ -251,7 +251,7 @@ export const JSONRPC_METHOD_HANDLERS: Record<
  * specially (audit §8.5).
  */
 export async function dispatchJsonRpcMessage(
-  ws: WSContext,
+  ws: WebSocketPeer,
   msg: JsonRpc2ClientMessage,
 ): Promise<void> {
   const state = clients.get(ws)

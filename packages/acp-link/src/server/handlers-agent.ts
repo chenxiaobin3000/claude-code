@@ -1,18 +1,17 @@
-import { Writable, Readable } from 'node:stream'
-import { spawn } from 'node:child_process'
 import * as acp from '@agentclientprotocol/sdk'
-import type { WSContext } from 'hono/ws'
 import { send, sendJsonRpcError } from './client-send.js'
 import { cancelPendingPermissions, createClient } from './acp-client.js'
 import { buildAgentEnv } from './permission-mode.js'
 import { clients, getAgentConfig, logAgent } from './runtime-state.js'
 import {
   JSONRPC_INTERNAL_ERROR,
+  type AgentSubprocess,
   type AgentCapabilities,
   type ClientState,
+  type WebSocketPeer,
 } from './types.js'
 
-export async function handleConnect(ws: WSContext): Promise<void> {
+export async function handleConnect(ws: WebSocketPeer): Promise<void> {
   const state = clients.get(ws)
   if (!state) return
 
@@ -52,16 +51,18 @@ export async function handleConnect(ws: WSContext): Promise<void> {
   try {
     logAgent.info({ command: AGENT_COMMAND, args: AGENT_ARGS }, 'spawning')
 
-    const agentProcess = spawn(AGENT_COMMAND, AGENT_ARGS, {
+    const agentProcess = Bun.spawn([AGENT_COMMAND, ...AGENT_ARGS], {
       cwd: AGENT_CWD,
-      stdio: ['pipe', 'pipe', 'inherit'],
+      stdin: 'pipe',
+      stdout: 'pipe',
+      stderr: 'inherit',
       env: buildAgentEnv(),
-    })
+    }) as unknown as AgentSubprocess
 
     state.process = agentProcess
 
     // Clean up state when agent process exits unexpectedly
-    agentProcess.on('exit', code => {
+    void agentProcess.exited.then(code => {
       logAgent.info({ exitCode: code }, 'agent process exited')
       // Only clear if this is still the current process
       if (state.process === agentProcess) {
@@ -71,12 +72,19 @@ export async function handleConnect(ws: WSContext): Promise<void> {
       }
     })
 
-    const input = Writable.toWeb(
-      agentProcess.stdin!,
-    ) as unknown as WritableStream<Uint8Array>
-    const output = Readable.toWeb(
-      agentProcess.stdout!,
-    ) as unknown as ReadableStream<Uint8Array>
+    const input = new WritableStream<Uint8Array>({
+      async write(chunk) {
+        agentProcess.stdin.write(chunk)
+        await agentProcess.stdin.flush()
+      },
+      close() {
+        agentProcess.stdin.end()
+      },
+      abort() {
+        agentProcess.stdin.end()
+      },
+    })
+    const output = agentProcess.stdout
 
     const stream = acp.ndJsonStream(input, output)
     const connection = new acp.ClientSideConnection(
@@ -143,7 +151,7 @@ export async function handleConnect(ws: WSContext): Promise<void> {
   }
 }
 
-export function handleDisconnect(ws: WSContext): void {
+export function handleDisconnect(ws: WebSocketPeer): void {
   const state = clients.get(ws)
   if (!state) return
 

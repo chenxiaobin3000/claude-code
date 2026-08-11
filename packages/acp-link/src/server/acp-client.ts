@@ -1,4 +1,3 @@
-import type { WSContext } from 'hono/ws'
 import * as acp from '@agentclientprotocol/sdk'
 import { send } from './client-send.js'
 import {
@@ -8,11 +7,11 @@ import {
   logWs,
 } from './runtime-state.js'
 import { clients } from './runtime-state.js'
-import type { ClientState } from './types.js'
+import type { ClientState, WebSocketPeer } from './types.js'
 
 // Create a Client implementation that forwards events to WebSocket
 export function createClient(
-  ws: WSContext,
+  ws: WebSocketPeer,
   clientState: ClientState,
 ): acp.Client {
   return {
@@ -63,7 +62,7 @@ export function createClient(
 
 // Handle permission response from client
 export function handlePermissionResponse(
-  ws: WSContext,
+  ws: WebSocketPeer,
   payload: {
     requestId: string
     outcome:

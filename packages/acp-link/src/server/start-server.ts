@@ -1,11 +1,7 @@
-import { createServer as createHttpsServer } from 'node:https'
-import { Hono } from 'hono'
-import { serve } from '@hono/node-server'
-import { createNodeWebSocket } from '@hono/node-ws'
-import type { WebSocket as RawWebSocket } from 'ws'
 import { getOrCreateCertificate, getLanIPs } from '../cert.js'
 import { RcsUpstreamClient } from '../rcs-upstream.js'
 import {
+  MAX_CLIENT_WS_PAYLOAD_BYTES,
   WsPayloadTooLargeError,
   decodeJsonWsMessage,
   isJsonRpc2Message,
@@ -32,12 +28,55 @@ import {
   JSONRPC_PARSE_ERROR,
   createClientState,
   type ServerConfig,
+  type WebSocketPeer,
 } from './types.js'
+
+type SocketData = {
+  authorized: boolean
+}
+
+function selectWebSocketProtocol(header: string | null): string | undefined {
+  return header
+    ?.split(',')
+    .map(value => value.trim())
+    .find(Boolean)
+}
+
+async function handleSocketMessage(
+  ws: WebSocketPeer,
+  message: unknown,
+): Promise<void> {
+  try {
+    const decoded = decodeJsonWsMessage(message)
+    if (isJsonRpc2Message(decoded)) {
+      logWs.debug({ method: decoded.method }, 'received jsonrpc')
+      await dispatchJsonRpcMessage(ws, decoded)
+    } else {
+      const data = decodeClientMessage(decoded)
+      logWs.debug({ type: data.type }, 'received')
+      await dispatchClientMessage(ws, data)
+    }
+  } catch (error) {
+    if (error instanceof WsPayloadTooLargeError) {
+      logWs.warn({ error: error.message }, 'message too large')
+      ws.close(1009, 'message too large')
+      return
+    }
+    logWs.error({ error: (error as Error).message }, 'message error')
+    const state = clients.get(ws)
+    sendJsonRpcError(
+      ws,
+      state,
+      state?.pendingJsonRpc?.id ?? null,
+      JSONRPC_PARSE_ERROR,
+      `Error: ${(error as Error).message}`,
+    )
+  }
+}
 
 export async function startServer(config: ServerConfig): Promise<void> {
   const { port, host, command, args, cwd, token, https } = config
 
-  // Set module-level config
   setServerConfig({
     command,
     args,
@@ -48,7 +87,6 @@ export async function startServer(config: ServerConfig): Promise<void> {
     permissionMode: config.permissionMode || process.env.ACP_PERMISSION_MODE,
   })
 
-  // Initialize RCS upstream client if configured
   const rcsUrl = process.env.ACP_RCS_URL
   const rcsToken = process.env.ACP_RCS_TOKEN
   const rcsGroup = config.group || process.env.ACP_RCS_GROUP
@@ -57,7 +95,7 @@ export async function startServer(config: ServerConfig): Promise<void> {
       `Invalid ACP_RCS_GROUP "${rcsGroup}": only letters, digits, hyphens, and underscores are allowed`,
     )
   }
-  let rcsUpstream = null
+  let rcsUpstream: RcsUpstreamClient | null = null
   if (rcsUrl) {
     rcsUpstream = new RcsUpstreamClient({
       rcsUrl,
@@ -68,18 +106,14 @@ export async function startServer(config: ServerConfig): Promise<void> {
     })
 
     const relayWs = createRelayWs()
-    const relayState = createClientState()
-    clients.set(relayWs, relayState)
-
-    rcsUpstream.setMessageHandler(async msg => {
+    clients.set(relayWs, createClientState())
+    rcsUpstream.setMessageHandler(async message => {
       try {
-        // The RCS relay forwards messages from the Web UI. Accept both
-        // JSON-RPC 2.0 (audit §8.12) and the legacy `{type, payload}` envelope.
-        if (isJsonRpc2Message(msg)) {
-          logRelay.debug({ method: msg.method }, 'processing jsonrpc')
-          await dispatchJsonRpcMessage(relayWs, msg)
+        if (isJsonRpc2Message(message)) {
+          logRelay.debug({ method: message.method }, 'processing jsonrpc')
+          await dispatchJsonRpcMessage(relayWs, message)
         } else {
-          const data = decodeClientMessage(msg)
+          const data = decodeClientMessage(message)
           logRelay.debug({ type: data.type }, 'processing')
           await dispatchClientMessage(relayWs, data)
         }
@@ -87,172 +121,117 @@ export async function startServer(config: ServerConfig): Promise<void> {
         logRelay.error({ error: (error as Error).message }, 'handler error')
       }
     })
-
-    rcsUpstream.connect().catch(err => {
+    void rcsUpstream.connect().catch(error => {
       logRelay.warn(
-        { error: (err as Error).message },
+        { error: (error as Error).message },
         'initial connection failed',
       )
     })
     logRelay.info({ url: rcsUrl }, 'upstream enabled')
   }
-  // Publish rcsUpstream back to runtime-state so send() can forward.
   setRcsUpstream(rcsUpstream)
 
-  const app = new Hono()
-  const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app })
+  const tls = https ? await getOrCreateCertificate() : undefined
+  const server = Bun.serve<SocketData>({
+    hostname: host,
+    port,
+    ...(tls ? { tls } : {}),
+    fetch(request, bunServer) {
+      const url = new URL(request.url)
+      if (url.pathname === '/health') {
+        return Response.json({ status: 'ok' })
+      }
+      if (url.pathname !== '/ws') {
+        return Response.json({ error: 'not found' }, { status: 404 })
+      }
 
-  // Health check endpoint
-  app.get('/health', c => {
-    return c.json({ status: 'ok' })
+      const expectedToken = getAuthToken()
+      const protocolHeader = request.headers.get('Sec-WebSocket-Protocol')
+      const providedToken = extractWebSocketAuthToken({
+        authorization: request.headers.get('Authorization') ?? undefined,
+        protocol: protocolHeader ?? undefined,
+      })
+      const authorized =
+        expectedToken === undefined ||
+        authTokensEqual(providedToken, expectedToken)
+      const selectedProtocol = selectWebSocketProtocol(protocolHeader)
+      const upgraded = bunServer.upgrade(request, {
+        data: { authorized },
+        ...(selectedProtocol
+          ? { headers: { 'Sec-WebSocket-Protocol': selectedProtocol } }
+          : {}),
+      })
+      return upgraded
+        ? undefined
+        : Response.json({ error: 'websocket upgrade failed' }, { status: 400 })
+    },
+    websocket: {
+      maxPayloadLength: MAX_CLIENT_WS_PAYLOAD_BYTES,
+      open(ws) {
+        if (!ws.data.authorized) {
+          logWs.warn('connection rejected: invalid token')
+          ws.close(4001, 'Unauthorized: Invalid token')
+          return
+        }
+        logWs.info('client connected')
+        clients.set(ws, createClientState())
+      },
+      message(ws, message) {
+        if (!ws.data.authorized) return
+        void handleSocketMessage(ws, message)
+      },
+      pong(ws) {
+        const state = clients.get(ws)
+        if (state) state.isAlive = true
+      },
+      close(ws) {
+        if (!clients.has(ws)) return
+        logWs.info('client disconnected')
+        const state = clients.get(ws)
+        if (state) cancelPendingPermissions(state)
+        handleDisconnect(ws)
+        clients.delete(ws)
+      },
+    },
   })
 
-  // WebSocket endpoint with token validation
-  app.get(
-    '/ws',
-    upgradeWebSocket(c => {
-      const AUTH_TOKEN = getAuthToken()
-      if (AUTH_TOKEN) {
-        const providedToken = extractWebSocketAuthToken({
-          authorization: c.req.header('Authorization'),
-          protocol: c.req.header('Sec-WebSocket-Protocol'),
-        })
-        if (!authTokensEqual(providedToken, AUTH_TOKEN)) {
-          logWs.warn('connection rejected: invalid token')
-          return {
-            onOpen(_event, ws) {
-              ws.close(4001, 'Unauthorized: Invalid token')
-            },
-            onMessage() {},
-            onClose() {},
-          }
-        }
-      }
-
-      return {
-        onOpen(_event, ws) {
-          logWs.info('client connected')
-          const state = createClientState()
-          clients.set(ws, state)
-
-          const rawWs = ws.raw as RawWebSocket
-          rawWs.on('pong', () => {
-            state.isAlive = true
-          })
-        },
-        async onMessage(event, ws) {
-          try {
-            // Decode the raw frame once. JSON-RPC 2.0 messages are routed by
-            // method name (audit §8.1, §8.4, §8.5); legacy `{type, payload}`
-            // messages keep the existing dispatch path for backwards compat.
-            const decoded = decodeJsonWsMessage(event.data)
-            if (isJsonRpc2Message(decoded)) {
-              logWs.debug({ method: decoded.method }, 'received jsonrpc')
-              await dispatchJsonRpcMessage(ws, decoded)
-            } else {
-              const data = decodeClientMessage(decoded)
-              logWs.debug({ type: data.type }, 'received')
-              await dispatchClientMessage(ws, data)
-            }
-          } catch (error) {
-            if (error instanceof WsPayloadTooLargeError) {
-              logWs.warn({ error: error.message }, 'message too large')
-              ws.close(1009, 'message too large')
-              return
-            }
-            logWs.error({ error: (error as Error).message }, 'message error')
-            const state = clients.get(ws)
-            sendJsonRpcError(
-              ws,
-              state,
-              state?.pendingJsonRpc?.id ?? null,
-              JSONRPC_PARSE_ERROR,
-              `Error: ${(error as Error).message}`,
-            )
-          }
-        },
-        onClose(_event, ws) {
-          logWs.info('client disconnected')
-          const state = clients.get(ws)
-          if (state) {
-            cancelPendingPermissions(state)
-          }
-          handleDisconnect(ws)
-          clients.delete(ws)
-        },
-      }
-    }),
-  )
-
-  // Create server with optional HTTPS
-  let server
-  if (https) {
-    const tlsOptions = await getOrCreateCertificate()
-    server = serve({
-      fetch: app.fetch,
-      port,
-      hostname: host,
-      createServer: createHttpsServer,
-      serverOptions: tlsOptions,
-    })
-  } else {
-    server = serve({ fetch: app.fetch, port, hostname: host })
-  }
-  injectWebSocket(server)
-
-  // Heartbeat: periodically ping all connected clients
-  setInterval(() => {
+  const heartbeat = setInterval(() => {
     for (const [ws, state] of clients) {
-      // Skip virtual relay connections (no raw socket, always alive)
-      if (!ws.raw && state.isAlive) continue
-      if (!ws.raw) {
-        // Connection already closed, clean up
+      if (ws.isVirtual) continue
+      if (!ws.ping || !ws.terminate) {
         clients.delete(ws)
         continue
       }
       if (!state.isAlive) {
         logWs.info('heartbeat timeout, terminating')
-        ;(ws.raw as RawWebSocket).terminate()
+        ws.terminate()
         continue
       }
       state.isAlive = false
-      ;(ws.raw as RawWebSocket).ping()
+      ws.ping()
     }
   }, HEARTBEAT_INTERVAL_MS)
 
-  // Protocol strings based on HTTPS mode
   const wsProtocol = https ? 'wss' : 'ws'
-
-  // Get actual LAN IP when binding to 0.0.0.0
   let displayHost = host
   if (host === '0.0.0.0') {
-    const lanIPs = getLanIPs()
-    displayHost = lanIPs[0] || 'localhost'
+    displayHost = getLanIPs()[0] || 'localhost'
   }
+  const actualPort = server.port
+  const localWsUrl = `${wsProtocol}://localhost:${actualPort}/ws`
+  const networkWsUrl = `${wsProtocol}://${displayHost}:${actualPort}/ws`
 
-  // Build URLs
-  const localWsUrl = `${wsProtocol}://localhost:${port}/ws`
-  const networkWsUrl = `${wsProtocol}://${displayHost}:${port}/ws`
-
-  // Print startup banner
   console.log()
   console.log(`  🚀 ACP Proxy Server${https ? ' (HTTPS)' : ''}`)
   console.log()
   console.log(`  Connection:`)
-  if (host === '0.0.0.0') {
-    console.log(`    URL:   ${networkWsUrl}`)
-  } else {
-    console.log(`    URL:   ${localWsUrl}`)
-  }
-  if (token) {
-    console.log(`    Token: configured`)
-  }
+  console.log(`    URL:   ${host === '0.0.0.0' ? networkWsUrl : localWsUrl}`)
+  if (token) console.log(`    Token: configured`)
   console.log()
   if (!token) {
     console.log(`  ⚠️  Authentication disabled (--no-auth)`)
     console.log()
   }
-
   const agentDisplay =
     args.length > 0 ? `${command} ${args.join(' ')}` : command
   console.log(`  📦 Agent: ${agentDisplay}`)
@@ -263,10 +242,10 @@ export async function startServer(config: ServerConfig): Promise<void> {
 
   logServer.info(
     {
-      port,
+      port: actualPort,
       host,
       https,
-      wsEndpoint: `${wsProtocol}://${displayHost}:${port}/ws`,
+      wsEndpoint: `${wsProtocol}://${displayHost}:${actualPort}/ws`,
       agent: command,
       agentArgs: args,
       cwd,
@@ -275,17 +254,25 @@ export async function startServer(config: ServerConfig): Promise<void> {
     'started',
   )
 
-  // Graceful shutdown — close RCS upstream
+  let shuttingDown = false
   const shutdown = async () => {
-    const upstream = getRcsUpstream()
-    if (upstream) {
-      await upstream.close()
+    if (shuttingDown) return
+    shuttingDown = true
+    clearInterval(heartbeat)
+    for (const ws of clients.keys()) {
+      if (!ws.isVirtual) {
+        handleDisconnect(ws)
+        ws.close(1001, 'server shutdown')
+      }
     }
+    clients.clear()
+    const upstream = getRcsUpstream()
+    if (upstream) await upstream.close()
+    await server.stop(true)
     process.exit(0)
   }
   process.on('SIGINT', shutdown)
   process.on('SIGTERM', shutdown)
 
-  // Keep the server running
   await new Promise(() => {})
 }

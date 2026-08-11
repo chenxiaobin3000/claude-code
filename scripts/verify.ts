@@ -127,6 +127,8 @@ const validationScripts = [
   'scripts/validation/self-update-boundary.ts',
   'scripts/validation/dependency-boundary.ts',
   'scripts/validation/node-runtime-boundary.ts',
+  'scripts/validation/acp-link-runtime.ts',
+  'scripts/validation/workflow-engine-runtime.ts',
   'scripts/validation/feature-flags.ts',
   'scripts/validation/utility-modules-boundary.ts',
   'scripts/validation/ripgrep-runtime.ts',

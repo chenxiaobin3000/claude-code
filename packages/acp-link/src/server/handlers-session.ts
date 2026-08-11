@@ -1,5 +1,4 @@
 import * as acp from '@agentclientprotocol/sdk'
-import type { WSContext } from 'hono/ws'
 import { cancelPendingPermissions } from './acp-client.js'
 import { send, sendJsonRpcError } from './client-send.js'
 import { resolveNewSessionPermissionMode } from './permission-mode.js'
@@ -19,9 +18,10 @@ import {
   JSONRPC_METHOD_NOT_FOUND,
   type ContentBlock,
 } from './types.js'
+import type { WebSocketPeer } from './types.js'
 
 export async function handleNewSession(
-  ws: WSContext,
+  ws: WebSocketPeer,
   params: { cwd?: string; permissionMode?: string },
 ): Promise<void> {
   const state = clients.get(ws)
@@ -105,7 +105,7 @@ export async function handleNewSession(
 // ============================================================================
 
 export async function handleListSessions(
-  ws: WSContext,
+  ws: WebSocketPeer,
   params: { cwd?: string; cursor?: string },
 ): Promise<void> {
   const state = clients.get(ws)
@@ -181,7 +181,7 @@ export async function handleListSessions(
 }
 
 export async function handleLoadSession(
-  ws: WSContext,
+  ws: WebSocketPeer,
   params: { sessionId: string; cwd?: string },
 ): Promise<void> {
   const state = clients.get(ws)
@@ -249,7 +249,7 @@ export async function handleLoadSession(
 }
 
 export async function handleResumeSession(
-  ws: WSContext,
+  ws: WebSocketPeer,
   params: { sessionId: string; cwd?: string },
 ): Promise<void> {
   const state = clients.get(ws)
@@ -317,7 +317,7 @@ export async function handleResumeSession(
 
 // Reference: Zed's AcpThread.send() forwards Vec<acp::ContentBlock> to agent
 export async function handlePrompt(
-  ws: WSContext,
+  ws: WebSocketPeer,
   params: { content: ContentBlock[] },
 ): Promise<void> {
   const state = clients.get(ws)
@@ -364,7 +364,7 @@ export async function handlePrompt(
 }
 
 // Handle cancel request from client
-export async function handleCancel(ws: WSContext): Promise<void> {
+export async function handleCancel(ws: WebSocketPeer): Promise<void> {
   const state = clients.get(ws)
   if (!state?.connection || !state.sessionId) {
     logWs.warn('cancel requested but no active session')
@@ -384,7 +384,7 @@ export async function handleCancel(ws: WSContext): Promise<void> {
 
 // Reference: Zed's AgentModelSelector.select_model() calls connection.set_session_model()
 export async function handleSetSessionModel(
-  ws: WSContext,
+  ws: WebSocketPeer,
   params: { modelId: string },
 ): Promise<void> {
   const state = clients.get(ws)

@@ -12,6 +12,7 @@ type PackageManifest = {
   bin?: Record<string, string>
   dependencies?: Record<string, string>
   engines?: Record<string, string>
+  packageManager?: string
   scripts?: Record<string, string>
 }
 
@@ -71,10 +72,7 @@ assertDeepEqual(
 )
 assertDeepEqual(
   nodeEngines.sort(),
-  [
-    'packages/acp-link/package.json#engines.node=>=18',
-    'packages/workflow-engine/package.json#engines.node=>=20',
-  ],
+  [],
   'Node engine contract inventory changed',
 )
 assertDeepEqual(
@@ -85,9 +83,14 @@ assertDeepEqual(
 
 const codePaths = (
   await Promise.all(
-    ['*.ts', '*.js', 'scripts/**/*.{ts,js,mjs,cjs}', 'src/**/*.{ts,tsx,js,mjs,cjs}', 'packages/**/*.{ts,tsx,js,mjs,cjs}', 'plugins/**/*.{ts,tsx,js,mjs,cjs}'].map(
-      matchingPaths,
-    ),
+    [
+      '*.ts',
+      '*.js',
+      'scripts/**/*.{ts,js,mjs,cjs}',
+      'src/**/*.{ts,tsx,js,mjs,cjs}',
+      'packages/**/*.{ts,tsx,js,mjs,cjs}',
+      'plugins/**/*.{ts,tsx,js,mjs,cjs}',
+    ].map(matchingPaths),
   )
 )
   .flat()
@@ -109,11 +112,7 @@ for (const path of codePaths) {
   }
 }
 
-assertDeepEqual(
-  nodeShebangs,
-  ['packages/acp-link/src/cli/bin.ts'],
-  'Node shebang inventory changed',
-)
+assertDeepEqual(nodeShebangs, [], 'Node shebang inventory changed')
 assertDeepEqual(
   generatedNodeShebangs,
   [],
@@ -156,8 +155,24 @@ assertDeepEqual(
   Object.keys(acpPackage.dependencies ?? {})
     .filter(name => name.startsWith('@hono/node-'))
     .sort(),
-  ['@hono/node-server', '@hono/node-ws'],
+  [],
   'acp-link Node server adapter inventory changed',
+)
+assert(
+  acpPackage.engines?.bun === '>=1.3.0' &&
+    acpPackage.engines?.node === undefined &&
+    acpPackage.packageManager === 'bun@1.3.14',
+  'acp-link must retain its Bun-only runtime and package-manager contract',
+)
+
+const workflowPackage = JSON.parse(
+  await source('packages/workflow-engine/package.json'),
+) as PackageManifest
+assert(
+  workflowPackage.engines?.bun === '>=1.3.0' &&
+    workflowPackage.engines?.node === undefined &&
+    workflowPackage.packageManager === 'bun@1.3.14',
+  'workflow-engine must retain its Bun-only runtime and package-manager contract',
 )
 
 console.log(

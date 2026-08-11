@@ -2,6 +2,9 @@
 
 ACP proxy server that bridges WebSocket clients to ACP (Agent Client Protocol) agents.
 
+The service runs on Bun: Proxy HTTP/HTTPS, WebSocket transport, Manager, and
+ACP subprocess streams do not require an external Node.js runtime.
+
 > Source code adapted from [chrome-acp](https://github.com/Areo-Joe/chrome-acp).
 
 ## Installation
@@ -73,7 +76,7 @@ ARGUMENTS
 ## How It Works
 
 1. Listens for WebSocket connections from clients
-2. When a "connect" message is received, spawns the configured ACP agent as a subprocess
+2. When a "connect" message is received, spawns the configured ACP agent with `Bun.spawn`
 3. Bridges messages between the WebSocket (client) and stdin/stdout (agent via ACP protocol)
 4. Supports session management: create, load, resume, list sessions
 5. Handles permission approval flow and heartbeat keepalive

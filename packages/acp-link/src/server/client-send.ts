@@ -1,6 +1,5 @@
-import type { WSContext } from 'hono/ws'
 import { clients, getRcsUpstream } from './runtime-state.js'
-import type { ClientState } from './types.js'
+import type { ClientState, WebSocketPeer } from './types.js'
 
 // Maps legacy notification type strings to their JSON-RPC method names so
 // agent→client notifications are also emitted as JSON-RPC notifications for
@@ -18,7 +17,7 @@ export const LEGACY_NOTIFICATION_TO_JSONRPC: Record<string, string> = {
 // request's expected response type (audit §8.2). Agent→client notifications
 // (`session_update`, `permission_request`) are emitted as JSON-RPC
 // notifications without an id.
-export function send(ws: WSContext, type: string, payload?: unknown): void {
+export function send(ws: WebSocketPeer, type: string, payload?: unknown): void {
   if (ws.readyState === 1) {
     // WebSocket.OPEN
     ws.send(JSON.stringify({ type, payload }))
@@ -57,7 +56,7 @@ export function send(ws: WSContext, type: string, payload?: unknown): void {
 }
 
 // Serialize a JSON-RPC 2.0 message and send it to a connected WS client.
-export function sendJsonRpcRaw(ws: WSContext, message: object): void {
+export function sendJsonRpcRaw(ws: WebSocketPeer, message: object): void {
   if (ws.readyState === 1) {
     ws.send(JSON.stringify(message))
   }
@@ -69,7 +68,7 @@ export function sendJsonRpcRaw(ws: WSContext, message: object): void {
  * backwards compatibility.
  */
 export function sendJsonRpcError(
-  ws: WSContext,
+  ws: WebSocketPeer,
   state: ClientState | undefined,
   id: string | number | null,
   code: number,

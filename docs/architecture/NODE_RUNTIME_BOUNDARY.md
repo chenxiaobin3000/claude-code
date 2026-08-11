@@ -17,12 +17,14 @@
 | 范围 | 当前入口 | 原因 | 后续阶段 |
 | --- | --- | --- | --- |
 | CI | Linux、Windows Job 使用 `actions/setup-node` 固定 Node 22 | 历史 CI 仍显式供应 Node，项目验证已不再直接启动它 | 第七阶段删除 |
-| `workflow-engine` | `engines.node >=20` | 对外包运行契约仍声明 Node；实际构建已由 Bun 驱动 | 第四/第六阶段改为 Bun |
-| `acp-link` | `engines.node >=18`、Node Shebang、`@hono/node-server`、`@hono/node-ws` | HTTP/WebSocket/Manager 是真实 Node Server 实现 | 第五/第六阶段迁移到 Bun 原生服务 |
 
 第三阶段已经删除根 Vite/Rollup Node Bundle、`dist/cli-node.js`、Node Shebang及其专用补丁。根包所有 `bin` 均指向 `dist/cli-bun.js`，`prepublishOnly` 使用 Bun bundle 并执行完整性检查，`packageManager` 固定声明 Bun；兼容 npm registry 只代表分发渠道，不再提供 Node 启动契约。生产 `build:production`、`claude.exe` 和独立 Plugin Host 继续由 Bun standalone 生成，目标机器不依赖 Node.js。
 
 第二阶段已经消除根命令中的直接 Node/npm-family 调用：依赖安装改为 `bun scripts/postinstall.cjs`，脚本 Shebang 同步改为 Bun；文档预览改为 `bunx --bun mintlify dev`，并已通过真实 CLI 启动检查。Mintlify 仍是按需下载的非核心文档工具，不进入项目依赖或生产产物。
+
+第四阶段已经把 `@claude-code/workflow-engine` 的对外运行契约改为 Bun，并用源码、TypeScript 编译产物和 Bun standalone 三形态 Fixture 验证 Workflow 的 Agent Adapter、Journal、恢复和进度事件一致。源码继续使用 Bun 已兼容的 `node:fs`、`node:path`、`node:crypto` API，不会启动外部 Node.js。
+
+第五阶段已经把 `acp-link` 的 HTTP/HTTPS、WebSocket、Manager 和 ACP 子进程桥接迁移到 Bun 原生实现，删除 Node Server Adapter、Node Shebang 和 Node engine 契约。独立运行时 Fixture 实际验证鉴权、消息上限、JSON-RPC、ACP 会话与权限回传、Manager 和 TLS；RCS 与多实例管理语义保持不变。
 
 ## 非 Node 运行时依赖
 
@@ -36,6 +38,6 @@
 
 ## 防回归
 
-`scripts/validation/node-runtime-boundary.ts` 会枚举所有 workspace `package.json` 中直接启动 Node/npm-family 的脚本、`engines.node` 和 Node CLI `bin`，并检查源码 Shebang、生成的 Node 入口、直接 Node 子进程、CI Node 安装、Bun 发布入口和 `acp-link` Node Server Adapter。当前清单使用精确允许集合：新增、删除或迁移任一项时验证都会失败，要求实现与本文件同步更新。
+`scripts/validation/node-runtime-boundary.ts` 会枚举所有 workspace `package.json` 中直接启动 Node/npm-family 的脚本、`engines.node` 和 Node CLI `bin`，并检查源码 Shebang、生成的 Node 入口、直接 Node 子进程、CI Node 安装、Bun 发布入口和 Bun-only workspace 契约。当前清单使用精确允许集合：新增、删除或迁移任一项时验证都会失败，要求实现与本文件同步更新。
 
 后续阶段完成一项迁移时，应同时缩小验证允许集合；P0 完成时所有外部运行时和 Node 分发记录必须归零。

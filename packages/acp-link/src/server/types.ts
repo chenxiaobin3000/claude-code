@@ -1,5 +1,23 @@
-import type { ChildProcess } from 'node:child_process'
 import * as acp from '@agentclientprotocol/sdk'
+
+export interface WebSocketPeer {
+  readonly readyState: number
+  readonly isVirtual?: boolean
+  send(data: string): unknown
+  close(code?: number, reason?: string): void
+  terminate?(): void
+  ping?(): unknown
+}
+
+export interface AgentSubprocess {
+  readonly pid: number
+  readonly stdin: Bun.FileSink
+  readonly stdout: ReadableStream<Uint8Array>
+  readonly exited: Promise<number>
+  readonly killed: boolean
+  readonly exitCode: number | null
+  kill(signal?: number | NodeJS.Signals): void
+}
 
 // JSON-RPC 2.0 reserved error codes (spec §5.1)
 export const JSONRPC_PARSE_ERROR = -32700
@@ -73,7 +91,7 @@ export interface AgentCapabilities {
 
 // Track connected clients and their agent connections
 export interface ClientState {
-  process: ChildProcess | null
+  process: AgentSubprocess | null
   connection: acp.ClientSideConnection | null
   sessionId: string | null
   pendingPermissions: Map<string, PendingPermission>
