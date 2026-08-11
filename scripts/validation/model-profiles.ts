@@ -308,35 +308,77 @@ const namedToolChoice = {
   type: 'function' as const,
   function: { name: 'Fixture' },
 }
-for (const [label, profile, shouldThrow] of [
-  ['Qwen named tool choice', getModelProfile('Qwen3.5-9B-Q6_K'), true],
-  ['OpenAI named tool choice', openAIReasoningProfile, false],
+const fixtureTool = {
+  type: 'function' as const,
+  function: { name: 'Fixture', parameters: { type: 'object' } },
+}
+const stringsOnlyNamedRequest = buildOpenAIRequestBodyForProfile(
+  {
+    ...baseRequest,
+    model: 'fixture-tool-choice',
+    endpoint: 'http://127.0.0.1:8080/v1',
+    querySource: 'validation',
+    tools: [fixtureTool],
+    toolChoice: namedToolChoice,
+  },
+  getModelProfile('Qwen3.5-9B-Q6_K'),
+) as Record<string, unknown>
+assertEqual(
+  stringsOnlyNamedRequest.tool_choice,
+  'required',
+  'strings-only singleton named tool choice',
+)
+
+const standardNamedRequest = buildOpenAIRequestBodyForProfile(
+  {
+    ...baseRequest,
+    model: 'fixture-tool-choice',
+    tools: [fixtureTool],
+    toolChoice: namedToolChoice,
+  },
+  openAIReasoningProfile,
+) as Record<string, unknown>
+assertDeepEqual(
+  standardNamedRequest.tool_choice,
+  namedToolChoice,
+  'OpenAI named tool choice is preserved',
+)
+
+for (const [label, tools] of [
+  [
+    'mismatched singleton',
+    [
+      {
+        type: 'function' as const,
+        function: { name: 'Other', parameters: { type: 'object' } },
+      },
+    ],
+  ],
+  [
+    'multiple tools',
+    [
+      fixtureTool,
+      {
+        type: 'function' as const,
+        function: { name: 'Other', parameters: { type: 'object' } },
+      },
+    ],
+  ],
 ] as const) {
   try {
-    const request = buildOpenAIRequestBodyForProfile(
+    buildOpenAIRequestBodyForProfile(
       {
         ...baseRequest,
         model: 'fixture-tool-choice',
         endpoint: 'http://127.0.0.1:8080/v1',
         querySource: 'validation',
-        tools: [
-          {
-            type: 'function',
-            function: { name: 'Fixture', parameters: { type: 'object' } },
-          },
-        ],
+        tools: [...tools],
         toolChoice: namedToolChoice,
       },
-      profile,
-    ) as Record<string, unknown>
-    if (shouldThrow) throw new Error(`${label} unexpectedly succeeded`)
-    assertDeepEqual(
-      request.tool_choice,
-      namedToolChoice,
-      `${label} is preserved`,
+      getModelProfile('Qwen3.5-9B-Q6_K'),
     )
+    throw new Error(`${label} named tool choice unexpectedly succeeded`)
   } catch (error) {
-    if (!shouldThrow) throw error
     const message = error instanceof Error ? error.message : String(error)
     if (
       !message.includes('only supports string tool_choice') ||

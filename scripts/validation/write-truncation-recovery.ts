@@ -34,6 +34,10 @@ import { prepareTools } from '../../src/services/model/prepareRequest.js'
 import { writeTextContent } from '../../src/utils/file.js'
 import { FileStateCache } from '../../src/utils/fileStateCache.js'
 import {
+  createEffectiveModelProfile,
+  setEffectiveModelProfiles,
+} from '../../src/utils/model/modelProfiles.js'
+import {
   NodeFsOperations,
   setFsImplementation,
   setOriginalFsImplementation,
@@ -43,6 +47,30 @@ import { assert, assertEqual, collectAsync } from './assertions.js'
 ;(globalThis as typeof globalThis & { MACRO: { VERSION: string } }).MACRO = {
   VERSION: 'write-truncation-recovery-validation',
 }
+
+const RECOVERY_MODEL = 'write-recovery-fixture'
+setEffectiveModelProfiles(
+  new Map([
+    [
+      RECOVERY_MODEL,
+      createEffectiveModelProfile(RECOVERY_MODEL, {
+        contextWindowTokens: 65_536,
+        defaultOutputTokens: 4_096,
+        maxOutputTokens: 4_096,
+        reasoning: { type: 'none' },
+        chatCompletions: {
+          outputTokenField: 'max_tokens',
+          toolChoice: 'strings_only',
+          parallelToolCalls: false,
+          strictToolSchemas: false,
+          temperature: 'supported',
+        },
+        promptCache: { type: 'none' },
+        pricing: null,
+      }),
+    ],
+  ]),
+)
 
 async function* truncatedWriteEvents(): AsyncGenerator<BetaRawMessageStreamEvent> {
   yield {
@@ -132,7 +160,7 @@ assertEqual(
   'partial JSON string extraction lost complete escapes',
 )
 
-const salvagedRecovery = createWriteRecovery('unregistered-local-qwen')
+const salvagedRecovery = createWriteRecovery(RECOVERY_MODEL)
 const salvagedOriginal = stageTruncatedWriteInput({
   recoveryId: salvagedRecovery.id,
   input: truncatedBlock.input,
@@ -191,7 +219,7 @@ assertEqual(
   '4096-token recovery chunk budget',
 )
 
-const oversizedChunkRecovery = createWriteRecovery('unregistered-local-qwen')
+const oversizedChunkRecovery = createWriteRecovery(RECOVERY_MODEL)
 const oversizedChunk = `${'a'.repeat(2149)}😀${'b'.repeat(300)}`
 const oversizedResult = appendWriteRecoveryChunk({
   recoveryId: oversizedChunkRecovery.id,
@@ -225,7 +253,7 @@ assert(
 )
 completeWriteRecovery(oversizedChunkRecovery.id)
 
-const recovery = createWriteRecovery('unregistered-local-qwen')
+const recovery = createWriteRecovery(RECOVERY_MODEL)
 assertEqual(
   recovery.truncationAttempts,
   0,
@@ -265,7 +293,7 @@ assert(
   'recovery instruction permits a normal Write call',
 )
 const preparedRecoveryTools = await prepareTools([FileWriteTool], {
-  model: 'unregistered-local-qwen',
+  model: RECOVERY_MODEL,
   toolSchemasOverride: [recoverySchema as never],
 } as never)
 assertEqual(
@@ -307,7 +335,7 @@ assertEqual(
 )
 completeWriteRecovery(recovery.id)
 
-const anchoredRecovery = createWriteRecovery('unregistered-local-qwen')
+const anchoredRecovery = createWriteRecovery(RECOVERY_MODEL)
 appendWriteRecoveryChunk({
   recoveryId: anchoredRecovery.id,
   filePath: 'C:\\tmp\\anchored.txt',
@@ -330,7 +358,7 @@ completeWriteRecovery(anchoredRecovery.id)
 
 const stagedWriteDir = mkdtempSync(join(tmpdir(), 'write-recovery-commit-'))
 const stagedWriteTarget = join(stagedWriteDir, 'complete.txt')
-const stagedWrite = createWriteRecovery('unregistered-local-qwen')
+const stagedWrite = createWriteRecovery(RECOVERY_MODEL)
 const callContext = {
   readFileState: new FileStateCache(100, 25 * 1024 * 1024),
   updateFileHistoryState() {},
@@ -373,7 +401,7 @@ assertEqual(
 )
 rmSync(stagedWriteDir, { recursive: true, force: true })
 
-const pathLocked = createWriteRecovery('unregistered-local-qwen')
+const pathLocked = createWriteRecovery(RECOVERY_MODEL)
 appendWriteRecoveryChunk({
   recoveryId: pathLocked.id,
   filePath: 'C:\\tmp\\one.txt',
@@ -395,7 +423,7 @@ try {
 }
 assert(pathChangeRejected, 'recovery accepted a changed target path')
 
-const noProgress = createWriteRecovery('unregistered-local-qwen')
+const noProgress = createWriteRecovery(RECOVERY_MODEL)
 let emptyChunkRejected = false
 try {
   appendWriteRecoveryChunk({
@@ -410,7 +438,7 @@ try {
 }
 assert(emptyChunkRejected, 'empty non-final recovery chunk made progress')
 
-const retryBound = createWriteRecovery('unregistered-local-qwen')
+const retryBound = createWriteRecovery(RECOVERY_MODEL)
 let retryStatus = retryBound
 while (retryStatus.truncationAttempts < MAX_WRITE_RECOVERY_TRUNCATIONS) {
   retryStatus = noteWriteRecoveryTruncation(retryBound.id)!
@@ -429,7 +457,7 @@ assertEqual(
 const conflictDir = mkdtempSync(join(tmpdir(), 'write-recovery-conflict-'))
 const conflictTarget = join(conflictDir, 'existing.txt')
 writeFileSync(conflictTarget, 'before', 'utf8')
-const conflictRecovery = createWriteRecovery('unregistered-local-qwen')
+const conflictRecovery = createWriteRecovery(RECOVERY_MODEL)
 appendWriteRecoveryChunk({
   recoveryId: conflictRecovery.id,
   filePath: conflictTarget,
@@ -513,7 +541,9 @@ assert(
     ) &&
     querySource.includes('createWriteRecoveryToolSchema') &&
     querySource.includes("type: 'tool', name: FILE_WRITE_TOOL_NAME") &&
-    querySource.includes('toolSchemasOverride'),
+    querySource.includes('toolSchemasOverride') &&
+    querySource.includes('write_recovery_tool_call_required') &&
+    querySource.includes('No file content was written'),
   'query no longer blocks or recovers truncated Write calls',
 )
 const messageSource = await Bun.file('src/utils/messagesRuntime.ts').text()

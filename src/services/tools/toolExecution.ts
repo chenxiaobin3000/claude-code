@@ -127,6 +127,7 @@ import {
 } from './toolHooks.js'
 import { isSkillLearningEnabled } from '../skillLearning/featureCheck.js'
 import {
+  clearDeterministicFileFailures,
   deterministicFileFailureKey,
   isDeterministicFileFailure,
   recordDeterministicFileFailure,
@@ -1322,6 +1323,10 @@ async function checkPermissionsAndCallTool(
       : await invokeToolCall()
     const durationMs = Date.now() - startTime
     addToToolDuration(durationMs)
+    clearDeterministicFileFailures(
+      toolUseContext.abortController.signal,
+      deterministicFailureKey,
+    )
 
     // Log tool content/output as span event if enabled
     if (result.data && typeof result.data === 'object') {
@@ -1793,6 +1798,7 @@ async function checkPermissionsAndCallTool(
       const failureCount = recordDeterministicFileFailure(
         toolUseContext.abortController.signal,
         deterministicFailureKey,
+        error,
       )
       if (failureCount === 2) {
         content +=

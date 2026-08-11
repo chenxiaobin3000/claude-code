@@ -97,24 +97,42 @@ function buildCommonRequestBody(
   params: CommonRequestParams,
   profile: ModelProfile = getModelProfile(params.model),
 ): Record<string, unknown> {
+  let toolChoice = params.toolChoice
   if (
-    params.toolChoice !== undefined &&
-    typeof params.toolChoice !== 'string' &&
+    toolChoice !== undefined &&
+    typeof toolChoice !== 'string' &&
     profile.chatCompletions.toolChoice === 'strings_only'
   ) {
-    let endpoint = 'the configured endpoint'
-    if (params.endpoint) {
-      try {
-        const url = new URL(params.endpoint)
-        endpoint = url.origin
-      } catch {
-        // The registry validates endpoints separately; never expose a raw URL here.
+    const requestedName =
+      toolChoice.type === 'function' &&
+      typeof toolChoice.function?.name === 'string'
+        ? toolChoice.function.name
+        : undefined
+    const onlyTool = params.tools.length === 1 ? params.tools[0] : undefined
+    if (
+      requestedName !== undefined &&
+      onlyTool?.type === 'function' &&
+      onlyTool.function.name === requestedName
+    ) {
+      // With one matching candidate, OpenAI's string "required" has the same
+      // observable result as selecting that function by name. This keeps
+      // strings-only llama.cpp endpoints strict without guessing by model ID.
+      toolChoice = 'required'
+    } else {
+      let endpoint = 'the configured endpoint'
+      if (params.endpoint) {
+        try {
+          const url = new URL(params.endpoint)
+          endpoint = url.origin
+        } catch {
+          // The registry validates endpoints separately; never expose a raw URL here.
+        }
       }
+      const source = params.querySource ? ` for ${params.querySource}` : ''
+      throw new Error(
+        `OpenAI compatibility error: model ${params.model} at ${endpoint} only supports string tool_choice values; a named-tool object was required${source}, but the active tool set was not exactly one matching function. Use an endpoint with OpenAI-standard tool_choice support, or explicitly set profile.chatCompletions.toolChoice to "openai_standard" only after confirming that support.`,
+      )
     }
-    const source = params.querySource ? ` for ${params.querySource}` : ''
-    throw new Error(
-      `OpenAI compatibility error: model ${params.model} at ${endpoint} only supports string tool_choice values; a named-tool object was required${source}. Use an endpoint with OpenAI-standard tool_choice support, or explicitly set profile.chatCompletions.toolChoice to "openai_standard" only after confirming that support.`,
-    )
   }
   const reasoningEffort = resolveReasoningEffort(
     profile,
@@ -147,8 +165,8 @@ function buildCommonRequestBody(
     [profile.chatCompletions.outputTokenField]: params.maxTokens,
     ...(params.tools.length > 0 && {
       tools: params.tools,
-      ...(params.toolChoice !== undefined && {
-        tool_choice: params.toolChoice,
+      ...(toolChoice !== undefined && {
+        tool_choice: toolChoice,
       }),
       parallel_tool_calls: profile.chatCompletions.parallelToolCalls,
     }),

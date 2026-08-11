@@ -1622,6 +1622,24 @@ async function* queryLoop(
         yield lastMessage
       }
 
+      if (activeWriteRecovery) {
+        abortWriteRecovery(activeWriteRecovery.id)
+        activeWriteRecoveryId = undefined
+        const recoveryProtocolError = createAssistantAPIErrorMessage({
+          content:
+            `Write recovery failed because model ${currentModel} did not return the required bounded Write tool call. ` +
+            'No file content was written. Check the endpoint tool-calling template or retry with a smaller requested file.',
+          apiError: 'openai_compatibility',
+          error: 'invalid_request',
+        })
+        yield recoveryProtocolError
+        void executeStopFailureHooks(recoveryProtocolError, toolUseContext)
+        return {
+          reason: 'model_error',
+          error: 'write_recovery_tool_call_required',
+        }
+      }
+
       // Skip stop hooks when the last message is an API error (rate limit,
       // prompt-too-long, auth failure, etc.). The model never produced a
       // real response — hooks evaluating it create a death spiral:

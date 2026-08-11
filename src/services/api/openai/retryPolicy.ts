@@ -90,7 +90,8 @@ export function hasVisibleOpenAIChunk(chunk: unknown): boolean {
           record.reasoning_content.length > 0) ||
         (typeof record.reasoning === 'string' && record.reasoning.length > 0) ||
         (Array.isArray(record.tool_calls) && record.tool_calls.length > 0) ||
-        (Array.isArray(record.function_call) && record.function_call.length > 0),
+        (record.function_call !== null &&
+          typeof record.function_call === 'object'),
     )
   })
 }
