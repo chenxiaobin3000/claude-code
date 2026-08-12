@@ -93,9 +93,6 @@
   "devDependencies": {
     "@agentclientprotocol/sdk": "^0.19.0",
     "@alcalzone/ansi-tokenize": "^0.3.0",
-    "@ant/computer-use-input": "workspace:*",
-    "@ant/computer-use-mcp": "workspace:*",
-    "@ant/computer-use-swift": "workspace:*",
     "@ant/model-provider": "workspace:*",
     "@anthropic-ai/claude-agent-sdk": "^0.2.114",
     "@anthropic-ai/mcpb": "^2.1.2",

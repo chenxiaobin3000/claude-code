@@ -140,6 +140,7 @@ const validationScripts = [
   'scripts/validation/acp-link-runtime.ts',
   'scripts/validation/workflow-engine-runtime.ts',
   'scripts/validation/feature-flags.ts',
+  'scripts/validation/computer-use-removal-boundary.ts',
   'scripts/validation/utility-modules-boundary.ts',
   'scripts/validation/ripgrep-runtime.ts',
   'scripts/validation/repl-boundary.ts',
@@ -494,6 +495,11 @@ async function main(): Promise<void> {
   }
   await runStep('Bun bundle build', [bunExecutable, 'run', 'build'])
   await runStep('Bun bundle integrity', [bunExecutable, 'run', 'check:bundle'])
+  await runStep('default Bun bundle Computer Use boundary', [
+    bunExecutable,
+    'run',
+    'scripts/validation/computer-use-default-bundle.ts',
+  ])
   await verifyCliArtifact(bunArtifact, config)
 
   if (process.platform === 'win32' && process.arch === 'x64') {

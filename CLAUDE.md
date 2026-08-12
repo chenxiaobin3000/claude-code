@@ -27,6 +27,12 @@
 - `/cd` 不自动扩大文件权限；启动 Project 外的写入仍按现有权限规则审批，且不得因临时 CWD 形成持久化宽泛授权。
 - `/clear` 将临时 CWD 恢复为启动目录；退出后必须从启动 Project 使用 `--resume` 查找该 Session。
 
+## 桌面控制边界
+
+- 项目不提供操作系统桌面 Computer Use，不得恢复桌面截图、操作系统级全局鼠标键盘、窗口控制、UI Automation、Office COM 自动化或隐藏的 `computer-use` MCP。
+- Chrome 页面读取、交互和浏览器截图只允许通过独立 `plugins/chrome` 的 MCP、Native Host 与扩展链路提供；这些是浏览器 Profile/Tab 能力，不是操作系统桌面控制。
+- Windows Sandbox 只负责隔离 Bash/PowerShell 命令执行，不提供桌面控制，也不得作为已移除能力的替代入口。
+
 ## Monorepo 工作空间
 
 workspaces 配置（package.json）：`plugins/*`、`packages/*`、`packages/@ant/*`、`packages/@anthropic-ai/*`。
@@ -48,9 +54,6 @@ wxwork:          WeCom 企业微信 Channel、独立 MCP Host
 x:               X API App-only 只读 MCP 工具与独立 Host
 
 # Ant 包（在 packages/@ant/ 下）
-@ant/computer-use-input:   Computer Use 输入处理
-@ant/computer-use-mcp:     Computer Use MCP 服务
-@ant/computer-use-swift:   Computer Use Swift 端
 @ant/model-provider:       模型供应商适配
 @anthropic/ink:            Ink（终端 React 渲染器）封装
 
@@ -72,7 +75,6 @@ x:               X API App-only 只读 MCP 工具与独立 Host
   - `autonomy`：自治状态查询
   - `--bg` / `--background`：后台会话快捷方式
   - `job`：模板任务
-  - `--computer-use-mcp`：Computer Use MCP 服务
   - `--worktree --tmux`：工作区 tmux 模式
   - `--update` / `--upgrade`：更新子命令
   - `--bare`：简约模式
@@ -145,7 +147,7 @@ x:               X API App-only 只读 MCP 工具与独立 Host
 - `ABLATION_BASELINE`, `AGENT_MEMORY_SNAPSHOT`, `BASH_CLASSIFIER`, `BREAK_CACHE_COMMAND`, `CACHED_MICROCOMPACT`, `COMPACTION_REMINDERS`, `CONTEXT_COLLAPSE`, `ENHANCED_TELEMETRY_BETA`, `EXPERIMENTAL_SEARCH_EXTRA_TOOLS`, `EXPERIMENTAL_SKILL_SEARCH`, `EXTRACT_MEMORIES`, `FORK_SUBAGENT`, `HISTORY_PICKER`, `HISTORY_SNIP`, `HOOK_PROMPTS`, `LODESTONE`, `MCP_RICH_OUTPUT`, `MCP_SKILLS`, `MESSAGE_ACTIONS`, `NATIVE_CLIPBOARD_IMAGE`, `NEW_INIT`, `POOR`, `POWERSHELL_AUTO_MODE`, `PROACTIVE`, `QUICK_SEARCH`, `REACTIVE_COMPACT`, `RUN_SKILL_GENERATOR`, `SKILL_IMPROVEMENT`, `SKILL_LEARNING`, `STREAMLINED_OUTPUT`, `TEAMMEM`, `TERMINAL_PANEL`, `TORCH`, `TREE_SITTER_BASH`, `ULTRAPLAN`, `UNATTENDED_RETRY`, `VERIFICATION_AGENT`, `WEB_BROWSER_TOOL`
 
 **Internal（需特殊标记）：**
-- `CHICAGO_MCP`, `COORDINATOR_MODE`, `DAEMON`, `DUMP_SYSTEM_PROMPT`, `HARD_FAIL`, `IS_LIBC_GLIBC`, `IS_LIBC_MUSL`, `KAIROS`, `KAIROS_BRIEF`, `KAIROS_CHANNELS`, `LAN_PIPES`, `LOCAL_COWORKER_METADATA`, `LOCAL_MEMORY_SHAPE_DIAGNOSTICS`, `PIPE_IPC`, `SHOT_STATS`, `SLOW_OPERATION_LOGGING`, `UDS_INBOX` 等
+- `COORDINATOR_MODE`, `DAEMON`, `DUMP_SYSTEM_PROMPT`, `HARD_FAIL`, `IS_LIBC_GLIBC`, `IS_LIBC_MUSL`, `KAIROS`, `KAIROS_BRIEF`, `KAIROS_CHANNELS`, `LAN_PIPES`, `LOCAL_COWORKER_METADATA`, `LOCAL_MEMORY_SHAPE_DIAGNOSTICS`, `PIPE_IPC`, `SHOT_STATS`, `SLOW_OPERATION_LOGGING`, `UDS_INBOX` 等
 
 额外功能可通过环境变量 `FEATURE_<NAME>=1` 启用，同时需设置对应的 `ALLOW_EXPERIMENTAL_FEATURES=1` 或 `ALLOW_INTERNAL_FEATURES=1`。
 

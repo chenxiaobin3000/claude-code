@@ -99,6 +99,9 @@
 - 本地 Plugin Manifest 使用可选 `apiVersion` SemVer 范围协商声明式扩展 API；当前版本为 `1.0.0`，缺省按旧 v1 契约兼容。显式不兼容时整插件及其组件不可达，依赖降级继续按固定点传播；MCP 与 ACP 保持各自协议协商。
 - `/cd` 有意保持为本项目的临时 cwd 命令，不对齐官方的跨项目会话迁移：它只改变主会话后续工具使用的当前目录，不改变启动项目根、Session ID、Transcript/Resume 归属、权限根、Settings、CLAUDE.md、Hook、Skill、Plugin、MCP、Memory、Plan 或 Checkpoint 作用域。
 - `/cd` 不改变已运行子 Agent 的 cwd；新建 Agent 从稳定的会话/工作树根启动，不继承主会话的临时 `/cd`，子 Agent 的 cwd 变化也不得回写主会话。`/clear` 和进程重启恢复到启动项目目录；无参数只报告当前 cwd，失败不得改变现有 cwd。
+- 本项目不提供操作系统桌面 Computer Use，不包含桌面截图、操作系统级全局鼠标键盘、窗口控制、UI Automation、Office COM 自动化或隐藏的 `computer-use` MCP；OpenAI/Anthropic 协议兼容层中对通用上游 `computer_use` 内容类型的识别不构成可调用能力。
+- Chrome 页面读取、交互和浏览器截图只由独立 `chrome` 插件在明确的 Profile/Tab 范围内提供；Windows Sandbox 只隔离 Bash/PowerShell 命令。两者都不是操作系统桌面控制实现，不得被用于绕过上述产品边界。
+- 休眠的 Computer Use 实现、`CHICAGO_MCP` Feature、隐藏 CLI/MCP 入口、专属 UI/状态/平台后端、Python/PowerShell/Win32 Bridge、三个 `@ant/computer-use-*` workspace 及其依赖均已删除，workspace 契约固定为 19 个。`computer-use-removal-boundary.ts` 与 `computer-use-default-bundle.ts` 持续检查源码、依赖和默认产物不可达边界，同时保护普通 MCP、Chrome、Windows Sandbox、Agent、Workflow、模型、文件与 Shell 权限能力。
 - 主程序本身不实现、不自动启用 Chrome 操作；`--chrome`/`--no-chrome`、`/chrome`、Chrome Settings/Onboarding/通知、隐藏 MCP/Native Host 进程入口、内置 Chrome Skill、MCP 保留名称和专用客户端渲染均已从主干入口移除。
 - Chrome 能力只能由本地 `chrome` 插件提供：生产 standalone 从同级 `plugins` 一级目录自动发现，源码开发使用 `--plugin-dir` 显式加载；目标链路固定为主程序标准插件加载器 → 插件 MCP/Skill → 插件 Native Host → 插件 Chrome 扩展 → Chrome，主干禁止绕过插件直接连接。
 - `plugins/chrome/chrome-extension` 已包含 Manifest V3 Chrome 扩展实现，固定扩展 ID 为 `dlpofjonbnceelbmpelkfblmnghclmkm`；标签页、导航、页面读取与交互、截图和窗口缩放等浏览器端能力已经实现。
@@ -145,22 +148,6 @@
 - 官方大型测试体系；项目只维护独立的 `scripts/validation` 轻量验证脚本。
 - 企业微信 `wxwork` 只实现 API 模式智能机器人的 Bot WebSocket 长连接；不实现 Bot Webhook、Agent/自建应用 XML 回调、公网回调服务、Bot→Agent 回退或多连接模式切换，后续官方同步也不得扩大这一边界。
 - X 插件不实现 OAuth 1.0a、OAuth 2.0 Authorization Code with PKCE 或任何用户身份授权，只允许固定 `X_BEARER_TOKEN` 的 App-only 公开数据只读访问；因此不提供 Home Timeline、发布、回复、删除、点赞、转发、关注、取消关注、私信、账号修改及其他用户身份读写操作，后续官方 SDK 同步也不得隐式扩大该边界。
-
-## 后续开发计划
-
-### P0：移除休眠的 Computer Use 实现
-
-当前 Computer Use 只由内部 `CHICAGO_MCP` Feature 控制，默认开发、CI 和生产构建均不启用，也没有进入已验收产品能力。其源码约 63 个文件、1.75 万行，Windows 截图仍依赖未进入 standalone 分发的 `bridge.py` 以及外部 Python、mss、Pillow，并缺少固定 Fixture 和真实端到端验收。本任务采用完整删除，不保留残缺的 Windows 后端或隐藏启动方式；它不涉及 Chrome 插件、Chrome DOM、Windows Sandbox、普通 MCP、模型、会话、工具权限、Agent、Workflow 或 Channel。
-
-- [ ] 第一阶段：冻结删除边界并建立回归基准。记录默认构建中 `CHICAGO_MCP` 不可达、普通 MCP 工具发现与调用、Query/Stop Hook 生命周期、权限 UI、Chrome 插件、Windows Sandbox 和 workspace 契约的当前结果；增加防回归检查，确保清理只命中 Computer Use 专属名称、入口和状态。
-- [ ] 第二阶段：移除产品与协议入口。删除 `CHICAGO_MCP` Feature 定义、`--computer-use-mcp` 隐藏入口、动态 MCP 注入、`computer-use` 保留 Server 名称、自动允许工具集合、系统提示可用性提示及 Analytics 元数据；普通 stdio/HTTP/SSE MCP 的配置、鉴权、工具包装、错误和生命周期行为不得改变。
-- [ ] 第三阶段：清理核心文件中的条件接入。仅删除 `src/query.ts`、`src/query/stopHooks.ts`、`src/services/mcp/client.ts`、`src/services/mcp/config.ts`、`src/cli/modes/defaultMode.tsx` 和 `src/state/AppStateStore.ts` 中受 Computer Use Gate 保护的导入、轮次清理、状态与工具覆盖分支；不得重构相邻的通用 Query、Stop Hook、MCP 或 AppState 逻辑。
-- [ ] 第四阶段：删除 Computer Use 专属 UI 与实现。删除 `src/components/permissions/ComputerUseApproval`、`src/utils/computerUse` 全目录，包括 Windows `bridge.py`/Bridge Client、PowerShell/Win32、UI Automation、COM、截图、虚拟光标、窗口消息，以及 macOS/Linux 后端、锁、渲染、权限包装和清理代码；同时删除只为该能力存在的资源、常量和样式引用。
-- [ ] 第五阶段：删除三个专属 workspace 和依赖。移除 `packages/@ant/computer-use-input`、`packages/@ant/computer-use-mcp`、`packages/@ant/computer-use-swift` 及根 `package.json` 中对应 workspace 依赖，更新 `bun.lock`、workspace 数量、依赖审计、Feature Policy 和构建完整性规则；不能把通用图片处理、MCP SDK、Windows Sandbox或 Chrome 能力作为连带依赖误删。
-- [ ] 第六阶段：更新文档与安全边界。明确本项目不提供操作系统桌面 Computer Use，不宣传桌面截图、全局鼠标键盘、窗口/Office 自动化或隐藏 `computer-use` MCP；同时说明 Chrome 页面操作仍由独立 `chrome` 插件提供，Windows Sandbox 仍只负责隔离 Bash/PowerShell，二者不受影响。
-- [ ] 第七阶段：执行完整验收。运行冻结安装、全部 workspace TypeScript/Smoke、Biome、Bun bundle、standalone EXE、所有独立 Host、CLI 启动和 `bun run verify -- --ci`；额外验证源码与产物不存在 `CHICAGO_MCP`、`--computer-use-mcp`、`@ant/computer-use-*`、`bridge.py`、Python Bridge 或 `mcp__computer-use__*`，并实测普通 MCP、Chrome、Windows Sandbox、模型请求、文件工具、Shell 权限、Agent 和 Workflow 未回归。
-
-完成条件：Computer Use 的 Feature、CLI/MCP 入口、UI、状态、平台后端、Python/PowerShell/Win32 实现、三个 workspace、依赖、文档和构建标记全部删除；默认产品行为和已验收能力不变；Chrome 与 Windows Sandbox 的职责边界继续成立；统一验证和适用的真实冒烟全部通过，仓库不保留无法启动或未受验收约束的 Computer Use 残余实现。
 
 ## 维护规则
 

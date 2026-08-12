@@ -102,13 +102,6 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (feature('CHICAGO_MCP') && process.argv[2] === '--computer-use-mcp') {
-    profileCheckpoint('cli_computer_use_mcp_path');
-    const { runComputerUseMcpServer } = await import('../utils/computerUse/mcpServer.js');
-    await runComputerUseMcpServer();
-    return;
-  }
-
   // Fast-path for `--acp` — ACP (Agent Client Protocol) agent mode over stdio.
   if (feature('ACP') && process.argv[2] === '--acp') {
     profileCheckpoint('cli_acp_path');

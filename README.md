@@ -20,6 +20,7 @@
 - **模型与登录**：官方的 Anthropic 登录、官方模型、组织默认/限制模型、Claude API Provider 与相关云端模型能力不适用。主程序只从 `models.json` 加载 OpenAI-compatible 模型；可选本地 `openai-proxy` 插件可把 ChatGPT/Codex 订阅转换为同一协议的 loopback 端点，但不改变 Provider、模型选择或工具主链。
 - **云端与远程产品**：官方的 Web/Desktop/Mobile、Remote Control、GitHub App、Cloud Code Review、Routines、云端 Channels、Artifacts、语音与账户/用量产品均不提供。本项目也不包含官方自动更新、安装器或远端遥测；可选的本地 `weixin`、`wxwork`、`qq` 与 `telegram` Channel 插件不依赖 Anthropic 云服务。
 - **插件与浏览器**：官方插件市场、远端安装/更新和插件自动重命名不提供。主程序不实现 Chrome、Channel 或订阅代理业务；生产 standalone 自动发现同级 `plugins` 一级目录中的本地 `chrome`、`weixin`、`wxwork`、`qq`、`telegram`、`telegram-user`、`x` 与 `openai-proxy`，源码开发通过 `--plugin-dir` 加载。插件均以独立 Host 分发，删除对应目录即可移除能力。
+- **桌面控制**：本项目不提供操作系统桌面 Computer Use，不包含桌面截图、操作系统级全局鼠标键盘、窗口控制、UI Automation、Office COM 自动化或隐藏的 `computer-use` MCP。Chrome 页面读取、交互和浏览器截图只能由独立 `chrome` 插件提供，其能力边界停留在明确指定的浏览器 Profile/Tab；Windows Sandbox 只隔离 Bash/PowerShell 命令，不提供或代理桌面操作。
 - **Sandbox**：Windows 上启用 Sandbox 时，Shell 会在 Windows Sandbox VM 内执行，默认只映射启动工作区和只读 Shell 运行时，且固定断网、不传递用户主目录或凭据。`failIfUnavailable`、`excludedCommands` 与 `allowUnsandboxedCommands` 保持上层语义；Windows 不能精确落实域名白名单、代理和目录内文件 allow/deny 规则，配置这些规则时会 fail-closed，而不会回退宿主执行。
 - **会话路径**：官方 `/cd` 可迁移会话；本项目有意保持临时 cwd 语义，只改变主会话后续工具的当前目录，不迁移项目身份、会话存储、权限根、配置或扩展作用域。
 - **Agent、Hook、MCP 与 Skill**：本地 Agent、后台任务、Hook、Plugin、Skill 与 MCP 已固化为当前基线；嵌套 Skill 使用相对启动项目根的限定名，连续 inline Skill 可在同一条输入中组合。`/cd` 的临时 cwd、OpenAI-compatible Provider、本地安全增强和不提供云端 Agent 产品仍是明确差异。本地 `/mcp login`/`logout` 仅管理用户配置的 MCP OAuth 凭据。

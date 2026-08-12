@@ -42,6 +42,9 @@ assert(
 )
 
 for (const removed of [
+  '@ant/computer-use-input',
+  '@ant/computer-use-mcp',
+  '@ant/computer-use-swift',
   '@claude-code/mcp-chrome-bridge',
   '@smithy/core',
   '@types/sharp',

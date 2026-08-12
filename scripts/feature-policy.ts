@@ -39,7 +39,6 @@ export const FEATURE_POLICY: Record<string, FeatureDefinition> = {
   BUDDY: stable(['cli-startup']),
   BUILTIN_EXPLORE_PLAN_AGENTS: stable(['tool-call']),
   CACHED_MICROCOMPACT: experimental(),
-  CHICAGO_MCP: internal(),
   COMMIT_ATTRIBUTION: stable(['shell-parsers']),
   COMPACTION_REMINDERS: experimental(),
   CONNECTOR_TEXT: stable(['message-conversion', 'sdk-compat']),
