@@ -6,7 +6,7 @@ import {
   type OpenAIProxyQuotaSnapshot,
 } from '../services/providerUsage/openaiProxy.js'
 
-const REFRESH_INTERVAL_MS = 60_000
+const REFRESH_INTERVAL_MS = 3 * 60_000
 
 export function useOpenAIProxyUsage(): OpenAIProxyQuotaSnapshot | null {
   const model = useMainLoopModel()
