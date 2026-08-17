@@ -10,6 +10,7 @@ const requiredValidations = [
   'openai-proxy-plugin-boundary.ts',
   'openai-proxy-config.ts',
   'openai-proxy-gateway.ts',
+  'openai-proxy-usage.ts',
   'openai-proxy-auth.ts',
   'openai-proxy-model.ts',
   'openai-proxy-lifecycle.ts',

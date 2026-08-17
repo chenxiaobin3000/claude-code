@@ -106,6 +106,8 @@ Hook command 的 `args` 会保持 argv 参数边界。启用 Sandbox 时不会�
 
 `plugins/openai-proxy` 使用独立 Host 完成 ChatGPT 浏览器/device-code 登录，把 Codex Responses/SSE 转换为项目现有的 OpenAI-compatible Chat Completions 流。它不读取 Codex 自身凭据，也不向主程序增加 Provider 类型；删除插件目录即可完整移除。
 
+选择该插件的 loopback 模型时，CLI 会通过本地 Bearer 鉴权接口读取 ChatGPT Codex 的 5 小时和 7 天剩余额度，并在底部右侧显示 `5h: 100% · 7d: 100%`。额度缓存 60 秒；切换到其他模型、插件不可用或额度响应不完整时不显示，OAuth Token 和账户标识不会进入主程序、界面或日志。
+
 首次执行 `login` 时，插件会生成 32 字节随机本地 Token，原子写入用户级 `settings.json` 的 `env.OPENAI_PROXY_LOCAL_TOKEN`，并在 `openaiProxy.port` 写入默认端口 `48481`；已有合法值会保留，进程与设置中的 Token 冲突时安全失败。端口可在 `1024`～`65535` 范围内修改，`models.json.baseUrl` 必须使用相同端口。下面只展示代理连接字段，实际模型条目仍须补充完整 `profile`：
 
 ```json

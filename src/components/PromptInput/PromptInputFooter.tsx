@@ -20,6 +20,7 @@ import { CoordinatorTaskPanel, useCoordinatorTaskCount } from '../CoordinatorAge
 import { getLastAssistantMessageId, StatusLine, statusLineShouldDisplay } from '../StatusLine.js';
 import { Notifications } from './Notifications.js';
 import { PromptInputFooterLeftSide } from './PromptInputFooterLeftSide.js';
+import { OpenAIQuotaIndicator } from './OpenAIQuotaIndicator.js';
 
 // Inline pipe status is shown only after /pipes sets pipeIpc.statusVisible.
 import { PromptInputFooterSuggestions, type SuggestionItem } from './PromptInputFooterSuggestions.js';
@@ -165,7 +166,8 @@ function PromptInputFooter({
             onOpenTasksDialog={onOpenTasksDialog}
           />
         </Box>
-        <Box flexShrink={1} gap={1}>
+        <Box flexShrink={1} gap={1} justifyContent={isNarrow ? 'flex-start' : 'flex-end'}>
+          <OpenAIQuotaIndicator />
           {isFullscreen ? null : (
             <Notifications
               apiKeyStatus={apiKeyStatus}

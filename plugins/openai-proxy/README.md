@@ -127,5 +127,15 @@ restricted to `0600`; Windows uses a current-user-only ACL. Tokens are never
 printed by `status` or `doctor` and are not exposed to the parent CLI.
 
 `GET /health` contains no credentials and is intentionally available without
-authentication. `/doctor`, `/v1/models`, and `/v1/chat/completions` require
+authentication. `/doctor`, `/v1/models`, `/v1/usage`, and
+`/v1/chat/completions` require
 `Authorization: Bearer $OPENAI_PROXY_LOCAL_TOKEN`.
+
+`/v1/usage` reads the authenticated ChatGPT Codex 5-hour and 7-day quota
+windows through the same OAuth session and explicit upstream proxy as model
+requests. The Host caches the normalized snapshot for 60 seconds and exposes
+only used/remaining percentages, window lengths, reset timestamps and capture
+time; OAuth tokens and account identifiers never enter the response. When a
+model configured with the loopback endpoint and `OPENAI_PROXY_LOCAL_TOKEN` is
+selected, the CLI footer displays the remaining values as
+`5h: 100% · 7d: 100%`. Other model endpoints do not display this indicator.

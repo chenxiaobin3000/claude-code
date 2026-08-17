@@ -92,6 +92,12 @@
       "localTargets": ["src/model/convert.ts", "src/model/types.ts"]
     },
     {
+      "path": "codex-rs/codex-api/src/rate_limits.rs",
+      "sha256": "4b3d72fd41a9bfa84c00c564643f73fe4455e63b05f13f2657c8ccbf65621d6d",
+      "scope": ["rate-limit", "headers", "usage"],
+      "localTargets": ["src/usage.ts"]
+    },
+    {
       "path": "codex-rs/codex-api/src/sse/mod.rs",
       "sha256": "1fbf6e82d233479ccd696a8e6600d2c424ec2233f577d3a6a78cec90b6eac29f",
       "scope": ["sse", "streaming"],
@@ -102,6 +108,12 @@
       "sha256": "4995c9c692dd9e3ebf8dcccc3e0f458d1d0f4c21fa60d75042594d00ba961fca",
       "scope": ["responses", "sse", "streaming", "usage"],
       "localTargets": ["src/model/sse.ts", "src/model/types.ts"]
+    },
+    {
+      "path": "codex-rs/backend-client/src/client/rate_limit_resets.rs",
+      "sha256": "52b114dff7c1e47bfc30835012565d8530b190c6f7d7069820eba24d77ed9773",
+      "scope": ["rate-limit", "usage", "base-url"],
+      "localTargets": ["src/usage.ts"]
     },
     {
       "path": "codex-rs/http-client/src/client_builder.rs",

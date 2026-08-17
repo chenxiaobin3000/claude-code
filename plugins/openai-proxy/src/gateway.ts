@@ -8,6 +8,10 @@ import {
 import { OpenAIProxyModelService } from './model/service.js'
 import { OpenAIProxyModelError } from './model/types.js'
 import { createOpenAIUpstreamFetch } from './upstreamProxy.js'
+import {
+  OpenAIProxyUsageService,
+  type OpenAIProxyUsageSnapshot,
+} from './usage.js'
 
 export interface OpenAIProxyGateway {
   readonly url: string
@@ -19,10 +23,15 @@ interface GatewayModelService {
   chatCompletions(request: Request): Promise<Response>
 }
 
+interface GatewayUsageService {
+  usage(signal: AbortSignal): Promise<OpenAIProxyUsageSnapshot>
+}
+
 interface GatewayOptions {
   token?: string
   port?: number
   modelService?: GatewayModelService
+  usageService?: GatewayUsageService
   instanceId?: string
   onStop?: () => void
 }
@@ -68,6 +77,8 @@ export function startOpenAIProxyGateway(
   const port = options.port ?? resolveOpenAIProxyPort()
   const modelService =
     options.modelService ?? new OpenAIProxyModelService({ version })
+  const usageService =
+    options.usageService ?? new OpenAIProxyUsageService({ version })
   const upstream = createOpenAIUpstreamFetch()
   const server = Bun.serve({
     hostname: OPENAI_PROXY_HOST,
@@ -115,6 +126,13 @@ export function startOpenAIProxyGateway(
       if (request.method === 'GET' && url.pathname === '/v1/models') {
         try {
           return await modelService.models(request.signal)
+        } catch (error) {
+          return modelErrorResponse(error)
+        }
+      }
+      if (request.method === 'GET' && url.pathname === '/v1/usage') {
+        try {
+          return json(await usageService.usage(request.signal))
         } catch (error) {
           return modelErrorResponse(error)
         }

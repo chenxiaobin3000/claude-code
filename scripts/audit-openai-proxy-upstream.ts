@@ -77,8 +77,10 @@ const sourceWhitelist = new Set([
   'codex-rs/codex-api/src/endpoint/models.rs',
   'codex-rs/codex-api/src/endpoint/responses.rs',
   'codex-rs/codex-api/src/requests/responses.rs',
+  'codex-rs/codex-api/src/rate_limits.rs',
   'codex-rs/codex-api/src/sse/mod.rs',
   'codex-rs/codex-api/src/sse/responses.rs',
+  'codex-rs/backend-client/src/client/rate_limit_resets.rs',
   'codex-rs/http-client/src/client_builder.rs',
 ])
 const excludedResponsibilities = [

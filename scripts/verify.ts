@@ -110,6 +110,7 @@ const validationScripts = [
   'scripts/validation/openai-proxy-plugin-boundary.ts',
   'scripts/validation/openai-proxy-config.ts',
   'scripts/validation/openai-proxy-gateway.ts',
+  'scripts/validation/openai-proxy-usage.ts',
   'scripts/validation/openai-proxy-auth.ts',
   'scripts/validation/openai-proxy-model.ts',
   'scripts/validation/openai-proxy-lifecycle.ts',

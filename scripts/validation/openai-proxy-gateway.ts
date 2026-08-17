@@ -17,6 +17,15 @@ const gateway = startOpenAIProxyGateway('0.1.0-test', {
       )
     },
   },
+  usageService: {
+    async usage() {
+      return {
+        primary: { usedPercent: 0, remainingPercent: 100 },
+        secondary: { usedPercent: 25, remainingPercent: 75 },
+        capturedAt: 123,
+      }
+    },
+  },
 })
 try {
   const health = await fetch(`${gateway.url}/health`)
@@ -47,6 +56,15 @@ try {
   assertEqual(models.status, 200, 'authenticated models endpoint')
   const modelBody = (await models.json()) as { data: unknown[] }
   assertEqual(modelBody.data.length, 0, 'no fabricated upstream models')
+
+  const usage = await fetch(`${gateway.url}/v1/usage`, { headers })
+  assertEqual(usage.status, 200, 'authenticated usage endpoint')
+  const usageBody = (await usage.json()) as {
+    primary: { remainingPercent: number }
+    secondary: { remainingPercent: number }
+  }
+  assertEqual(usageBody.primary.remainingPercent, 100, 'primary remaining')
+  assertEqual(usageBody.secondary.remainingPercent, 75, 'secondary remaining')
 
   const completion = await fetch(`${gateway.url}/v1/chat/completions`, {
     method: 'POST',
