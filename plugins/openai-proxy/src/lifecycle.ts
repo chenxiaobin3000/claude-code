@@ -347,6 +347,7 @@ export async function runOpenAIProxyService(
   const token = options.token ?? resolveLocalToken()
   let exitReason: OpenAIProxyLastExit['reason'] = 'signal'
   let gateway: ReturnType<typeof startOpenAIProxyGateway> | undefined
+  const retainedModelClients = new Map<string, number>()
   const controller = new AbortController()
   const stop = (reason: OpenAIProxyLastExit['reason']): void => {
     if (controller.signal.aborted) return
@@ -375,6 +376,8 @@ export async function runOpenAIProxyService(
       port,
       instanceId,
       onStop: () => stop('control_stop'),
+      onClientRetain: ownerId => retainedModelClients.set(ownerId, Date.now()),
+      onClientRelease: ownerId => retainedModelClients.delete(ownerId),
     })
     const state: OpenAIProxyRuntimeState = {
       version: 1,
@@ -394,7 +397,14 @@ export async function runOpenAIProxyService(
         options.leaseTtlMs ?? OPENAI_PROXY_CLIENT_LEASE_TTL_MS,
       )
         .then(count => {
-          if (count > 0) {
+          const retainedCutoff =
+            Date.now() -
+            (options.leaseTtlMs ?? OPENAI_PROXY_CLIENT_LEASE_TTL_MS)
+          for (const [ownerId, retainedAt] of retainedModelClients) {
+            if (retainedAt < retainedCutoff)
+              retainedModelClients.delete(ownerId)
+          }
+          if (count > 0 || retainedModelClients.size > 0) {
             emptySince = undefined
             return
           }

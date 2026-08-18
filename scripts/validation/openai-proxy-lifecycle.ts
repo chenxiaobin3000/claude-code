@@ -28,7 +28,9 @@ async function waitForState(
     if (state && state.instanceId !== excludedInstanceId) return state
     await Bun.sleep(20)
   }
-  throw new Error('openai-proxy lifecycle fixture did not publish runtime state')
+  throw new Error(
+    'openai-proxy lifecycle fixture did not publish runtime state',
+  )
 }
 
 async function bounded<T>(promise: Promise<T>, label: string): Promise<T> {
@@ -69,23 +71,75 @@ try {
   const sharedDirectory = join(root, 'shared')
   const sharedOptions = fixtureOptions(sharedDirectory)
   const first = await acquireOpenAIProxyClientLease('fixture-v1', sharedOptions)
-  const second = await acquireOpenAIProxyClientLease('fixture-v1', sharedOptions)
+  const second = await acquireOpenAIProxyClientLease(
+    'fixture-v1',
+    sharedOptions,
+  )
   const sharedRun = runOpenAIProxyService('fixture-v1', 'daemon', sharedOptions)
   const sharedState = await waitForState(sharedDirectory)
   const doctor = await authenticateDoctor(sharedState)
-  assertEqual(doctor.instanceId, sharedState.instanceId, 'doctor instance identity')
+  assertEqual(
+    doctor.instanceId,
+    sharedState.instanceId,
+    'doctor instance identity',
+  )
   await first.release()
   await Bun.sleep(160)
   assert(
-    Boolean(await readOpenAIProxyRuntimeState({ stateDirectory: sharedDirectory })),
+    Boolean(
+      await readOpenAIProxyRuntimeState({ stateDirectory: sharedDirectory }),
+    ),
     'one active client lease keeps the singleton service alive',
   )
   await second.release()
-  assertEqual(await bounded(sharedRun, 'idle exit'), 'idle_exit', 'idle exit reason')
+  assertEqual(
+    await bounded(sharedRun, 'idle exit'),
+    'idle_exit',
+    'idle exit reason',
+  )
   assertEqual(
     await readOpenAIProxyRuntimeState({ stateDirectory: sharedDirectory }),
     undefined,
     'owned runtime state removed after idle exit',
+  )
+
+  const modelLeaseDirectory = join(root, 'model-lease')
+  const modelLeaseOptions = fixtureOptions(modelLeaseDirectory)
+  const modelLeaseRun = runOpenAIProxyService(
+    'fixture-v1',
+    'daemon',
+    modelLeaseOptions,
+  )
+  const modelLeaseState = await waitForState(modelLeaseDirectory)
+  const modelLeaseHeaders = {
+    authorization: `Bearer ${token}`,
+    'x-openai-proxy-client-id': 'fixture-selected-model',
+  }
+  for (let index = 0; index < 4; index++) {
+    const retained = await fetch(
+      `${modelLeaseState.endpoint}/control/client/retain`,
+      { method: 'POST', headers: modelLeaseHeaders },
+    )
+    assertEqual(retained.status, 200, 'selected model lease heartbeat')
+    await Bun.sleep(60)
+  }
+  assert(
+    Boolean(
+      await readOpenAIProxyRuntimeState({
+        stateDirectory: modelLeaseDirectory,
+      }),
+    ),
+    'selected model lease keeps the gateway alive without an MCP lease',
+  )
+  const released = await fetch(
+    `${modelLeaseState.endpoint}/control/client/release`,
+    { method: 'POST', headers: modelLeaseHeaders },
+  )
+  assertEqual(released.status, 200, 'selected model lease release')
+  assertEqual(
+    await bounded(modelLeaseRun, 'model lease idle exit'),
+    'idle_exit',
+    'gateway exits after the selected model lease is released',
   )
 
   const controlledDirectory = join(root, 'controlled')
@@ -106,7 +160,11 @@ try {
   })
   assertEqual(unauthorized.status, 401, 'stop control requires local token')
   assert(
-    Boolean(await readOpenAIProxyRuntimeState({ stateDirectory: controlledDirectory })),
+    Boolean(
+      await readOpenAIProxyRuntimeState({
+        stateDirectory: controlledDirectory,
+      }),
+    ),
     'unauthorized stop preserves service',
   )
   let spawnCount = 0
@@ -142,7 +200,15 @@ try {
     'fixture-v1',
     automaticOptions,
   )
-  let automaticRun: Promise<'control_stop' | 'idle_exit' | 'signal' | 'startup_failed' | 'recovered_stale_runtime'> | undefined
+  let automaticRun:
+    | Promise<
+        | 'control_stop'
+        | 'idle_exit'
+        | 'signal'
+        | 'startup_failed'
+        | 'recovered_stale_runtime'
+      >
+    | undefined
   const automaticState = await ensureOpenAIProxyDaemon('fixture-v1', {
     ...automaticOptions,
     spawnDaemon: () => {
@@ -208,7 +274,8 @@ try {
   )
   await waitForState(recoveredDirectory, 'crashed-instance')
   assertEqual(
-    (await readOpenAIProxyLastExit({ stateDirectory: recoveredDirectory }))?.reason,
+    (await readOpenAIProxyLastExit({ stateDirectory: recoveredDirectory }))
+      ?.reason,
     'recovered_stale_runtime',
     'crash residue is diagnosed during recovery',
   )
@@ -219,7 +286,15 @@ try {
     'recovered service remains operational',
   )
   const lifecycleSource = await readFile(
-    join(import.meta.dir, '..', '..', 'plugins', 'openai-proxy', 'src', 'lifecycle.ts'),
+    join(
+      import.meta.dir,
+      '..',
+      '..',
+      'plugins',
+      'openai-proxy',
+      'src',
+      'lifecycle.ts',
+    ),
     'utf8',
   )
   assert(

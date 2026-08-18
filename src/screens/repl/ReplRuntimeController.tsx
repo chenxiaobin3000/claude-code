@@ -244,6 +244,7 @@ import type { AgentDefinition } from '@claude-code/builtin-tools/tools/AgentTool
 import { resolveAgentTools } from '@claude-code/builtin-tools/tools/AgentTool/agentToolUtils.js';
 import { resumeAgentBackground } from '@claude-code/builtin-tools/tools/AgentTool/resumeAgent.js';
 import { useMainLoopModel } from '../../hooks/useMainLoopModel.js';
+import { useOpenAIProxyModelLease } from '../../hooks/useOpenAIProxyModelLease.js';
 import { useAppState, useAppStateStore } from '../../state/AppState.js';
 import type { ContentBlockParam, ContentBlock, ImageBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs';
 import type { ProcessUserInputContext } from '../../utils/processUserInput/processUserInput.js';
@@ -564,6 +565,7 @@ export function REPL({
   const store = useAppStateStore();
   const terminal = useTerminalNotification();
   const mainLoopModel = useMainLoopModel();
+  useOpenAIProxyModelLease();
 
   // Note: standaloneAgentContext is initialized in main.tsx (via initialState) or
   // ResumeConversation.tsx (via setAppState before rendering REPL) to avoid

@@ -34,7 +34,12 @@ interface GatewayOptions {
   usageService?: GatewayUsageService
   instanceId?: string
   onStop?: () => void
+  onClientRetain?: (ownerId: string) => void
+  onClientRelease?: (ownerId: string) => void
 }
+
+const CLIENT_OWNER_HEADER = 'x-openai-proxy-client-id'
+const VALID_CLIENT_OWNER = /^[A-Za-z0-9._-]{1,128}$/
 
 function json(body: unknown, status = 200): Response {
   return Response.json(body, {
@@ -122,6 +127,26 @@ export function startOpenAIProxyGateway(
         }
         setTimeout(options.onStop, 0)
         return json({ stopping: true, instanceId: options.instanceId })
+      }
+      if (
+        request.method === 'POST' &&
+        (url.pathname === '/control/client/retain' ||
+          url.pathname === '/control/client/release')
+      ) {
+        const ownerId = request.headers.get(CLIENT_OWNER_HEADER)?.trim()
+        if (!ownerId || !VALID_CLIENT_OWNER.test(ownerId)) {
+          return openAIError(
+            `A valid ${CLIENT_OWNER_HEADER} header is required.`,
+            'invalid_client_owner',
+            400,
+          )
+        }
+        if (url.pathname.endsWith('/retain')) {
+          options.onClientRetain?.(ownerId)
+          return json({ retained: true })
+        }
+        options.onClientRelease?.(ownerId)
+        return json({ released: true })
       }
       if (request.method === 'GET' && url.pathname === '/v1/models') {
         try {

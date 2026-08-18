@@ -15,6 +15,8 @@ export interface OpenAIProxyQuotaSnapshot {
 
 export interface OpenAIProxyUsageTarget {
   endpoint: string
+  retainEndpoint: string
+  releaseEndpoint: string
   token: string
 }
 
@@ -61,6 +63,8 @@ export function openAIProxyUsageTargetFromModel(
   if (!token) return null
   return {
     endpoint: `${target.baseUrl.replace(/\/$/, '')}/usage`,
+    retainEndpoint: `${baseUrl.origin}/control/client/retain`,
+    releaseEndpoint: `${baseUrl.origin}/control/client/release`,
     token,
   }
 }

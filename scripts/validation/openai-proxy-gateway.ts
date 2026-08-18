@@ -3,6 +3,7 @@ import { startOpenAIProxyGateway } from '../../plugins/openai-proxy/src/gateway.
 import { assert, assertEqual } from './assertions.js'
 
 const token = 'fixture-local-token-that-is-at-least-32-characters'
+const retainedClients = new Set<string>()
 const gateway = startOpenAIProxyGateway('0.1.0-test', {
   token,
   port: 0,
@@ -26,6 +27,8 @@ const gateway = startOpenAIProxyGateway('0.1.0-test', {
       }
     },
   },
+  onClientRetain: ownerId => retainedClients.add(ownerId),
+  onClientRelease: ownerId => retainedClients.delete(ownerId),
 })
 try {
   const health = await fetch(`${gateway.url}/health`)
@@ -51,6 +54,23 @@ try {
   assertEqual(doctor.status, 200, 'authenticated doctor')
   const doctorBody = (await doctor.json()) as Record<string, unknown>
   assertEqual(doctorBody.forwarding, 'responses', 'model forwarding status')
+
+  const clientHeaders = {
+    ...headers,
+    'x-openai-proxy-client-id': 'fixture-client',
+  }
+  const retain = await fetch(`${gateway.url}/control/client/retain`, {
+    method: 'POST',
+    headers: clientHeaders,
+  })
+  assertEqual(retain.status, 200, 'model client retain status')
+  assert(retainedClients.has('fixture-client'), 'model client is retained')
+  const release = await fetch(`${gateway.url}/control/client/release`, {
+    method: 'POST',
+    headers: clientHeaders,
+  })
+  assertEqual(release.status, 200, 'model client release status')
+  assert(!retainedClients.has('fixture-client'), 'model client is released')
 
   const models = await fetch(`${gateway.url}/v1/models`, { headers })
   assertEqual(models.status, 200, 'authenticated models endpoint')

@@ -99,6 +99,11 @@ assertEqual(
   'local usage endpoint',
 )
 assertEqual(
+  target?.retainEndpoint,
+  'http://127.0.0.1:48481/control/client/retain',
+  'local model lease retain endpoint',
+)
+assertEqual(
   openAIProxyUsageTargetFromModel(
     {
       baseUrl: 'https://api.example.com/v1',
