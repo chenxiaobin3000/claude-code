@@ -30,10 +30,16 @@ const streamFetch = (async (
   input: string | URL | Request,
   init?: RequestInit,
 ): Promise<Response> => {
-  assert(String(input).endsWith('/v1/chat/completions'), 'incorrect Chat Completions URL')
+  assert(
+    String(input).endsWith('/v1/chat/completions'),
+    'incorrect Chat Completions URL',
+  )
   assert(init?.method === 'POST', 'request must use POST')
   const headers = new Headers(init?.headers)
-  assert(headers.get('authorization') === 'Bearer validation-secret', 'missing API key header')
+  assert(
+    headers.get('authorization') === 'Bearer validation-secret',
+    'missing API key header',
+  )
   const body = JSON.parse(String(init?.body)) as Record<string, unknown>
   assert(body.stream === true, 'stream request lost stream=true')
   streamRequestChecked = true
@@ -56,7 +62,10 @@ const chunks = []
 for await (const chunk of stream) chunks.push(chunk)
 assert(streamRequestChecked, 'stream fetch was not called')
 assert(chunks.length === 1, 'stream parser returned the wrong chunk count')
-assert(chunks[0]?.choices[0]?.delta.content === 'ok', 'stream content was not preserved')
+assert(
+  chunks[0]?.choices[0]?.delta.content === 'ok',
+  'stream content was not preserved',
+)
 
 const jsonFetch = (async (): Promise<Response> =>
   new Response(
@@ -84,7 +93,10 @@ const completion = await jsonClient.chat.completions.create(
   } satisfies ChatCompletionCreateParamsNonStreaming,
   {},
 )
-assert(completion.choices[0]?.message.content === 'json-ok', 'JSON response was not preserved')
+assert(
+  completion.choices[0]?.message.content === 'json-ok',
+  'JSON response was not preserved',
+)
 
 const errorFetch = (async (): Promise<Response> =>
   new Response(
@@ -135,17 +147,32 @@ assert(
   'legacy function-call chunk was not recognized as visible output',
 )
 assert(
-  isRetryableOpenAITransportError(Object.assign(new Error('busy'), { status: 503 })),
+  isRetryableOpenAITransportError(
+    Object.assign(new Error('busy'), { status: 503 }),
+  ),
   'server error was not retryable',
 )
 assert(
-  !isRetryableOpenAITransportError(Object.assign(new Error('bad key'), { status: 401 })),
+  isRetryableOpenAITransportError(
+    new Error('Unable to connect. Is the computer able to access the url?'),
+  ),
+  'Bun connection-refused error was not retryable during local Host startup',
+)
+assert(
+  !isRetryableOpenAITransportError(
+    Object.assign(new Error('bad key'), { status: 401 }),
+  ),
   'authentication error was retryable',
 )
 const retryOptions = getOpenAIRetryOptions({ API_MAX_RETRIES: '2' })
 assert(retryOptions.maxRetries === 2, 'retry option was not parsed')
 assert(
-  getOpenAIRetryDelayMs(new Error('network error'), 1, retryOptions, () => 0) === 250,
+  getOpenAIRetryDelayMs(
+    new Error('network error'),
+    1,
+    retryOptions,
+    () => 0,
+  ) === 250,
   'retry delay was not deterministic at the lower jitter bound',
 )
 assert(
@@ -164,7 +191,8 @@ process.env.API_RETRY_MAX_DELAY_MS = '1'
 let retryFetchCalls = 0
 const retryFetch = (async (): Promise<Response> => {
   retryFetchCalls++
-  if (retryFetchCalls === 1) return new Response('temporary outage', { status: 503 })
+  if (retryFetchCalls === 1)
+    return new Response('temporary outage', { status: 503 })
   return new Response(
     'data: {"id":"chunk-2","object":"chat.completion.chunk","created":1,"model":"validation-model","choices":[{"index":0,"delta":{"content":"retried"},"finish_reason":null}]}\n\ndata: [DONE]\n\n',
     { headers: { 'content-type': 'text/event-stream' } },
@@ -217,7 +245,10 @@ try {
 } catch (error) {
   partialError = error
 }
-assert(partialError instanceof OpenAIStreamInterruptedError, 'visible partial stream was replayed or lost')
+assert(
+  partialError instanceof OpenAIStreamInterruptedError,
+  'visible partial stream was replayed or lost',
+)
 assert(partialFetchCalls === 1, 'visible partial stream was retried')
 
 const previousBoundaryRetries = process.env.API_MAX_RETRIES
@@ -235,7 +266,10 @@ try {
       { headers: { 'content-type': 'text/event-stream' } },
     )
   }) as typeof fetch
-  const metadataClient = getOpenAIClient({ target, fetchOverride: metadataFetch })
+  const metadataClient = getOpenAIClient({
+    target,
+    fetchOverride: metadataFetch,
+  })
   const metadataStream = await metadataClient.chat.completions.create(
     {
       model: target.model,
@@ -247,7 +281,10 @@ try {
   for await (const _chunk of metadataStream) {
     // A metadata-only first attempt is safe to replay.
   }
-  assert(metadataFetchCalls === 2, 'metadata-only interrupted stream was not retried')
+  assert(
+    metadataFetchCalls === 2,
+    'metadata-only interrupted stream was not retried',
+  )
 
   let toolFetchCalls = 0
   const toolFetch = (async (): Promise<Response> => {

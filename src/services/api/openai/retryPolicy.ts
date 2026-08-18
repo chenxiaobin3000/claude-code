@@ -42,13 +42,19 @@ function errorStatus(error: unknown): number | undefined {
 export function isRetryableOpenAITransportError(error: unknown): boolean {
   const status = errorStatus(error)
   if (status !== undefined) {
-    return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500
+    return (
+      status === 408 ||
+      status === 409 ||
+      status === 425 ||
+      status === 429 ||
+      status >= 500
+    )
   }
 
   const value = String(
     error instanceof Error ? `${error.name} ${error.message}` : error,
   ).toLowerCase()
-  return /timed? ?out|aborterror|econn(?:reset|refused)|enotfound|eai_again|fetch failed|network error|socket hang up|connection (?:closed|reset|dropped)|stream_(?:idle_timeout|ended_before_done)/.test(
+  return /timed? ?out|aborterror|econn(?:reset|refused)|enotfound|eai_again|fetch failed|network error|unable to connect|socket hang up|connection (?:closed|reset|dropped)|stream_(?:idle_timeout|ended_before_done)/.test(
     value,
   )
 }
@@ -69,8 +75,12 @@ export function getOpenAIRetryDelayMs(
   random: () => number = Math.random,
 ): number {
   const serverDelay = retryAfterMs(error)
-  if (serverDelay !== undefined) return Math.min(serverDelay, options.maxDelayMs)
-  const capped = Math.min(500 * 2 ** Math.max(0, attempt - 1), options.maxDelayMs)
+  if (serverDelay !== undefined)
+    return Math.min(serverDelay, options.maxDelayMs)
+  const capped = Math.min(
+    500 * 2 ** Math.max(0, attempt - 1),
+    options.maxDelayMs,
+  )
   // Full jitter prevents multiple local CLI instances from retrying in lockstep.
   return Math.floor(capped * (0.5 + Math.max(0, Math.min(1, random())) * 0.5))
 }
